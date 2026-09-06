@@ -1,0 +1,49 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Swift / build artifacts
+.build/
+Build/
+build/
+DerivedData/
+*.app
+*.dSYM
+*.dSYM.zip
+
+# Xcode user-specific files
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Temporary files
+*.swp
+*.tmp
+*.temp
+*~
+
+# Logs
+*.log
+
+# Secrets and local configuration
+.env
+.env.*
+*.secret
+*.secrets
+Secrets/
+LocalConfig/
+
+# API key files / credentials
+*apikey*
+*api_key*
+*credentials*
+
+# Composition Lab generated/exported artifacts
+*.mid
+*.midi
+*.musicxml
+*.mxl
+*.clab
+*.clabproject
