@@ -1,0 +1,83 @@
+name: Expand Native source tree
+
+on:
+  push:
+    branches:
+      - native-core-alignment
+    paths:
+      - '.github/workflows/expand-native-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  expand:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: native-core-alignment
+          fetch-depth: 0
+
+      - name: Expand verified V5.0.11 source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/native-source
+          mkdir -p /tmp/native-source
+          unzip -q Composition_Lab_Native_V5_0_11_SOURCE.zip -d /tmp/native-source
+          ROOT="$(find /tmp/native-source -maxdepth 2 -type d -name Sources -print -quit | xargs dirname)"
+          test -n "$ROOT"
+          mkdir -p Sources
+
+          # Keep already aligned files in the branch. Copy the remaining exact V5.0.11 sources.
+          for f in "$ROOT"/Sources/*.swift; do
+            name="$(basename "$f")"
+            case "$name" in
+              MIDIParser.swift|MusicXMLParser.swift|APIClient.swift)
+                ;;
+              *)
+                cp "$f" "Sources/$name"
+                ;;
+            esac
+          done
+
+          cp "$ROOT/Info.plist" Info.plist
+          cp "$ROOT/Build Native App.command" "Build Native App.command"
+          chmod +x "Build Native App.command"
+          if [ -f "$ROOT/README.txt" ]; then cp "$ROOT/README.txt" README.txt; fi
+          if [ -f "$ROOT/AppIcon.png" ]; then cp "$ROOT/AppIcon.png" AppIcon.png; fi
+
+          # Integrate the already tested explicit MusicXML tie export.
+          patch -p0 < patches/MusicXMLBuilder-tie-export.patch
+
+      - name: Verify required source files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f Sources/MainViewController.swift
+          test -f Sources/MIDIParser.swift
+          test -f Sources/MusicXMLParser.swift
+          test -f Sources/MusicXMLBuilder.swift
+          test -f Sources/ReaperBridge.swift
+          test -f Sources/Models.swift
+          test -f Info.plist
+          test -x 'Build Native App.command'
+          echo "Swift files: $(find Sources -maxdepth 1 -name '*.swift' | wc -l)"
+
+      - name: Commit expanded source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Sources Info.plist 'Build Native App.command' README.txt AppIcon.png
+          if git diff --cached --quiet; then
+            echo 'No source changes to commit.'
+            exit 0
+          fi
+          git commit -m 'Expand complete Native V5.0.11 source tree'
+          git push origin HEAD:native-core-alignment
