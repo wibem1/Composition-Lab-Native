@@ -2,17 +2,11 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# Der Entwicklungsbranch enthält das verifizierte V5.0.11-Source-ZIP als
-# Referenz. Vor jedem Build wird daraus der vollständige Quellbaum hergestellt;
-# die bereits ausgerichteten Parser bleiben erhalten und der getestete Tie-Patch
-# wird in MusicXMLBuilder.swift integriert.
-bash "./Expand Native Source.command"
-
 APP="Composition Lab.app"
 BUILD=".build-native"
 SRC=(Sources/*.swift)
 
-echo "Baue Composition Lab Native V5.0.11 …"
+echo "Baue Composition Lab Native V5.0.12 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -91,7 +85,7 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 5.0.11 (Build 83) · Engine Build 14"
+echo "  Version: 5.0.12 (Build 84) · Engine Build 14"
 echo
 echo "Die App ist nativ (AppKit), kein HTML/WebView."
 echo "API-Schlüssel werden im normalen Betrieb nicht im macOS-Schlüsselbund gespeichert."
