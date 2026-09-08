@@ -43,10 +43,65 @@ done
 cp "$TMP/Info.plist" Info.plist
 cp "$TMP/README.txt" README.txt
 
-# Getestete Tie-Export-Erweiterung integrieren, aber nie doppelt anwenden.
-if ! grep -q 'explicitTieStart' Sources/MusicXMLBuilder.swift; then
-  patch -p0 < patches/MusicXMLBuilder-tie-export.patch
-fi
+# Getestete Tie-Export-Erweiterung direkt in den unveränderten V5.0.11-Builder
+# integrieren. Die Ersetzung ist absichtlich exakt; falls sich der Referenzblock
+# nicht wiederfindet, wird abgebrochen statt stillschweigend falsch weiterzubauen.
+python3 - <<'PY'
+from pathlib import Path
+p = Path('Sources/MusicXMLBuilder.swift')
+s = p.read_text()
+if 'explicitTieStart' not in s:
+    old = '''        if maxStaff > 1 { out += "        <staff>\\(staff)</staff>\\n" }
+        out += "        <velocity>\\(f.velocity)</velocity>\\n"
+        if grace == nil {
+            if f.tieStop { out += "        <tie type=\\"stop\\"/>\\n" }
+            if f.tieStart { out += "        <tie type=\\"start\\"/>\\n" }
+        }
+
+        var notations = ""
+        if grace == nil {
+            if f.tieStop { notations += "<tied type=\\"stop\\"/>" }
+            if f.tieStart { notations += "<tied type=\\"start\\"/>" }
+        }
+'''
+    new = '''        if maxStaff > 1 { out += "        <staff>\\(staff)</staff>\\n" }
+        out += "        <velocity>\\(f.velocity)</velocity>\\n"
+
+        // Neben den automatisch erzeugten Bindungen für in Teilnoten zerlegte lange
+        // Noten werden auch explizite, aus MusicXML importierte tie-Ereignisse
+        // berücksichtigt. Ein tie-Event beschreibt den Startbeat b und den Beat e
+        // der gebundenen Folgenoten; Pitch/Staff begrenzen die Zuordnung.
+        let explicitTieStart = events.contains { ev in
+            guard ev.t.lowercased() == "tie", abs(ev.b - f.sourceStart) < 0.000_1 else { return false }
+            if let st = ev.st, st != staff { return false }
+            if let pitch = ev.p, pitch != f.pitch { return false }
+            return ev.e != nil
+        }
+        let explicitTieStop = events.contains { ev in
+            guard ev.t.lowercased() == "tie", let end = ev.e, abs(end - f.sourceStart) < 0.000_1 else { return false }
+            if let st = ev.st, st != staff { return false }
+            if let pitch = ev.p, pitch != f.pitch { return false }
+            return true
+        }
+        let tieStop = f.tieStop || explicitTieStop
+        let tieStart = f.tieStart || explicitTieStart
+
+        if grace == nil {
+            if tieStop { out += "        <tie type=\\"stop\\"/>\\n" }
+            if tieStart { out += "        <tie type=\\"start\\"/>\\n" }
+        }
+
+        var notations = ""
+        if grace == nil {
+            if tieStop { notations += "<tied type=\\"stop\\"/>" }
+            if tieStart { notations += "<tied type=\\"start\\"/>" }
+        }
+'''
+    if old not in s:
+        raise SystemExit('FEHLER: Erwarteter V5.0.11-Tie-Block in MusicXMLBuilder.swift nicht gefunden.')
+    s = s.replace(old, new, 1)
+    p.write_text(s)
+PY
 
 COUNT="$(find Sources -maxdepth 1 -name '*.swift' | wc -l | tr -d ' ')"
 if [ "$COUNT" -ne 25 ]; then
@@ -64,6 +119,11 @@ for required in \
   Info.plist; do
   test -f "$required" || { echo "FEHLER: $required fehlt."; exit 1; }
 done
+
+grep -q 'explicitTieStart' Sources/MusicXMLBuilder.swift || {
+  echo "FEHLER: Tie-Export-Erweiterung wurde nicht integriert."
+  exit 1
+}
 
 echo "Native-Quellbaum vollständig entfaltet: $COUNT Swift-Dateien."
 echo "V5.0.11 / Build 83 / Engine Build 14"
