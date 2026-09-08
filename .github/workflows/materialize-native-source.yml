@@ -13,37 +13,68 @@ jobs:
   materialize:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout native cleanup branch
+      - name: Checkout Native cleanup branch
         uses: actions/checkout@v4
         with:
           ref: native-core-alignment
           fetch-depth: 0
 
-      - name: Expand verified V5.0.12 package into normal source tree
+      - name: Materialize complete V5.0.12 source tree from verified reference
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf .materialize
-          mkdir .materialize
-          unzip -q .cleanup-import/Composition_Lab_Native_V5_0_12.zip -d .materialize
-          SRC=.materialize/Composition_Lab_Native_V5_0_12
-          test -d "$SRC/Sources"
-          test -f "$SRC/Info.plist"
-          test -f "$SRC/Build Native App.command"
-          rm -rf Sources
-          cp -R "$SRC/Sources" Sources
-          cp "$SRC/Info.plist" Info.plist
-          cp "$SRC/Build Native App.command" "Build Native App.command"
-          chmod +x "Build Native App.command"
-          cp "$SRC/CORE-ALIGNMENT-CHANGES.md" CORE-ALIGNMENT-CHANGES.md
-          rm -rf .materialize .cleanup-import
-          rm -f Composition_Lab_Native_V5_0_11_SOURCE.zip
-          rm -f "Expand Native Source.command"
+
+          # Remove the failed temporary binary transfer from the earlier attempt.
+          rm -rf .cleanup-import
+
+          # The checked-in script verifies SHA-256 of the immutable V5.0.11 source
+          # archive, expands exactly 25 Swift files, preserves the aligned parsers,
+          # and applies the tested explicit-tie export change.
+          bash "./Expand Native Source.command"
+
           test "$(find Sources -maxdepth 1 -name '*.swift' | wc -l | tr -d ' ')" -eq 25
+          grep -q 'explicitTieStart' Sources/MusicXMLBuilder.swift
+          grep -q '1.0' Sources/MIDIParser.swift
+
+          # Promote the materialized development state to product V5.0.12 / Build 84.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          info = Path('Info.plist')
+          s = info.read_text()
+          s = s.replace('<key>CFBundleShortVersionString</key><string>5.0.11</string>',
+                        '<key>CFBundleShortVersionString</key><string>5.0.12</string>')
+          s = s.replace('<key>CFBundleVersion</key><string>83</string>',
+                        '<key>CFBundleVersion</key><string>84</string>')
+          info.write_text(s)
+
+          main = Path('Sources/MainViewController.swift')
+          s = main.read_text().replace('· V5.0.11"', '· V5.0.12"')
+          main.write_text(s)
+
+          build = Path('Build Native App.command')
+          s = build.read_text()
+          marker = '# Der Entwicklungsbranch enthält das verifizierte V5.0.11-Source-ZIP als\n'
+          if marker in s:
+              start = s.index(marker)
+              end_marker = 'bash "./Expand Native Source.command"\n\n'
+              end = s.index(end_marker, start) + len(end_marker)
+              s = s[:start] + s[end:]
+          s = s.replace('Baue Composition Lab Native V5.0.11', 'Baue Composition Lab Native V5.0.12')
+          s = s.replace('Version: 5.0.11 (Build 83)', 'Version: 5.0.12 (Build 84)')
+          build.write_text(s)
+          PY
+
           grep -q '<string>5.0.12</string>' Info.plist
           grep -q '<string>84</string>' Info.plist
+          grep -q 'V5.0.12' Sources/MainViewController.swift
+          ! grep -q 'Expand Native Source.command' "Build Native App.command"
 
-      - name: Commit normalized source tree
+          # The normal source tree is now authoritative; bootstrap artifacts are removed.
+          rm -f Composition_Lab_Native_V5_0_11_SOURCE.zip
+          rm -f "Expand Native Source.command"
+
+      - name: Commit normalized Native source tree
         shell: bash
         run: |
           git config user.name 'Composition Lab cleanup'
