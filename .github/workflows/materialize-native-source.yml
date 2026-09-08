@@ -1,0 +1,57 @@
+name: Materialize Native V5.0.12 source
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/materialize-native-source.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout native cleanup branch
+        uses: actions/checkout@v4
+        with:
+          ref: native-core-alignment
+          fetch-depth: 0
+
+      - name: Expand verified V5.0.12 package into normal source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .materialize
+          mkdir .materialize
+          unzip -q .cleanup-import/Composition_Lab_Native_V5_0_12.zip -d .materialize
+          SRC=.materialize/Composition_Lab_Native_V5_0_12
+          test -d "$SRC/Sources"
+          test -f "$SRC/Info.plist"
+          test -f "$SRC/Build Native App.command"
+          rm -rf Sources
+          cp -R "$SRC/Sources" Sources
+          cp "$SRC/Info.plist" Info.plist
+          cp "$SRC/Build Native App.command" "Build Native App.command"
+          chmod +x "Build Native App.command"
+          cp "$SRC/CORE-ALIGNMENT-CHANGES.md" CORE-ALIGNMENT-CHANGES.md
+          rm -rf .materialize .cleanup-import
+          rm -f Composition_Lab_Native_V5_0_11_SOURCE.zip
+          rm -f "Expand Native Source.command"
+          test "$(find Sources -maxdepth 1 -name '*.swift' | wc -l | tr -d ' ')" -eq 25
+          grep -q '<string>5.0.12</string>' Info.plist
+          grep -q '<string>84</string>' Info.plist
+
+      - name: Commit normalized source tree
+        shell: bash
+        run: |
+          git config user.name 'Composition Lab cleanup'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'Nothing to commit.'
+            exit 0
+          fi
+          git commit -m 'Materialize complete Native V5.0.12 source tree and remove ZIP bootstrap'
+          git push origin HEAD:native-core-alignment
