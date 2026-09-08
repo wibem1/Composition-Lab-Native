@@ -1,10 +1,10 @@
-# Composition Lab Native
+# CompositionLab
 
-Native macOS-Fassung von Composition Lab.
+Native macOS-Fassung des Music-Lab-Systems.
 
 ## Rolle im Music-Lab-System
 
-Dieses Repository ist die aktive Quellbasis für Composition Lab Native. Die App gehört zusammen mit Composition Lab WebApp (`wibem1/Composer-Lab`) und Music Chat Lab (`wibem1/Music-Chat-Lab`) zum gemeinsamen Music-Lab-System.
+Dieses Repository ist die aktive Quellbasis für **CompositionLab**. Die App gehört zusammen mit **ComposeLab** (`wibem1/Composer-Lab`) und **MusicChatLab** (`wibem1/Music-Chat-Lab`) zum gemeinsamen Music-Lab-System.
 
 Gemeinsame Grundlagen sind Score-Schema, Engine Build 14, CLAB, MIDI und MusicXML. Anwendungsspezifisch sind hier native macOS-Funktionen, Partiturdarstellung, MIDI-Ausgänge und DAW-Anbindungen.
 
@@ -12,7 +12,7 @@ Gemeinsame Grundlagen sind Score-Schema, Engine Build 14, CLAB, MIDI und MusicXM
 
 `main` ist der freigegebene aktive Quellstand:
 
-- Composition Lab Native **V5.0.12**
+- CompositionLab **V5.0.12**
 - Build **84**
 - Engine Build **14**
 
@@ -40,7 +40,7 @@ Der aktive `main` enthält **keine Referenz-ZIP, keine Entfaltungslogik und kein
 
 ## CLAB
 
-Composition Lab Native bleibt derzeit die Referenz für das gemeinsame `.clab`-Projektdokument. WebApp und Music Chat Lab sollen dasselbe Projektformat lesen und schreiben und unbekannte optionale Felder erhalten.
+CompositionLab bleibt die Referenz für das gemeinsame `.clab`-Projektdokument. ComposeLab und MusicChatLab lesen und schreiben dasselbe Projektformat und erhalten unbekannte optionale Felder.
 
 ## Entwicklungsregel
 
