@@ -2,6 +2,7 @@
 
 Stand: 8. September 2026
 Status: verbindliche Ereignisspezifikation für `track.ev`
+Version: EV Contract 1.1
 
 ## 1. Zweck
 
@@ -14,158 +15,107 @@ Ziel ist ein gemeinsamer Vertrag für Composition Lab Native, Composition Lab We
 Jedes Ereignis ist ein Objekt mit mindestens:
 
 ```json
-{
-  "b": 0.0,
-  "t": "dynamic"
-}
+{"b":0.0,"t":"dyn"}
 ```
 
 - `b`: Beatposition in Viertelnoten-Beats
-- `t`: Ereignistyp
-- weitere Felder hängen vom Typ ab
+- `t`: kanonischer Ereignistyp
+- `v`: optionaler Wert
+- `e`: optionaler Endbeat für Bereichsereignisse
+- `st`: optionaler Staff
+- `p`: optionaler MIDI-Pitch zur Bindung an eine konkrete Note
+- `n`: optionaler Zusatzwert
 
 Unbekannte `ev`-Typen sollen bei Projekt-Roundtrips erhalten bleiben, auch wenn eine App sie nicht selbst darstellt oder auswertet.
 
-## 3. Verbindliche Ereignistypen
+## 3. Kanonische Ereignistypen
 
-### 3.1 Dynamik
+Die kanonischen Typnamen richten sich nach dem bereits produktiv verwendeten Native-V5.0.11-Modell und dem vorhandenen MusicXML-Builder. Langformen wie `dynamic`, `articulation` oder `ornament` sind keine konkurrierenden Typnamen.
 
-```json
-{"b":0,"t":"dynamic","v":"p"}
-```
-
-`v`: z. B. `ppp`, `pp`, `p`, `mp`, `mf`, `f`, `ff`, `fff`, `sfz`, `fp`
-
-### 3.2 Dynamikverlauf / Hairpin
+### 3.1 Dynamik – `dyn`
 
 ```json
-{"b":4,"t":"wedge","v":"crescendo","id":"w1"}
-{"b":8,"t":"wedge-stop","id":"w1"}
+{"b":0,"t":"dyn","v":"p"}
 ```
 
-`v`: `crescendo` oder `diminuendo`
+`v`: z. B. `ppp`, `pp`, `p`, `mp`, `mf`, `f`, `ff`, `fff`, `sfz`, `fp`.
 
-### 3.3 Pedal
+### 3.2 Dynamikverlauf – `wedge`
+
+```json
+{"b":4,"t":"wedge","v":"crescendo","e":8}
+```
+
+`v`: `crescendo` oder `diminuendo`; `e` ist der Endbeat. Es gibt keinen separaten kanonischen `wedge-stop`-Eintrag.
+
+### 3.3 Pedal – `pedal`
 
 ```json
 {"b":0,"t":"pedal","v":"start"}
 {"b":4,"t":"pedal","v":"stop"}
 ```
 
-Optional zulässig: `change`, falls ein Importformat dies eindeutig liefert.
+Optional zulässig: `change`.
 
-### 3.4 Artikulation
+### 3.4 Artikulation – `art`
 
 ```json
-{"b":2,"t":"articulation","v":"staccato"}
+{"b":2,"t":"art","v":"staccato","p":64}
 ```
 
-Verbindliche Werte:
+Aktuell vom Native-MusicXML-Pfad unterstützt:
 - `staccato`
-- `staccatissimo`
 - `tenuto`
 - `accent`
-- `strong-accent`
-- `detached-legato`
+- `marcato`
+- `fermata`
 
-### 3.5 Ornament
+Weitere Werte dürfen ergänzt werden, ohne den Typnamen `art` zu ändern.
 
-```json
-{"b":6,"t":"ornament","v":"trill-mark"}
-```
-
-Verbindliche Werte:
-- `trill-mark`
-- `turn`
-- `inverted-turn`
-- `mordent`
-- `inverted-mordent`
-
-### 3.6 Slur
+### 3.5 Ornament / Vorschlagsfunktion – `orn`
 
 ```json
-{"b":0,"t":"slur","v":"start","id":"s1"}
-{"b":4,"t":"slur","v":"stop","id":"s1"}
+{"b":6,"t":"orn","v":"trill"}
 ```
 
-`id` verbindet Start und Ende.
+Der vorhandene Native-Builder verwendet `orn` insbesondere für `trill`, `acciaccatura` und `appoggiatura`.
 
-### 3.7 Tie
-
-Ein musikalischer Tie kann zusätzlich zur normalen Notendauer erhalten werden, wenn die Notationsherkunft relevant ist:
+### 3.6 Slur – `slur`
 
 ```json
-{"b":3,"t":"tie","v":"start","id":"t1"}
-{"b":4,"t":"tie","v":"stop","id":"t1"}
+{"b":0,"t":"slur","e":4,"st":1}
 ```
+
+Ein Slur ist ein Bereichsereignis: `b` = Start, `e` = Ende. Start und Ende werden nicht als zwei getrennte `ev`-Einträge gespeichert.
+
+### 3.7 Freie Spielanweisung – `words`
+
+```json
+{"b":8,"t":"words","v":"dolce"}
+```
+
+### 3.8 Tempo – `tempo`
+
+```json
+{"b":8,"t":"tempo","v":"rit."}
+```
+
+Der Score-Hauptwert `bpm` bleibt das globale Grundtempo; `tempo` in `ev` beschreibt lokale/expressive Tempoangaben.
+
+### 3.9 Tie – `tie` (reserviert, noch nicht vollständig implementiert)
+
+MusicXML-Notenbindungen sollen bei Bedarf zusätzlich zur `nt`-Dauer erhalten werden. Der Typ `tie` ist dafür reserviert, wird vom aktuellen MusicXML-Import aber noch nicht erzeugt.
 
 Für reine MIDI-Wiedergabe bleibt `nt` maßgeblich.
 
-### 3.8 Grace Note
+### 3.10 Weitere zulässige Erweiterungen
 
-```json
-{"b":7.5,"t":"grace","v":"acciaccatura"}
-```
-
-Verbindliche Werte:
-- `grace`
-- `acciaccatura`
-- `appoggiatura`
-
-Die zugehörige Tonhöhe bleibt grundsätzlich in `nt`; `ev` beschreibt hier die Notationsfunktion.
-
-### 3.9 Fermate
-
-```json
-{"b":12,"t":"fermata"}
-```
-
-Optional `v`: `normal`, `angled`, `square`.
-
-### 3.10 Atemzeichen / Caesura
-
-```json
-{"b":15,"t":"breath"}
-```
-
-oder
-
-```json
-{"b":15,"t":"caesura"}
-```
-
-### 3.11 Text / Spielanweisung
-
-```json
-{"b":8,"t":"text","v":"dolce"}
-```
-
-Für freie musikalische Spielanweisungen, sofern kein spezieller Ereignistyp existiert.
-
-### 3.12 Rehearsal Mark
-
-```json
-{"b":16,"t":"rehearsal","v":"A"}
-```
-
-### 3.13 Arpeggio
-
-```json
-{"b":4,"t":"arpeggio","v":"normal"}
-```
-
-Optional `v`: `normal`, `up`, `down`, `non-arpeggiate`.
+Weitere semantische Typen wie Atemzeichen, Caesura, Rehearsal Marks oder Arpeggio dürfen ergänzt werden. Bestehende kanonische Typen dürfen dabei nicht umbenannt oder parallel durch Synonyme ersetzt werden.
 
 ## 4. Was nicht in `ev` gehört
 
 ### `nt`
-Noten selbst:
-- Start
-- Dauer
-- Pitch
-- Velocity
-- Staff
-- Gate
+Noten selbst: Start, Dauer, Pitch, Velocity, Staff, Gate.
 
 ### `ct`
 Normale MIDI-Controller, z. B. Sustain CC64, Modulation CC1, Expression CC11.
@@ -173,43 +123,33 @@ Normale MIDI-Controller, z. B. Sustain CC64, Modulation CC1, Expression CC11.
 Wenn dieselbe musikalische Information sowohl als Notationsereignis als auch als Controller vorliegt, dürfen beide Formen koexistieren, sofern sie unterschiedliche Zwecke erfüllen. Beispiel: MusicXML-Pedalzeichen in `ev`, tatsächlicher CC64-Verlauf in `ct`.
 
 ### `me`
-Rohe MIDI-/DAW-Ereignisse, insbesondere solche, die möglichst unverändert transportiert werden sollen:
-- Pitch Bend
-- Channel Pressure / Aftertouch
-- Poly Aftertouch
-- SysEx
-- spezielle Metaevents
-- DAW-spezifische Zusatzdaten
+Rohe MIDI-/DAW-Ereignisse, insbesondere Pitch Bend, Aftertouch, SysEx, spezielle Metaevents und DAW-spezifische Zusatzdaten.
 
 ## 5. Roundtrip-Regel
 
 Apps dürfen unbekannte `ev`-Einträge nicht ohne Not löschen.
 
-Eine App darf:
-- bekannte Typen interpretieren
-- bekannte Typen exportieren
-- unbekannte Typen ignorieren
-
-Sie soll unbekannte Typen bei CLAB-/Score-Roundtrips trotzdem erhalten.
+Eine App darf bekannte Typen interpretieren und unbekannte Typen ignorieren. Bei CLAB-/Score-Roundtrips sollen unbekannte Einträge trotzdem erhalten bleiben.
 
 ## 6. MusicXML
 
 MusicXML ist die wichtigste externe Quelle und Senke für `ev`.
 
-Der Native-MusicXML-Export verwendet bereits einen großen Teil dieser Ereignisklassen. Der Import soll schrittweise auf denselben Vertrag erweitert werden.
-
-Reihenfolge für den Importausbau:
-1. `dynamic`
-2. `articulation`
+Der Native-MusicXML-Import unterstützt inzwischen:
+1. `dyn`
+2. `art`
 3. `pedal`
 4. `slur`
-5. `wedge` / `wedge-stop`
-6. `ornament`
-7. `grace`
-8. weitere Typen
+5. `wedge`
+
+Weitere Importausbaustufen:
+6. `tie`
+7. `orn`
+8. `words`
+9. weitere Typen
 
 ## 7. Versionierung
 
-Diese Spezifikation ist `EV Contract 1`.
+Diese Spezifikation ist `EV Contract 1.1`.
 
-Neue Ereignistypen dürfen ergänzt werden, ohne bestehende Typen umzudeuten. Änderungen an der Bedeutung bestehender Typen benötigen eine neue Contract-Version.
+Version 1.1 korrigiert die erste Dokumentfassung so, dass die kanonischen Typnamen exakt mit dem bereits vorhandenen Native-V5.0.11-Code übereinstimmen. Es wurden keine bestehenden produktiven Eventnamen im Code umbenannt.
