@@ -38,6 +38,7 @@ enum MusicXMLParser {
             var grace = false
             var articulations: [String] = []
             var slurActions: [(type: String, number: String)] = []
+            var tieActions: [String] = []
         }
 
         struct DirectionDraft {
@@ -79,6 +80,7 @@ enum MusicXMLParser {
         var partEvents: [String: [NotationEvent]] = [:]
         var openWedges: [String: Int] = [:]
         var openSlurs: [String: Int] = [:]
+        var openTies: [String: Int] = [:]
 
         init(fallbackTitle: String) { self.fallbackTitle = fallbackTitle }
 
@@ -115,6 +117,10 @@ enum MusicXMLParser {
             case "slur":
                 if currentNote != nil, let kind = attributeDict["type"] {
                     currentNote?.slurActions.append((kind, attributeDict["number"] ?? "1"))
+                }
+            case "tie", "tied":
+                if currentNote != nil, let kind = attributeDict["type"], (kind == "start" || kind == "stop") {
+                    if !(currentNote?.tieActions.contains(kind) ?? false) { currentNote?.tieActions.append(kind) }
                 }
             case "pedal":
                 if currentDirection != nil, let kind = attributeDict["type"] {
@@ -227,6 +233,15 @@ enum MusicXMLParser {
                         closeRange(partID: partID, key: key, at: n.start, open: &openSlurs)
                     }
                 }
+                let tieKey = tieRangeKey(partID: partID, staff: n.staff, pitch: n.pitch)
+                for action in n.tieActions {
+                    if action == "start" {
+                        addEvent(partID: partID, NotationEvent(b: n.start, t: "tie", v: nil, e: nil, st: n.staff > 0 ? n.staff : nil, p: n.pitch, n: nil))
+                        openTies[tieKey] = max(0, (partEvents[partID]?.count ?? 1) - 1)
+                    } else if action == "stop" {
+                        closeRange(partID: partID, key: tieKey, at: n.start, open: &openTies)
+                    }
+                }
             }
             if !n.chord { measureCursor += dur }
             currentNote = nil
@@ -261,6 +276,10 @@ enum MusicXMLParser {
 
         private func rangeKey(partID: String, staff: Int, number: String) -> String {
             "\(partID):\(staff):\(number)"
+        }
+
+        private func tieRangeKey(partID: String, staff: Int, pitch: Int) -> String {
+            "\(partID):tie:\(staff):\(pitch)"
         }
 
         private func closeRange(partID: String, key: String, at beat: Double, open: inout [String: Int]) {
