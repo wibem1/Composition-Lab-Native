@@ -4,9 +4,14 @@ cd "$(dirname "$0")"
 
 APP="Composition Lab.app"
 BUILD=".build-native"
+
+# Restore the previously stable workspace architecture before compilation:
+# one neutral NSView container; workspaces switch only via isHidden.
+python3 ApplyWorkspaceLayoutFix.py
+
 SRC=(Sources/*.swift)
 
-echo "Baue Composition Lab Native V5.0.14 …"
+echo "Baue Composition Lab Native V5.0.15 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -85,7 +90,7 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 5.0.14 (Build 86) · Engine Build 14"
+echo "  Version: 5.0.15 (Build 87) · Engine Build 14"
 echo
 echo "Die App ist nativ (AppKit), kein HTML/WebView."
 echo "API-Schlüssel werden im normalen Betrieb nicht im macOS-Schlüsselbund gespeichert."
