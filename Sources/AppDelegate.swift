@@ -5,8 +5,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var mainVC: MainViewController?
     private let mainWindowFrameKey = "CompositionLab.MainWindow.Frame.v1"
 
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+    }
+
+    private var appBuild: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+    }
+
+    private var versionAndBuildText: String {
+        "V\(appVersion) · Build \(appBuild)"
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        WorkspaceFramePreserver.install()
         buildMenus()
         createMainWindowIfNeeded()
 
@@ -38,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        w.title = "Composition Lab Native · V3.5"
+        w.title = "Composition Lab Native · \(versionAndBuildText)"
         w.contentViewController = vc
         w.minSize = NSSize(width: 1000, height: 680)
         w.isReleasedWhenClosed = false
@@ -120,7 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         let appItem = NSMenuItem(title: "Composition Lab", action: nil, keyEquivalent: "")
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Über Composition Lab · V3.5", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "Über Composition Lab · \(versionAndBuildText)", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Composition Lab beenden", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
