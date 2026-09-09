@@ -3,8 +3,24 @@ from pathlib import Path
 p = Path('Sources/MainViewController.swift')
 s = p.read_text(encoding='utf-8')
 
-# Idempotent: if the neutral workspace container is already present, do nothing.
+# Never hard-code a product version in the main window title. The app version
+# is authoritative in Info.plist and should be used everywhere.
+old_title = '''    private func updateWindowTitle() {
+        view.window?.title = "Composition Lab · Projekt: \\(projectName) · V5.0.12"
+    }
+'''
+new_title = '''    private func updateWindowTitle() {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        view.window?.title = "Composition Lab · Projekt: \\(projectName) · V\\(version)"
+    }
+'''
+if old_title in s:
+    s = s.replace(old_title, new_title, 1)
+
+# Idempotent: the neutral workspace container may already have been applied by
+# an earlier build. The title correction above still runs in that case.
 if 'private let workspaceHost = NSView()' in s:
+    p.write_text(s, encoding='utf-8')
     raise SystemExit(0)
 
 old = '    private let workspaceTabs = NSTabView()\n'
@@ -63,4 +79,4 @@ if 'workspaceTabs' in s:
     raise SystemExit('Unexpected workspaceTabs reference remains after patch')
 
 p.write_text(s, encoding='utf-8')
-print('Applied neutral workspace container fix.')
+print('Applied neutral workspace container and dynamic title fix.')
