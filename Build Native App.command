@@ -11,9 +11,13 @@ BUILD=".build-native"
 # from Info.plist.
 python3 ApplyWorkspaceLayoutFix.py
 
+# Replace normal NSScrollView construction with FastScrollView. This accelerates
+# only discrete mouse-wheel events; precise trackpad scrolling stays native.
+python3 ApplyFastScrollFix.py
+
 SRC=(Sources/*.swift)
 
-echo "Baue Composition Lab Native V5.0.16 …"
+echo "Baue Composition Lab Native V5.0.17 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -113,9 +117,10 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 5.0.16 (Build 88) · Engine Build 14"
+echo "  Version: 5.0.17 (Build 89) · Engine Build 14"
 echo
 echo "Die App ist nativ (AppKit), kein HTML/WebView."
+echo "Mausrad-Scrollen ist um Faktor 2,5 beschleunigt; Trackpad bleibt unverändert."
 echo "API-Schlüssel werden im normalen Betrieb nicht im macOS-Schlüsselbund gespeichert."
 echo
 open "$APP" || true
