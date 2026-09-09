@@ -6,7 +6,7 @@ APP="Composition Lab.app"
 BUILD=".build-native"
 SRC=(Sources/*.swift)
 
-echo "Baue Composition Lab Native V5.0.12 …"
+echo "Baue Composition Lab Native V5.0.13 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -85,7 +85,7 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 5.0.12 (Build 84) · Engine Build 14"
+echo "  Version: 5.0.13 (Build 85) · Engine Build 14"
 echo
 echo "Die App ist nativ (AppKit), kein HTML/WebView."
 echo "API-Schlüssel werden im normalen Betrieb nicht im macOS-Schlüsselbund gespeichert."
