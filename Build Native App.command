@@ -7,11 +7,13 @@ BUILD=".build-native"
 
 # Restore the previously stable workspace architecture before compilation:
 # one neutral NSView container; workspaces switch only via isHidden.
+# Also replaces the last hard-coded V5.0.12 window title with the version
+# from Info.plist.
 python3 ApplyWorkspaceLayoutFix.py
 
 SRC=(Sources/*.swift)
 
-echo "Baue Composition Lab Native V5.0.15 …"
+echo "Baue Composition Lab Native V5.0.16 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -25,6 +27,25 @@ SDK="$(xcrun --sdk macosx --show-sdk-path)"
 
 pkill -x "Composition Lab" >/dev/null 2>&1 || true
 sleep 1
+
+# The repository cleanup intentionally contained only text source files and
+# therefore lost AppIcon.png. Recover the original icon from an older local
+# Composition Lab Native build/source folder when it is available.
+RECOVERED_ICNS=""
+if [ ! -f "AppIcon.png" ]; then
+  OLD_PNG="$(find "$HOME/Downloads" -type f -name 'AppIcon.png' -path '*Composition_Lab_Native*' 2>/dev/null | head -n 1 || true)"
+  if [ -n "$OLD_PNG" ]; then
+    echo "Original-Icon gefunden: $OLD_PNG"
+    cp "$OLD_PNG" AppIcon.png
+  else
+    RECOVERED_ICNS="$(find "$HOME/Downloads" "$HOME/Applications" /Applications -type f -path '*/Composition Lab.app/Contents/Resources/AppIcon.icns' 2>/dev/null | head -n 1 || true)"
+    if [ -n "$RECOVERED_ICNS" ]; then
+      echo "Original-Icon aus älterer Composition Lab.app gefunden."
+    else
+      echo "Hinweis: Kein älteres Composition-Lab-Icon auf diesem Mac gefunden."
+    fi
+  fi
+fi
 
 rm -rf "$BUILD" "$APP"
 mkdir -p "$BUILD" "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -49,6 +70,8 @@ if [ -f "AppIcon.png" ]; then
   cp AppIcon.png "$ICONSET/icon_512x512@2x.png"
   iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
   cp AppIcon.png "$APP/Contents/Resources/AppIcon.png"
+elif [ -n "$RECOVERED_ICNS" ]; then
+  cp "$RECOVERED_ICNS" "$APP/Contents/Resources/AppIcon.icns"
 fi
 
 build_arch () {
@@ -90,7 +113,7 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 5.0.15 (Build 87) · Engine Build 14"
+echo "  Version: 5.0.16 (Build 88) · Engine Build 14"
 echo
 echo "Die App ist nativ (AppKit), kein HTML/WebView."
 echo "API-Schlüssel werden im normalen Betrieb nicht im macOS-Schlüsselbund gespeichert."
