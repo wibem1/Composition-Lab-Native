@@ -11,13 +11,13 @@ BUILD=".build-native"
 # from Info.plist.
 python3 ApplyWorkspaceLayoutFix.py
 
-# Replace normal NSScrollView construction with FastScrollView. This accelerates
-# only discrete mouse-wheel events; precise trackpad scrolling stays native.
+# Replace normal NSScrollView construction with the scroll-view subclass.
+# Scroll speed remains native; the subclass only prefers the predominant axis.
 python3 ApplyFastScrollFix.py
 
 SRC=(Sources/*.swift)
 
-echo "Baue Composition Lab Native V5.0.17 …"
+echo "Baue Composition Lab Native V5.0.19 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -32,9 +32,8 @@ SDK="$(xcrun --sdk macosx --show-sdk-path)"
 pkill -x "Composition Lab" >/dev/null 2>&1 || true
 sleep 1
 
-# The repository cleanup intentionally contained only text source files and
-# therefore lost AppIcon.png. Recover the original icon from an older local
-# Composition Lab Native build/source folder when it is available.
+# Recover the original icon from an older local Composition Lab Native build/source
+# folder when it is available.
 RECOVERED_ICNS=""
 if [ ! -f "AppIcon.png" ]; then
   OLD_PNG="$(find "$HOME/Downloads" -type f -name 'AppIcon.png' -path '*Composition_Lab_Native*' 2>/dev/null | head -n 1 || true)"
@@ -85,7 +84,7 @@ build_arch () {
   xcrun swiftc "${SRC[@]}" \
     -sdk "$SDK" \
     -target "${arch}-apple-macosx11.0" \
-    -Onone \
+    -O \
     -framework Cocoa \
     -framework Security \
     -framework CryptoKit \
@@ -117,10 +116,10 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 5.0.17 (Build 89) · Engine Build 14"
+echo "  Version: 5.0.19 (Build 91) · Engine Build 14"
 echo
 echo "Die App ist nativ (AppKit), kein HTML/WebView."
-echo "Mausrad-Scrollen ist um Faktor 2,5 beschleunigt; Trackpad bleibt unverändert."
+echo "Scrolltempo ist wieder nativ; Swift wird jetzt optimiert (-O) gebaut."
 echo "API-Schlüssel werden im normalen Betrieb nicht im macOS-Schlüsselbund gespeichert."
 echo
 open "$APP" || true
