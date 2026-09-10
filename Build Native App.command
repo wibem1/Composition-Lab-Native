@@ -5,11 +5,13 @@ cd "$(dirname "$0")"
 APP="Composition Lab.app"
 BUILD=".build-native"
 
-# Restore the previously stable workspace architecture before compilation:
-# one neutral NSView container; workspaces switch only via isHidden.
-# Also replaces the last hard-coded V5.0.12 window title with the version
-# from Info.plist.
+# Keep the proven neutral workspace foundation from the 5.x line.
 python3 ApplyWorkspaceLayoutFix.py
+
+# Composition Lab 2 / v6 architecture: only Main + Noten are exposed as
+# workspaces. Experiment/compare code remains in the source temporarily as a
+# rollback/reference layer while its useful functions move into Main.
+python3 ApplyCompositionLab2.py
 
 # Replace normal NSScrollView construction with the scroll-view subclass.
 # Scroll speed remains native; the subclass only prefers the predominant axis.
@@ -17,7 +19,7 @@ python3 ApplyFastScrollFix.py
 
 SRC=(Sources/*.swift)
 
-echo "Baue Composition Lab Native V5.0.19 …"
+echo "Baue Composition Lab Native V6.0.0 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -32,8 +34,6 @@ SDK="$(xcrun --sdk macosx --show-sdk-path)"
 pkill -x "Composition Lab" >/dev/null 2>&1 || true
 sleep 1
 
-# Recover the original icon from an older local Composition Lab Native build/source
-# folder when it is available.
 RECOVERED_ICNS=""
 if [ ! -f "AppIcon.png" ]; then
   OLD_PNG="$(find "$HOME/Downloads" -type f -name 'AppIcon.png' -path '*Composition_Lab_Native*' 2>/dev/null | head -n 1 || true)"
@@ -116,10 +116,10 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 5.0.19 (Build 91) · Engine Build 14"
+echo "  Version: 6.0.0 (Build 92) · Engine Build 14"
+echo "  Architektur: Composition Lab 2 · Main + Noten"
 echo
 echo "Die App ist nativ (AppKit), kein HTML/WebView."
-echo "Scrolltempo ist wieder nativ; Swift wird jetzt optimiert (-O) gebaut."
-echo "API-Schlüssel werden im normalen Betrieb nicht im macOS-Schlüsselbund gespeichert."
+echo "Der 5.x-Quellstand bleibt als Basis erhalten; die v6-Struktur wird reproduzierbar gepatcht."
 echo
 open "$APP" || true
