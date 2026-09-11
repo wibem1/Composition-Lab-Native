@@ -19,7 +19,7 @@ s = p.read_text(encoding='utf-8')
 start = s.find('# Richer labels for the large V6.3 cards.')
 end = s.find("p.write_text(s, encoding='utf-8')", start)
 if start < 0 or end < 0:
-    raise SystemExit('V6.5 build preparation: V6.3 label-check block not found')
+    raise SystemExit('V6.5.1 build preparation: V6.3 label-check block not found')
 s = s[:start] + "# Card labels are patched separately.\n\n" + s[end:]
 p.write_text(s, encoding='utf-8')
 PY
@@ -29,10 +29,11 @@ python3 ApplyV64Layout.py
 python3 ApplyV63TechnicalWorkspace.py
 python3 ApplyV65Polish.py
 python3 ApplyV65PlayerSync.py
+python3 ApplyV651Fix.py
 python3 ApplyFastScrollFix.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native V6.5.0 …"
+echo "Baue Composition Lab Native V6.5.1 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -86,6 +87,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 6.5.0 (Build 101) · Engine Build 14"
-echo "V6.5: compact piece deck · fuller titles · Main/Noten player parity · MIDI/JSON save · V6 project + backup UI · smoother DAW watcher"
+echo "Version: 6.5.1 (Build 102) · Engine Build 14"
+echo "V6.5.1: taller piece cards · right-click MIDI/CLAB loading · freely resizable width"
 open "$APP" || true
