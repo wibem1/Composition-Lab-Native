@@ -16,7 +16,10 @@ enum Provider: String, CaseIterable, Codable {
         case .gemini:
             return [("gemini-3.7-flash", "Gemini 3.7 Flash")]
         case .anthropic:
-            return [("claude-sonnet-5", "Claude Sonnet 5")]
+            return [
+                ("claude-fable-5-1", "Claude Fable 5.1"),
+                ("claude-sonnet-5", "Claude Sonnet 5")
+            ]
         case .openai:
             return [
                 ("gpt-5.6-sol", "GPT-5.6 Sol"),
@@ -126,8 +129,10 @@ struct APICost {
             // Gemini 3.7 Flash: introductory paid-tier pricing through 2026-12-31.
             rates = (0.75, 3.75)
         case .anthropic:
-            // Claude Sonnet 5.
-            rates = (2.00, 10.00)
+            switch model {
+            case "claude-fable-5-1": rates = (10.00, 50.00)
+            default: rates = (2.00, 10.00) // Claude Sonnet 5
+            }
         case .openai:
             switch model {
             case "gpt-5.6-terra": rates = (2.00, 12.00)
