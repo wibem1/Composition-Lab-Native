@@ -19,7 +19,7 @@ s = p.read_text(encoding='utf-8')
 start = s.find('# Richer labels for the large V6.3 cards.')
 end = s.find("p.write_text(s, encoding='utf-8')", start)
 if start < 0 or end < 0:
-    raise SystemExit('V6.7.3 build preparation: V6.3 label-check block not found')
+    raise SystemExit('V6.7.4 build preparation: V6.3 label-check block not found')
 s = s[:start] + "# Card labels are patched separately.\n\n" + s[end:]
 p.write_text(s, encoding='utf-8')
 PY
@@ -44,9 +44,10 @@ python3 ApplyV670ContextMusicChat.py
 python3 ApplyV671DialogFirst.py
 python3 ApplyV672DiagnosticSaveFix.py
 python3 ApplyV673ActorFix.py
+python3 ApplyV674DialogAndDiagnosticUX.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native V6.7.3 …"
+echo "Baue Composition Lab Native V6.7.4 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -100,6 +101,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 6.7.3 (Build 119) · Engine Build 14"
-echo "DIAGNOSE V6.7.3: MainActor-Korrektur für die explizite Diagnose-Menüaktion."
+echo "Version: 6.7.4 (Build 120) · Engine Build 14"
+echo "V6.7.4: Diagnose-Speichern als echtes Sheet; MusicChat behauptet vor dem Komponieren keinen Entwurf und fragt vorhandene obere Einstellungen nicht erneut ab."
 open "$APP" || true
