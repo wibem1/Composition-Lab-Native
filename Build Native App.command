@@ -27,9 +27,8 @@ python3 ApplyV63MainLayout.py
 python3 ApplyV63CardLabels.py
 python3 ApplyV64Layout.py
 python3 ApplyV63TechnicalWorkspace.py
-# V6.5 must run after the Main/Noten/Technik reconstruction so it can polish
-# the final workspace and expose the existing save/backup infrastructure.
 python3 ApplyV65Polish.py
+python3 ApplyV65PlayerSync.py
 python3 ApplyFastScrollFix.py
 
 SRC=(Sources/*.swift)
