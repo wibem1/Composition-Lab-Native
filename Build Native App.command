@@ -20,14 +20,28 @@ python3 ApplyV6MainLayoutFix.py
 python3 ApplyV6CompileFixes.py
 
 # V6.3 replaces the visible Main workspace completely.
+# Its old exact-text card-label check is removed at build time; labels are
+# applied robustly by the dedicated boundary-based patch immediately after.
+python3 - <<'PY'
+from pathlib import Path
+p = Path('ApplyV63MainLayout.py')
+s = p.read_text(encoding='utf-8')
+start = s.find('# Richer labels for the large V6.3 cards.')
+end = s.find("p.write_text(s, encoding='utf-8')", start)
+if start < 0 or end < 0:
+    raise SystemExit('V6.3 build preparation: label-check block not found')
+s = s[:start] + "# Card labels are patched separately by ApplyV63CardLabels.py.\n\n" + s[end:]
+p.write_text(s, encoding='utf-8')
+PY
 python3 ApplyV63MainLayout.py
+python3 ApplyV63CardLabels.py
 
 # Replace normal NSScrollView construction with the scroll-view subclass.
 python3 ApplyFastScrollFix.py
 
 SRC=(Sources/*.swift)
 
-echo "Baue Composition Lab Native V6.3.0 …"
+echo "Baue Composition Lab Native V6.3.1 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -124,7 +138,7 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 6.3.0 (Build 96) · Engine Build 14"
+echo "  Version: 6.3.1 (Build 97) · Engine Build 14"
 echo "  Architektur: Main + Noten + Technik · MusicChat-zentrierte Main-Seite"
 echo
 echo "Die App ist nativ (AppKit), kein HTML/WebView."
