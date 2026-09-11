@@ -54,9 +54,10 @@ python3 ApplyV304IdeaPanelCleanup.py
 python3 ApplyV305MusicalIdeaQuality.py
 python3 ApplyV306PreserveWorkingIdea.py
 python3 ApplyV307CentralCLAB.py
+python3 ApplyV308MainCleanup.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native 3.0.7 …"
+echo "Baue Composition Lab Native 3.0.8 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -110,6 +111,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 3.0.7 (Build 307) · Engine Build 14"
-echo "3.0.7: CLAB wieder als zentrales Einzelstück-Format sichtbar; speichert Partitur, Kompositionsauftrag, editierbare Idee, KI/Modell und Einstellungen."
+echo "Version: 3.0.8 (Build 308) · Engine Build 14"
+echo "3.0.8: JSON-Sichern von Main entfernt; MIDI und CLAB bleiben die sichtbaren zentralen Einzelstück-Dateifunktionen."
 open "$APP" || true
