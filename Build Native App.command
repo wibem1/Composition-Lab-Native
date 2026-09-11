@@ -5,23 +5,13 @@ cd "$(dirname "$0")"
 APP="Composition Lab.app"
 BUILD=".build-native"
 
-# Keep the proven neutral workspace foundation from the 5.x line.
 python3 ApplyWorkspaceLayoutFix.py
-
-# V6 workspace architecture: Main + Noten + Technik.
 python3 ApplyCompositionLab2.py
-
-# Shared V6 piece-slot state, motif workflow and Main/Noten synchronization.
 python3 ApplyV6SlotsState.py
-
-# Transitional V6.2 layout patches remain for compatibility with the source base.
 python3 ApplyV6MainLayout.py
 python3 ApplyV6MainLayoutFix.py
 python3 ApplyV6CompileFixes.py
 
-# V6.3 replaces the visible Main workspace completely.
-# Its old exact-text card-label check is removed at build time; labels are
-# applied robustly by the dedicated boundary-based patch immediately after.
 python3 - <<'PY'
 from pathlib import Path
 p = Path('ApplyV63MainLayout.py')
@@ -35,13 +25,11 @@ p.write_text(s, encoding='utf-8')
 PY
 python3 ApplyV63MainLayout.py
 python3 ApplyV63CardLabels.py
-
-# Replace normal NSScrollView construction with the scroll-view subclass.
+python3 ApplyV63TechnicalWorkspace.py
 python3 ApplyFastScrollFix.py
 
 SRC=(Sources/*.swift)
-
-echo "Baue Composition Lab Native V6.3.1 …"
+echo "Baue Composition Lab Native V6.3.2 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -52,7 +40,6 @@ if ! xcrun --find swiftc >/dev/null 2>&1; then
 fi
 
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
-
 pkill -x "Composition Lab" >/dev/null 2>&1 || true
 sleep 1
 
@@ -83,15 +70,15 @@ fi
 if [ -f "AppIcon.png" ]; then
   ICONSET="$BUILD/AppIcon.iconset"
   mkdir -p "$ICONSET"
-  sips -z 16 16     AppIcon.png --out "$ICONSET/icon_16x16.png" >/dev/null
-  sips -z 32 32     AppIcon.png --out "$ICONSET/icon_16x16@2x.png" >/dev/null
-  sips -z 32 32     AppIcon.png --out "$ICONSET/icon_32x32.png" >/dev/null
-  sips -z 64 64     AppIcon.png --out "$ICONSET/icon_32x32@2x.png" >/dev/null
-  sips -z 128 128   AppIcon.png --out "$ICONSET/icon_128x128.png" >/dev/null
-  sips -z 256 256   AppIcon.png --out "$ICONSET/icon_128x128@2x.png" >/dev/null
-  sips -z 256 256   AppIcon.png --out "$ICONSET/icon_256x256.png" >/dev/null
-  sips -z 512 512   AppIcon.png --out "$ICONSET/icon_256x256@2x.png" >/dev/null
-  sips -z 512 512   AppIcon.png --out "$ICONSET/icon_512x512.png" >/dev/null
+  sips -z 16 16 AppIcon.png --out "$ICONSET/icon_16x16.png" >/dev/null
+  sips -z 32 32 AppIcon.png --out "$ICONSET/icon_16x16@2x.png" >/dev/null
+  sips -z 32 32 AppIcon.png --out "$ICONSET/icon_32x32.png" >/dev/null
+  sips -z 64 64 AppIcon.png --out "$ICONSET/icon_32x32@2x.png" >/dev/null
+  sips -z 128 128 AppIcon.png --out "$ICONSET/icon_128x128.png" >/dev/null
+  sips -z 256 256 AppIcon.png --out "$ICONSET/icon_128x128@2x.png" >/dev/null
+  sips -z 256 256 AppIcon.png --out "$ICONSET/icon_256x256.png" >/dev/null
+  sips -z 512 512 AppIcon.png --out "$ICONSET/icon_256x256@2x.png" >/dev/null
+  sips -z 512 512 AppIcon.png --out "$ICONSET/icon_512x512.png" >/dev/null
   cp AppIcon.png "$ICONSET/icon_512x512@2x.png"
   iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
   cp AppIcon.png "$APP/Contents/Resources/AppIcon.png"
@@ -119,15 +106,10 @@ build_arch () {
 }
 
 build_arch x86_64
-
 if build_arch arm64; then
   echo "Erzeuge Universal Binary (Intel + Apple Silicon) …"
-  xcrun lipo -create \
-    "$BUILD/Composition Lab-x86_64" \
-    "$BUILD/Composition Lab-arm64" \
-    -output "$APP/Contents/MacOS/Composition Lab"
+  xcrun lipo -create "$BUILD/Composition Lab-x86_64" "$BUILD/Composition Lab-arm64" -output "$APP/Contents/MacOS/Composition Lab"
 else
-  echo
   echo "Hinweis: arm64-Build nicht möglich; Intel-Fassung wird trotzdem erstellt."
   cp "$BUILD/Composition Lab-x86_64" "$APP/Contents/MacOS/Composition Lab"
 fi
@@ -138,7 +120,7 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 6.3.1 (Build 97) · Engine Build 14"
+echo "  Version: 6.3.2 (Build 98) · Engine Build 14"
 echo "  Architektur: Main + Noten + Technik · MusicChat-zentrierte Main-Seite"
 echo
 echo "Die App ist nativ (AppKit), kein HTML/WebView."
