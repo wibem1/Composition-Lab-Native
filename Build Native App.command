@@ -19,21 +19,21 @@ s = p.read_text(encoding='utf-8')
 start = s.find('# Richer labels for the large V6.3 cards.')
 end = s.find("p.write_text(s, encoding='utf-8')", start)
 if start < 0 or end < 0:
-    raise SystemExit('V6.4.1 build preparation: V6.3 label-check block not found')
+    raise SystemExit('V6.5 build preparation: V6.3 label-check block not found')
 s = s[:start] + "# Card labels are patched separately.\n\n" + s[end:]
 p.write_text(s, encoding='utf-8')
 PY
 python3 ApplyV63MainLayout.py
 python3 ApplyV63CardLabels.py
-
-# IMPORTANT: V6.4 replaces the Main workspace block. Therefore Technik must
-# be inserted AFTER V6.4, otherwise V6.4 would remove buildTechnicalWorkspace again.
 python3 ApplyV64Layout.py
 python3 ApplyV63TechnicalWorkspace.py
+# V6.5 must run after the Main/Noten/Technik reconstruction so it can polish
+# the final workspace and expose the existing save/backup infrastructure.
+python3 ApplyV65Polish.py
 python3 ApplyFastScrollFix.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native V6.4.1 …"
+echo "Baue Composition Lab Native V6.5.0 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -87,6 +87,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 6.4.1 (Build 100) · Engine Build 14"
-echo "Main: approved MusicChat layout · Technik restored after Main patch"
+echo "Version: 6.5.0 (Build 101) · Engine Build 14"
+echo "V6.5: compact piece deck · fuller titles · Main/Noten player parity · MIDI/JSON save · V6 project + backup UI · smoother DAW watcher"
 open "$APP" || true
