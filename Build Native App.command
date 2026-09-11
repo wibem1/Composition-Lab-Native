@@ -14,17 +14,20 @@ python3 ApplyCompositionLab2.py
 # Shared V6 piece-slot state, motif workflow and Main/Noten synchronization.
 python3 ApplyV6SlotsState.py
 
-# Full V6 Main rebuild: no V5 sidebar and no fold-out work area.
+# Transitional V6.2 layout patches remain for compatibility with the source base.
 python3 ApplyV6MainLayout.py
 python3 ApplyV6MainLayoutFix.py
 python3 ApplyV6CompileFixes.py
+
+# V6.3 replaces the visible Main workspace completely.
+python3 ApplyV63MainLayout.py
 
 # Replace normal NSScrollView construction with the scroll-view subclass.
 python3 ApplyFastScrollFix.py
 
 SRC=(Sources/*.swift)
 
-echo "Baue Composition Lab Native V6.2.1 …"
+echo "Baue Composition Lab Native V6.3.0 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -121,8 +124,8 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 6.2.1 (Build 95) · Engine Build 14"
-echo "  Architektur: Main + Noten + Technik · Main vollständig neu aufgebaut"
+echo "  Version: 6.3.0 (Build 96) · Engine Build 14"
+echo "  Architektur: Main + Noten + Technik · MusicChat-zentrierte Main-Seite"
 echo
 echo "Die App ist nativ (AppKit), kein HTML/WebView."
 echo
