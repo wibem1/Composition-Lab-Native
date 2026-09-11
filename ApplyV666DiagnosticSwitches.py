@@ -33,16 +33,7 @@ block = r'''    private var v666BridgeEnabledInNotation = false
         sender.state = v666PlayerTimerEnabledInNotation ? .on : .off
         if workspaceSegment.selectedSegment == 1 {
             if v666PlayerTimerEnabledInNotation {
-                if playerTimer == nil {
-                    let timer = Timer(timeInterval: 0.10,
-                                      target: self,
-                                      selector: #selector(playerTimerFired(_:)),
-                                      userInfo: nil,
-                                      repeats: true)
-                    timer.tolerance = 0.03
-                    RunLoop.main.add(timer, forMode: .default)
-                    playerTimer = timer
-                }
+                if playerTimer == nil { startPlayerTimer() }
             } else {
                 playerTimer?.invalidate()
                 playerTimer = nil
@@ -76,6 +67,8 @@ block = r'''    private var v666BridgeEnabledInNotation = false
         if !v666PlayerTimerEnabledInNotation {
             playerTimer?.invalidate()
             playerTimer = nil
+        } else if playerTimer == nil {
+            startPlayerTimer()
         }
         if !v666PreviewEnabledInNotation {
             musicXMLPreviewTimer?.invalidate()
