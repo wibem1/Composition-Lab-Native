@@ -47,9 +47,10 @@ python3 ApplyV673ActorFix.py
 python3 ApplyV674DialogAndDiagnosticUX.py
 python3 ApplyV675DiagnosticModalAndPreparedState.py
 python3 ApplyV300MusicChatCore.py
+python3 ApplyV301Corrections.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native 3.0.0 …"
+echo "Baue Composition Lab Native 3.0.1 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -103,6 +104,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 3.0.0 (Build 300) · Engine Build 14"
-echo "3.0.0: MusicChat als Kern, editierbare Kompositionsidee, bewusste Partiturerzeugung aus der sichtbaren Idee."
+echo "Version: 3.0.1 (Build 301) · Engine Build 14"
+echo "3.0.1: musikalisch vollständigere editierbare Idee, redundante Impulsanzeige entfernt, Diagnose direkt in Downloads."
 open "$APP" || true
