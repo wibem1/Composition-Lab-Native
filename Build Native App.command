@@ -49,9 +49,10 @@ python3 ApplyV675DiagnosticModalAndPreparedState.py
 python3 ApplyV300MusicChatCore.py
 python3 ApplyV301Corrections.py
 python3 ApplyV302SlotAndSourceFix.py
+python3 ApplyV303Consistency.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native 3.0.2 …"
+echo "Baue Composition Lab Native 3.0.3 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -105,6 +106,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 3.0.2 (Build 302) · Engine Build 14"
-echo "3.0.2: neue Kompositionen landen zuverlässig im gewählten leeren bzw. nächsten freien Slot; alte Vorlage wird nicht mehr ungefragt mitkomponiert."
+echo "Version: 3.0.3 (Build 303) · Engine Build 14"
+echo "3.0.3: neueste ausdrückliche MusicChat-Vorgaben aktualisieren die sichtbaren Eckdaten; Widersprüche mit manuell editierter Kompositionsidee werden vor dem Komponieren geklärt."
 open "$APP" || true
