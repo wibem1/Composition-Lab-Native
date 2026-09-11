@@ -48,9 +48,10 @@ python3 ApplyV674DialogAndDiagnosticUX.py
 python3 ApplyV675DiagnosticModalAndPreparedState.py
 python3 ApplyV300MusicChatCore.py
 python3 ApplyV301Corrections.py
+python3 ApplyV302SlotAndSourceFix.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native 3.0.1 …"
+echo "Baue Composition Lab Native 3.0.2 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -104,6 +105,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 3.0.1 (Build 301) · Engine Build 14"
-echo "3.0.1: musikalisch vollständigere editierbare Idee, redundante Impulsanzeige entfernt, Diagnose direkt in Downloads."
+echo "Version: 3.0.2 (Build 302) · Engine Build 14"
+echo "3.0.2: neue Kompositionen landen zuverlässig im gewählten leeren bzw. nächsten freien Slot; alte Vorlage wird nicht mehr ungefragt mitkomponiert."
 open "$APP" || true
