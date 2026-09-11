@@ -25,18 +25,24 @@ helper = '''    private func v665SetNotationDiagnosticMode(_ enabled: Bool) {
 if 'private func v665SetNotationDiagnosticMode' not in s:
     s = s.replace(workspace_marker, helper + workspace_marker, 1)
 
-# Robustly inject diagnostic mode directly after the workspace selection line,
-# independent of whether earlier performance patches changed history-refresh code.
-selection = '        workspaceTabs.selectTabViewItem(at: i)\n'
-if selection not in s:
-    raise SystemExit('V6.6.5: workspace selection line not found')
+# The stable workspace architecture no longer uses NSTabView selection here.
+# It toggles workspaceViews via host.isHidden. Inject after the visibility loop.
+loop_block = '''        for (index, host) in workspaceViews.enumerated() {
+            host.isHidden = index != i
+        }
+'''
+if loop_block not in s:
+    raise SystemExit('V6.6.5: neutral workspace visibility loop not found')
 if 'v665SetNotationDiagnosticMode(i == 1)' not in s:
-    s = s.replace(selection,
-                  selection + '        v665SetNotationDiagnosticMode(i == 1)\n',
+    s = s.replace(loop_block,
+                  loop_block + '        v665SetNotationDiagnosticMode(i == 1)\n',
                   1)
 
-# Disable any automatic notation refresh in the workspace handler for this diagnostic.
+# Disable automatic notation refresh in the workspace handler for this diagnostic.
 s = s.replace('        if i == 1 { scheduleMusicXMLPreviewRefresh() }\n',
+              '        // V6.6.5 Diagnose: kein automatisches Noten-Refresh beim Seitenwechsel.\n',
+              1)
+s = s.replace('        if i == 3 { scheduleMusicXMLPreviewRefresh() }\n',
               '        // V6.6.5 Diagnose: kein automatisches Noten-Refresh beim Seitenwechsel.\n',
               1)
 
