@@ -19,7 +19,7 @@ s = p.read_text(encoding='utf-8')
 start = s.find('# Richer labels for the large V6.3 cards.')
 end = s.find("p.write_text(s, encoding='utf-8')", start)
 if start < 0 or end < 0:
-    raise SystemExit('V6.7.1 build preparation: V6.3 label-check block not found')
+    raise SystemExit('V6.7.2 build preparation: V6.3 label-check block not found')
 s = s[:start] + "# Card labels are patched separately.\n\n" + s[end:]
 p.write_text(s, encoding='utf-8')
 PY
@@ -42,9 +42,10 @@ python3 ApplyV6610DiagnosticPipeline.py
 python3 ApplyV6611UnifiedMusicChat.py
 python3 ApplyV670ContextMusicChat.py
 python3 ApplyV671DialogFirst.py
+python3 ApplyV672DiagnosticSaveFix.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native V6.7.1 …"
+echo "Baue Composition Lab Native V6.7.2 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -98,6 +99,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 6.7.1 (Build 117) · Engine Build 14"
-echo "MUSICCHAT V6.7.1: Senden ist wieder reiner Dialog. Die KI denkt mit und fragt bei Mehrdeutigkeit nach; eine Partitur entsteht erst über den blauen Komponieren-Button. Diagnosedaten werden für Dialog und Komposition erhalten."
+echo "Version: 6.7.2 (Build 118) · Engine Build 14"
+echo "DIAGNOSE V6.7.2: Menüaktion wird explizit an den MainViewController weitergereicht; Diagnosedaten werden mit sichtbarer Fehlermeldung serialisiert und gespeichert."
 open "$APP" || true
