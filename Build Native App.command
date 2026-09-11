@@ -53,9 +53,10 @@ python3 ApplyV303Consistency.py
 python3 ApplyV304IdeaPanelCleanup.py
 python3 ApplyV305MusicalIdeaQuality.py
 python3 ApplyV306PreserveWorkingIdea.py
+python3 ApplyV307CentralCLAB.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native 3.0.6 …"
+echo "Baue Composition Lab Native 3.0.7 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -109,6 +110,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 3.0.6 (Build 306) · Engine Build 14"
-echo "3.0.6: Stück-Slot-Auswahl lädt Wiedergabe und Noten, überschreibt aber die aktuelle editierbare Kompositionsidee nicht mehr."
+echo "Version: 3.0.7 (Build 307) · Engine Build 14"
+echo "3.0.7: CLAB wieder als zentrales Einzelstück-Format sichtbar; speichert Partitur, Kompositionsauftrag, editierbare Idee, KI/Modell und Einstellungen."
 open "$APP" || true
