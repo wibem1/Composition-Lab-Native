@@ -13,6 +13,10 @@ python3 ApplyWorkspaceLayoutFix.py
 # rollback/reference layer while its useful functions move into Main.
 python3 ApplyCompositionLab2.py
 
+# Complete native Drag & Drop: import on Main/Noten plus drag export for
+# MIDI, MusicXML and complete CLAB project files.
+python3 ApplyFullDragDrop.py
+
 # Replace normal NSScrollView construction with the scroll-view subclass.
 # Scroll speed remains native; the subclass only prefers the predominant axis.
 python3 ApplyFastScrollFix.py
@@ -118,6 +122,7 @@ echo "FERTIG:"
 echo "  $PWD/$APP"
 echo "  Version: 6.0.0 (Build 92) · Engine Build 14"
 echo "  Architektur: Composition Lab 2 · Main + Noten"
+echo "  Drag & Drop: MIDI + MusicXML + CLAB hinein und heraus"
 echo
 echo "Die App ist nativ (AppKit), kein HTML/WebView."
 echo "Der 5.x-Quellstand bleibt als Basis erhalten; die v6-Struktur wird reproduzierbar gepatcht."
