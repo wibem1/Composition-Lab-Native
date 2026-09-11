@@ -16,6 +16,7 @@ python3 ApplyV6Rebuild.py
 
 # Full V6 Main rebuild: no V5 sidebar and no fold-out work area.
 python3 ApplyV6MainLayout.py
+python3 ApplyV6MainLayoutFix.py
 
 # Replace normal NSScrollView construction with the scroll-view subclass.
 python3 ApplyFastScrollFix.py
