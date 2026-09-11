@@ -3,11 +3,11 @@ from pathlib import Path
 p = Path('Sources/MainViewController.swift')
 s = p.read_text(encoding='utf-8')
 
-# 1) Main piece deck: deliberately tall portrait-like cards, not wide cards.
+# V6.6: true tall cards, but less bulky than the mockup.
 start = s.find('    private func buildV64Deck() -> NSView {\n')
 end = s.find('    private func buildV64BottomBar() -> NSView {\n', start)
 if start < 0 or end < 0:
-    raise SystemExit('V6.5.3: deck boundaries not found')
+    raise SystemExit('V6.6: deck boundaries not found')
 
 new_deck = r'''    private func buildV64Deck() -> NSView {
         let panel = v64Panel()
@@ -29,7 +29,7 @@ new_deck = r'''    private func buildV64Deck() -> NSView {
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
         scroll.borderType = .noBorder
-        scroll.heightAnchor.constraint(equalToConstant: 220).isActive = true
+        scroll.heightAnchor.constraint(equalToConstant: 184).isActive = true
 
         let cards = NSStackView()
         cards.orientation = .horizontal
@@ -43,13 +43,11 @@ new_deck = r'''    private func buildV64Deck() -> NSView {
         for i in 0..<10 {
             let b = PieceSlotDropButton(title: "\(i + 1)", target: self, action: #selector(pieceSlotPressed(_:)))
             b.tag = i
-            b.bezelStyle = .rounded
             b.setButtonType(.toggle)
             b.font = .systemFont(ofSize: 12, weight: .medium)
-            b.cell?.wraps = true
             b.alignment = .center
-            b.widthAnchor.constraint(equalToConstant: 112).isActive = true
-            b.heightAnchor.constraint(equalToConstant: 198).isActive = true
+            b.widthAnchor.constraint(equalToConstant: 116).isActive = true
+            b.heightAnchor.constraint(equalToConstant: 164).isActive = true
             b.onDropFile = { [weak self, weak b] url in
                 guard let self, let b else { return }
                 self.importFile(url, intoPieceSlot: b.tag)
@@ -70,7 +68,7 @@ new_deck = r'''    private func buildV64Deck() -> NSView {
             cards.addArrangedSubview(b)
         }
 
-        cards.widthAnchor.constraint(greaterThanOrEqualToConstant: 1195).isActive = true
+        cards.widthAnchor.constraint(greaterThanOrEqualToConstant: 1235).isActive = true
         mainPieceSlotButtons = buttons
         updatePieceSlotButtons()
         stack.addArrangedSubview(scroll)
@@ -81,11 +79,11 @@ new_deck = r'''    private func buildV64Deck() -> NSView {
 '''
 s = s[:start] + new_deck + s[end:]
 
-# 2) Make bottom controls horizontally scrollable instead of forcing a fixed window width.
+# Keep bottom controls horizontally scrollable so the window width remains freely resizable.
 start = s.find('    private func buildV64BottomBar() -> NSView {\n')
 end = s.find('    private func importFile(_ url: URL, intoPieceSlot index: Int) {\n', start)
 if start < 0 or end < 0:
-    raise SystemExit('V6.5.3: bottom bar boundaries not found')
+    raise SystemExit('V6.6: bottom bar boundaries not found')
 
 new_bottom = r'''    private func buildV64BottomBar() -> NSView {
         let panel = v64Panel()
@@ -159,7 +157,7 @@ new_bottom = r'''    private func buildV64BottomBar() -> NSView {
 '''
 s = s[:start] + new_bottom + s[end:]
 
-# 3) Right-click actions for assigning a file to the clicked slot.
+# Right-click actions for assigning MIDI/CLAB to the clicked slot.
 action_marker = '    @objc private func v65ProjectAction(_ sender: NSPopUpButton) {\n'
 if '@objc private func v651LoadMIDIIntoSlot' not in s:
     actions = r'''    @objc private func v651LoadMIDIIntoSlot(_ sender: NSMenuItem) {
@@ -184,16 +182,15 @@ if '@objc private func v651LoadMIDIIntoSlot' not in s:
 
 '''
     if action_marker not in s:
-        raise SystemExit('V6.5.3: action insertion marker not found')
+        raise SystemExit('V6.6: action insertion marker not found')
     s = s.replace(action_marker, actions + action_marker, 1)
 
-# 4) Explicitly keep the main window freely resizable in width.
 view_appear = '''        view.window?.minSize = NSSize(width:1000,height:680)\n'''
 replacement = '''        view.window?.minSize = NSSize(width:900,height:680)\n        view.window?.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)\n'''
 if view_appear in s:
     s = s.replace(view_appear, replacement, 1)
 elif 'CGFloat.greatestFiniteMagnitude' not in s:
-    raise SystemExit('V6.5.3: viewDidAppear window size marker not found')
+    raise SystemExit('V6.6: viewDidAppear window size marker not found')
 
 p.write_text(s, encoding='utf-8')
-print('Applied V6.5.3: much taller and narrower piece cards.')
+print('Applied V6.6 card proportions and resizable layout.')
