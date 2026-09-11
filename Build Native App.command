@@ -50,9 +50,10 @@ python3 ApplyV300MusicChatCore.py
 python3 ApplyV301Corrections.py
 python3 ApplyV302SlotAndSourceFix.py
 python3 ApplyV303Consistency.py
+python3 ApplyV304IdeaPanelCleanup.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native 3.0.3 …"
+echo "Baue Composition Lab Native 3.0.4 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -106,6 +107,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 3.0.3 (Build 303) · Engine Build 14"
-echo "3.0.3: neueste ausdrückliche MusicChat-Vorgaben aktualisieren die sichtbaren Eckdaten; Widersprüche mit manuell editierter Kompositionsidee werden vor dem Komponieren geklärt."
+echo "Version: 3.0.4 (Build 304) · Engine Build 14"
+echo "3.0.4: redundantes Feld 'Notizen / musikalischer Impuls' entfernt; editierbare Kompositionsidee nutzt den frei gewordenen Raum."
 open "$APP" || true
