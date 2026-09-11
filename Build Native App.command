@@ -12,18 +12,19 @@ python3 ApplyWorkspaceLayoutFix.py
 python3 ApplyCompositionLab2.py
 
 # Shared V6 piece-slot state, motif workflow and Main/Noten synchronization.
-python3 ApplyV6Rebuild.py
+python3 ApplyV6SlotsState.py
 
 # Full V6 Main rebuild: no V5 sidebar and no fold-out work area.
 python3 ApplyV6MainLayout.py
 python3 ApplyV6MainLayoutFix.py
+python3 ApplyV6CompileFixes.py
 
 # Replace normal NSScrollView construction with the scroll-view subclass.
 python3 ApplyFastScrollFix.py
 
 SRC=(Sources/*.swift)
 
-echo "Baue Composition Lab Native V6.2.0 …"
+echo "Baue Composition Lab Native V6.2.1 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -120,7 +121,7 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 6.2.0 (Build 94) · Engine Build 14"
+echo "  Version: 6.2.1 (Build 95) · Engine Build 14"
 echo "  Architektur: Main + Noten + Technik · Main vollständig neu aufgebaut"
 echo
 echo "Die App ist nativ (AppKit), kein HTML/WebView."
