@@ -19,7 +19,7 @@ s = p.read_text(encoding='utf-8')
 start = s.find('# Richer labels for the large V6.3 cards.')
 end = s.find("p.write_text(s, encoding='utf-8')", start)
 if start < 0 or end < 0:
-    raise SystemExit('V6.6.10 build preparation: V6.3 label-check block not found')
+    raise SystemExit('V6.6.11 build preparation: V6.3 label-check block not found')
 s = s[:start] + "# Card labels are patched separately.\n\n" + s[end:]
 p.write_text(s, encoding='utf-8')
 PY
@@ -39,9 +39,10 @@ python3 ApplyV667AsyncBridge.py
 python3 ApplyV668PianoSplitAndMeasures.py
 python3 ApplyV669ConceptAndDiagnostic.py
 python3 ApplyV6610DiagnosticPipeline.py
+python3 ApplyV6611UnifiedMusicChat.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native V6.6.10 …"
+echo "Baue Composition Lab Native V6.6.11 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -95,6 +96,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 6.6.10 (Build 114) · Engine Build 14"
-echo "REGULÄRE VERSION: Diagnose wird ab Start jeder Komposition fortlaufend gespeichert und kann auch bei Fehlern exportiert werden."
+echo "Version: 6.6.11 (Build 115) · Engine Build 14"
+echo "REGULÄRE VERSION: neue Kompositionsaufträge im MusicChat verwenden dieselbe Kompositionspipeline wie der Komponieren-Button; Editierdialog bleibt getrennt und Diagnose markiert den Pfad."
 open "$APP" || true
