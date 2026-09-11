@@ -1,0 +1,27 @@
+from pathlib import Path
+
+# Composition Lab Native 3.0.5
+# Make the editable composition idea a concrete musical working concept rather
+# than a poetic mood description. It should offer useful parameters the user can
+# actually change, while still leaving the composer freedom.
+
+p = Path('Sources/MainViewController.swift')
+s = p.read_text(encoding='utf-8')
+
+old = '''        - compositionIdea ist ein musikalischer Gedanke/Impuls, kein technischer Bauplan. Stelle die aktuellen Eckdaten knapp voran: Takte · Taktart · Tempo in BPM · Tonart · Besetzung. Danach höchstens drei kurze Sätze zur musikalischen Identität und Entwicklungsrichtung.\n        - Übernimm dafür die oben eingetragenen Rahmenbedingungen ausdrücklich; lasse Tempo oder Tonart nicht weg, wenn sie vorhanden sind.\n        - Vermeide unnötige taktgenaue Regieanweisungen wie einen fest vorgeschriebenen Höhepunkt in Takt 5, sofern der Nutzer das nicht ausdrücklich verlangt. Lass kompositorische Freiheit.\n'''
+new = '''        - compositionIdea ist ein KONKRETES MUSIKALISCHES ARBEITSKONZEPT, keine poetische Stimmungsbeschreibung und kein technischer Takt-für-Takt-Bauplan.\n        - Stelle die aktuellen Eckdaten in einer eigenen ersten Zeile voran: Takte · Taktart · Tempo in BPM · Tonart · Besetzung. Übernimm die oben eingetragenen Rahmenbedingungen ausdrücklich; Tempo oder Tonart dürfen nicht fehlen, wenn sie vorhanden sind.\n        - Beschreibe danach knapp musikalisch greifbare Entscheidungen, die der Nutzer direkt editieren kann. Je nach Besetzung und Aufgabe sind besonders wichtig: Motiv/Melodie bzw. thematisches Material; Begleitung/Satz/Textur; Harmonik bzw. tonale Bewegung; Entwicklung/Form bzw. Umgang mit Wiederholung und Kontrast.\n        - Nenne nicht mechanisch immer alle Kategorien. Wähle die musikalisch relevanten Aspekte und formuliere sie konkret genug, dass man einzelne Entscheidungen ändern kann.\n        - Bevorzuge Aussagen wie „kurze auftaktige Phrase, überwiegend schrittweise, später erweitert“, „gebrochene Akkorde reagieren auf die Melodie“, „zunächst toniknah, später deutlichere Ausweichung“ gegenüber bloßen Adjektiven wie „lyrisch“, „warm“, „ausdrucksvoll“, „schwebend“ oder „sehnsuchtsvoll“. Solche Charakterwörter dürfen ergänzen, aber nie den musikalischen Inhalt ersetzen.\n        - Bei Klaviermusik sollen insbesondere Rollen bzw. Verhältnis der Hände, Begleitungs- oder Satzidee und melodisches Material greifbar werden, sofern der Nutzer nichts anderes vorgibt. Bei anderer Besetzung entsprechend idiomatisch denken.\n        - Vermeide unnötige taktgenaue Regieanweisungen wie einen fest vorgeschriebenen Höhepunkt in Takt 5, sofern der Nutzer das nicht ausdrücklich verlangt. Lass genügend kompositorische Freiheit.\n        - Die Idee darf mehrere kurze Absätze oder Zeilen haben und soll typischerweise etwa 4 bis 7 knappe musikalische Aussagen umfassen. Sie muss als editierbarer Arbeitszettel brauchbar sein.\n'''
+if old not in s:
+    raise SystemExit('V3.0.5: MusicChat idea-quality anchor not found')
+s = s.replace(old, new, 1)
+
+old = '''            Formuliere eine kurze, musikalisch brauchbare Kompositionsidee.\n            Stelle zuerst die aktuellen Eckdaten knapp voran: Takte · Taktart · Tempo in BPM · Tonart · Besetzung.\n            Übernimm die im Auftrag vorhandenen Werte ausdrücklich; Tempo und Tonart dürfen nicht fehlen, wenn sie angegeben sind.\n            Danach höchstens drei kurze Sätze zu musikalischer Identität, Material und Entwicklungsrichtung.\n            Kein detaillierter Takt-für-Takt-Ablauf und kein technischer Bauplan. Keine unnötig festgelegten Höhepunkte in bestimmten Takten, sofern der Nutzer das nicht verlangt. Noch keine Partitur erzeugen.\n'''
+new = '''            Formuliere ein konkretes, direkt editierbares MUSIKALISCHES ARBEITSKONZEPT, keine bloße Stimmungsbeschreibung.\n            Stelle zuerst die aktuellen Eckdaten in einer eigenen Zeile voran: Takte · Taktart · Tempo in BPM · Tonart · Besetzung.\n            Übernimm die im Auftrag vorhandenen Werte ausdrücklich; Tempo und Tonart dürfen nicht fehlen, wenn sie angegeben sind.\n            Beschreibe danach in etwa 4 bis 7 knappen Aussagen die musikalisch relevanten Entscheidungen. Wähle passend zur Aufgabe insbesondere aus: Motiv/Melodie oder thematisches Material; Begleitung/Satz/Textur; Harmonik bzw. tonale Bewegung; Entwicklung/Form, Wiederholung und Kontrast.\n            Formuliere konkret und veränderbar. Nicht nur „lyrisch“, „warm“, „schwebend“ usw., sondern z.B. Art und Bewegung einer Phrase, Funktion der Begleitung, harmonische Richtung oder Art der motivischen Veränderung.\n            Bei Klaviermusik sollen Rollen bzw. Verhältnis der Hände und die Satzidee greifbar sein, sofern der Nutzer nichts anderes vorgibt. Bei anderer Besetzung entsprechend idiomatisch denken.\n            Kein detaillierter Takt-für-Takt-Ablauf und kein technischer Bauplan. Keine unnötig festgelegten Höhepunkte in bestimmten Takten, sofern der Nutzer das nicht verlangt. Lass kompositorische Freiheit. Noch keine Partitur erzeugen.\n'''
+if old not in s:
+    raise SystemExit('V3.0.5: compose-button idea-quality anchor not found')
+s = s.replace(old, new, 1)
+
+# Keep diagnostic version current.
+s = s.replace('"interfaceVersion": "3.0.4"', '"interfaceVersion": "3.0.5"')
+
+p.write_text(s, encoding='utf-8')
+print('Applied V3.0.5: concrete, musically editable composition ideas.')
