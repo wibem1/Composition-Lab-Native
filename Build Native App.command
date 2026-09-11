@@ -19,7 +19,7 @@ s = p.read_text(encoding='utf-8')
 start = s.find('# Richer labels for the large V6.3 cards.')
 end = s.find("p.write_text(s, encoding='utf-8')", start)
 if start < 0 or end < 0:
-    raise SystemExit('V6.6.8 build preparation: V6.3 label-check block not found')
+    raise SystemExit('V6.6.9 build preparation: V6.3 label-check block not found')
 s = s[:start] + "# Card labels are patched separately.\n\n" + s[end:]
 p.write_text(s, encoding='utf-8')
 PY
@@ -37,9 +37,10 @@ python3 ApplyFastScrollFix.py
 python3 ApplyV664Performance.py
 python3 ApplyV667AsyncBridge.py
 python3 ApplyV668PianoSplitAndMeasures.py
+python3 ApplyV669ConceptAndDiagnostic.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native V6.6.8 …"
+echo "Baue Composition Lab Native V6.6.9 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -93,6 +94,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 6.6.8 (Build 112) · Engine Build 14"
-echo "REGULÄRE VERSION: Klavier-Zweiersystem, wählbarer Splitpunkt, editierbare Taktvorgaben, Motiv übernimmt obere Einstellungen."
+echo "Version: 6.6.9 (Build 113) · Engine Build 14"
+echo "REGULÄRE VERSION: musikalischer Impuls hält die gesetzte Taktzahl verbindlich ein; Diagnose wieder sichtbar."
 open "$APP" || true
