@@ -19,17 +19,20 @@ s = p.read_text(encoding='utf-8')
 start = s.find('# Richer labels for the large V6.3 cards.')
 end = s.find("p.write_text(s, encoding='utf-8')", start)
 if start < 0 or end < 0:
-    raise SystemExit('V6.3 build preparation: label-check block not found')
-s = s[:start] + "# Card labels are patched separately by ApplyV63CardLabels.py.\n\n" + s[end:]
+    raise SystemExit('V6.4 build preparation: V6.3 label-check block not found')
+s = s[:start] + "# Card labels are patched separately.\n\n" + s[end:]
 p.write_text(s, encoding='utf-8')
 PY
 python3 ApplyV63MainLayout.py
 python3 ApplyV63CardLabels.py
 python3 ApplyV63TechnicalWorkspace.py
+# V6.4 is deliberately last: it replaces only the visible Main workspace with
+# the approved MusicChat-oriented layout while retaining V6 slot/engine logic.
+python3 ApplyV64Layout.py
 python3 ApplyFastScrollFix.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native V6.3.2 …"
+echo "Baue Composition Lab Native V6.4.0 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -38,38 +41,20 @@ if ! xcrun --find swiftc >/dev/null 2>&1; then
   read -r -p "Return zum Beenden …"
   exit 1
 fi
-
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
 pkill -x "Composition Lab" >/dev/null 2>&1 || true
 sleep 1
-
 RECOVERED_ICNS=""
 if [ ! -f "AppIcon.png" ]; then
   OLD_PNG="$(find "$HOME/Downloads" -type f -name 'AppIcon.png' -path '*Composition_Lab_Native*' 2>/dev/null | head -n 1 || true)"
-  if [ -n "$OLD_PNG" ]; then
-    echo "Original-Icon gefunden: $OLD_PNG"
-    cp "$OLD_PNG" AppIcon.png
-  else
-    RECOVERED_ICNS="$(find "$HOME/Downloads" "$HOME/Applications" /Applications -type f -path '*/Composition Lab.app/Contents/Resources/AppIcon.icns' 2>/dev/null | head -n 1 || true)"
-    if [ -n "$RECOVERED_ICNS" ]; then
-      echo "Original-Icon aus älterer Composition Lab.app gefunden."
-    else
-      echo "Hinweis: Kein älteres Composition-Lab-Icon auf diesem Mac gefunden."
-    fi
-  fi
+  if [ -n "$OLD_PNG" ]; then cp "$OLD_PNG" AppIcon.png; else RECOVERED_ICNS="$(find "$HOME/Downloads" "$HOME/Applications" /Applications -type f -path '*/Composition Lab.app/Contents/Resources/AppIcon.icns' 2>/dev/null | head -n 1 || true)"; fi
 fi
-
 rm -rf "$BUILD" "$APP"
 mkdir -p "$BUILD" "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Info.plist "$APP/Contents/Info.plist"
-
-if [ -f "Composition_Lab_Benutzerhandbuch_V3_0.pdf" ]; then
-  cp "Composition_Lab_Benutzerhandbuch_V3_0.pdf" "$APP/Contents/Resources/"
-fi
-
+if [ -f "Composition_Lab_Benutzerhandbuch_V3_0.pdf" ]; then cp "Composition_Lab_Benutzerhandbuch_V3_0.pdf" "$APP/Contents/Resources/"; fi
 if [ -f "AppIcon.png" ]; then
-  ICONSET="$BUILD/AppIcon.iconset"
-  mkdir -p "$ICONSET"
+  ICONSET="$BUILD/AppIcon.iconset"; mkdir -p "$ICONSET"
   sips -z 16 16 AppIcon.png --out "$ICONSET/icon_16x16.png" >/dev/null
   sips -z 32 32 AppIcon.png --out "$ICONSET/icon_16x16@2x.png" >/dev/null
   sips -z 32 32 AppIcon.png --out "$ICONSET/icon_32x32.png" >/dev/null
@@ -82,47 +67,25 @@ if [ -f "AppIcon.png" ]; then
   cp AppIcon.png "$ICONSET/icon_512x512@2x.png"
   iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
   cp AppIcon.png "$APP/Contents/Resources/AppIcon.png"
-elif [ -n "$RECOVERED_ICNS" ]; then
-  cp "$RECOVERED_ICNS" "$APP/Contents/Resources/AppIcon.icns"
-fi
+elif [ -n "$RECOVERED_ICNS" ]; then cp "$RECOVERED_ICNS" "$APP/Contents/Resources/AppIcon.icns"; fi
 
 build_arch () {
-  local arch="$1"
-  local out="$BUILD/Composition Lab-$arch"
+  local arch="$1"; local out="$BUILD/Composition Lab-$arch"
   echo "Kompiliere für $arch …"
-  xcrun swiftc "${SRC[@]}" \
-    -sdk "$SDK" \
-    -target "${arch}-apple-macosx11.0" \
-    -O \
-    -framework Cocoa \
-    -framework Security \
-    -framework CryptoKit \
-    -framework AVFoundation \
-    -framework CoreMIDI \
-    -framework AudioToolbox \
-    -framework WebKit \
-    -framework PDFKit \
-    -o "$out"
+  xcrun swiftc "${SRC[@]}" -sdk "$SDK" -target "${arch}-apple-macosx11.0" -O -framework Cocoa -framework Security -framework CryptoKit -framework AVFoundation -framework CoreMIDI -framework AudioToolbox -framework WebKit -framework PDFKit -o "$out"
 }
-
 build_arch x86_64
 if build_arch arm64; then
   echo "Erzeuge Universal Binary (Intel + Apple Silicon) …"
   xcrun lipo -create "$BUILD/Composition Lab-x86_64" "$BUILD/Composition Lab-arm64" -output "$APP/Contents/MacOS/Composition Lab"
 else
-  echo "Hinweis: arm64-Build nicht möglich; Intel-Fassung wird trotzdem erstellt."
   cp "$BUILD/Composition Lab-x86_64" "$APP/Contents/MacOS/Composition Lab"
 fi
-
 chmod +x "$APP/Contents/MacOS/Composition Lab"
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
-echo "FERTIG:"
-echo "  $PWD/$APP"
-echo "  Version: 6.3.2 (Build 98) · Engine Build 14"
-echo "  Architektur: Main + Noten + Technik · MusicChat-zentrierte Main-Seite"
-echo
-echo "Die App ist nativ (AppKit), kein HTML/WebView."
-echo
+echo "FERTIG: $PWD/$APP"
+echo "Version: 6.4.0 (Build 99) · Engine Build 14"
+echo "Main: approved MusicChat layout · 10 large cards · generous margins"
 open "$APP" || true
