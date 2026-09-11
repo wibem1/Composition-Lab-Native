@@ -51,9 +51,10 @@ python3 ApplyV301Corrections.py
 python3 ApplyV302SlotAndSourceFix.py
 python3 ApplyV303Consistency.py
 python3 ApplyV304IdeaPanelCleanup.py
+python3 ApplyV305MusicalIdeaQuality.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native 3.0.4 …"
+echo "Baue Composition Lab Native 3.0.5 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -107,6 +108,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 3.0.4 (Build 304) · Engine Build 14"
-echo "3.0.4: redundantes Feld 'Notizen / musikalischer Impuls' entfernt; editierbare Kompositionsidee nutzt den frei gewordenen Raum."
+echo "Version: 3.0.5 (Build 305) · Engine Build 14"
+echo "3.0.5: Kompositionsideen sind konkrete, direkt editierbare musikalische Arbeitskonzepte statt poetischer Stimmungsbeschreibungen."
 open "$APP" || true
