@@ -8,19 +8,16 @@ props = '''    private let workspaceSegment = NSSegmentedControl(labels: ["Main"
 if segment in s and 'private var pieceSlots:' not in s:
     s = s.replace(segment, props, 1)
 
-# Main: slot bar becomes the top-level comparison/navigation surface.
 marker = '''        let topSplit = NSSplitView()\n        topSplit.isVertical = true\n'''
 replacement = '''        let slotBar = buildPieceSlotBar(includeMotifButton: true)\n        outer.addArrangedSubview(slotBar)\n        slotBar.widthAnchor.constraint(equalTo: outer.widthAnchor).isActive = true\n\n        let topSplit = NSSplitView()\n        topSplit.isVertical = true\n'''
 if marker in s and 'let slotBar = buildPieceSlotBar(includeMotifButton: true)' not in s:
     s = s.replace(marker, replacement, 1)
 
-# Noten: same ten slots plus a compact transport/progress bar.
 marker = '''        let topRow = NSStackView()\n        topRow.orientation = .horizontal\n'''
 replacement = '''        let notationSlotBar = buildPieceSlotBar(includeMotifButton: false)\n        rightStack.addArrangedSubview(notationSlotBar)\n        notationSlotBar.widthAnchor.constraint(equalTo: rightStack.widthAnchor).isActive = true\n\n        let notationTransport = buildNotationTransport()\n        rightStack.addArrangedSubview(notationTransport)\n        notationTransport.widthAnchor.constraint(equalTo: rightStack.widthAnchor).isActive = true\n\n        let topRow = NSStackView()\n        topRow.orientation = .horizontal\n'''
 if marker in s and 'let notationSlotBar = buildPieceSlotBar(includeMotifButton: false)' not in s:
     s = s.replace(marker, replacement, 1)
 
-# Insert V6 slot logic before the existing UI helper section.
 helper_marker = '    private func separatorBox() -> NSBox {\n'
 helpers = r'''    private func buildPieceSlotBar(includeMotifButton: Bool) -> NSView {
         let bar = NSStackView()
@@ -171,13 +168,11 @@ helpers = r'''    private func buildPieceSlotBar(includeMotifButton: Bool) -> NS
 if helper_marker in s and 'private func buildPieceSlotBar(includeMotifButton:' not in s:
     s = s.replace(helper_marker, helpers + helper_marker, 1)
 
-# Every composition request is bound to the slot that was active when it started.
 marker = '''        saveSettingsFromUI()\n        // Kein Zugriff auf den macOS-Schlüsselbund: Schlüssel gelten nur für diese Sitzung.\n'''
 replacement = '''        saveSettingsFromUI()\n        pendingCompositionSlot = activePieceSlot\n        // Kein Zugriff auf den macOS-Schlüsselbund: Schlüssel gelten nur für diese Sitzung.\n'''
 if marker in s and 'pendingCompositionSlot = activePieceSlot' not in s:
     s = s.replace(marker, replacement, 1)
 
-# Install result into the request's slot and keep slot state synchronized.
 marker = '''        lastScore = score; lastConcept = concept; lastProvider = provider; lastModel = model\n        musicXMLCurrentLabel.stringValue = "Aktuelles Stück: " + score.ti\n'''
 replacement = '''        if addHistory, let requestedSlot = pendingCompositionSlot {\n            activePieceSlot = max(0, min(requestedSlot, pieceSlots.count - 1))\n            pendingCompositionSlot = nil\n        }\n        lastScore = score; lastConcept = concept; lastProvider = provider; lastModel = model\n        musicXMLCurrentLabel.stringValue = "Aktuelles Stück: " + score.ti\n'''
 if marker in s and 'if addHistory, let requestedSlot = pendingCompositionSlot' not in s:
@@ -188,17 +183,31 @@ replacement = '''        if !slotSelectionLoad { captureCurrentInActiveSlot() }\
 if marker in s and 'if !slotSelectionLoad { captureCurrentInActiveSlot() }' not in s:
     s = s.replace(marker, replacement, 1)
 
-# Chat edits belong to the same active piece slot and refresh notation.
 marker = '''                            if changed, let sc = self.lastScore {\n                                self.history.insert(HistoryItem'''
 replacement = '''                            if changed, let sc = self.lastScore {\n                                self.captureCurrentInActiveSlot()\n                                self.scheduleMusicXMLPreviewRefresh()\n                                self.history.insert(HistoryItem'''
 if marker in s and 'self.captureCurrentInActiveSlot()\n                                self.scheduleMusicXMLPreviewRefresh()' not in s:
     s = s.replace(marker, replacement, 1)
 
-# Mirror main transport progress/time on the Noten page.
-marker = '''        playerTimeLabel.stringValue="\\(t(pos)) / \\(t(dur))"\n        if dur > 0 { playerProgress.doubleValue = max(0, min(1, pos / dur)) } else { playerProgress.doubleValue = 0 }\n'''
-replacement = '''        playerTimeLabel.stringValue="\\(t(pos)) / \\(t(dur))"\n        notationPlayerTimeLabel.stringValue = playerTimeLabel.stringValue\n        if dur > 0 {\n            let f = max(0, min(1, pos / dur))\n            playerProgress.doubleValue = f\n            notationPlayerProgress.doubleValue = f\n        } else {\n            playerProgress.doubleValue = 0\n            notationPlayerProgress.doubleValue = 0\n        }\n'''
+marker = '''        playerTimeLabel.stringValue="\\(t(pos)) / \\(t(dur))"\n        if dur > 0 { playerProgress.doubleValue = max(0, min(1, pos / dur)) } else { playerProgress.doubleValue = 0 }\n'''.replace('\\\\(', '\\(')
+replacement = '''        playerTimeLabel.stringValue="\\(t(pos)) / \\(t(dur))"\n        notationPlayerTimeLabel.stringValue = playerTimeLabel.stringValue\n        if dur > 0 {\n            let f = max(0, min(1, pos / dur))\n            playerProgress.doubleValue = f\n            notationPlayerProgress.doubleValue = f\n        } else {\n            playerProgress.doubleValue = 0\n            notationPlayerProgress.doubleValue = 0\n        }\n'''.replace('\\\\(', '\\(')
 if marker in s and 'notationPlayerTimeLabel.stringValue = playerTimeLabel.stringValue' not in s:
     s = s.replace(marker, replacement, 1)
+
+required = [
+    'private var pieceSlots:',
+    'buildPieceSlotBar(includeMotifButton: true)',
+    'buildPieceSlotBar(includeMotifButton: false)',
+    'private func buildPieceSlotBar(includeMotifButton:',
+    'pendingCompositionSlot = activePieceSlot',
+    'if addHistory, let requestedSlot = pendingCompositionSlot',
+    'if !slotSelectionLoad { captureCurrentInActiveSlot() }',
+    'self.captureCurrentInActiveSlot()',
+    'private func buildNotationTransport()',
+    'notationPlayerTimeLabel.stringValue = playerTimeLabel.stringValue'
+]
+missing = [x for x in required if x not in s]
+if missing:
+    raise SystemExit('V6 rebuild patch incomplete; missing: ' + ', '.join(missing))
 
 p.write_text(s, encoding='utf-8')
 print('Applied V6 rebuild: ten piece slots, motif generation, shared Main/Noten selection and Noten transport.')
