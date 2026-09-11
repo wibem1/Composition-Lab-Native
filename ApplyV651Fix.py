@@ -3,11 +3,11 @@ from pathlib import Path
 p = Path('Sources/MainViewController.swift')
 s = p.read_text(encoding='utf-8')
 
-# 1) Main piece deck: taller, not wider; tight surrounding panel.
+# 1) Main piece deck: deliberately tall portrait-like cards, not wide cards.
 start = s.find('    private func buildV64Deck() -> NSView {\n')
 end = s.find('    private func buildV64BottomBar() -> NSView {\n', start)
 if start < 0 or end < 0:
-    raise SystemExit('V6.5.1: deck boundaries not found')
+    raise SystemExit('V6.5.3: deck boundaries not found')
 
 new_deck = r'''    private func buildV64Deck() -> NSView {
         let panel = v64Panel()
@@ -29,13 +29,13 @@ new_deck = r'''    private func buildV64Deck() -> NSView {
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
         scroll.borderType = .noBorder
-        scroll.heightAnchor.constraint(equalToConstant: 148).isActive = true
+        scroll.heightAnchor.constraint(equalToConstant: 220).isActive = true
 
         let cards = NSStackView()
         cards.orientation = .horizontal
         cards.alignment = .centerY
         cards.spacing = 8
-        cards.edgeInsets = NSEdgeInsets(top: 1, left: 1, bottom: 2, right: 1)
+        cards.edgeInsets = NSEdgeInsets(top: 2, left: 1, bottom: 2, right: 1)
         cards.translatesAutoresizingMaskIntoConstraints = false
         scroll.documentView = cards
 
@@ -48,8 +48,8 @@ new_deck = r'''    private func buildV64Deck() -> NSView {
             b.font = .systemFont(ofSize: 12, weight: .medium)
             b.cell?.wraps = true
             b.alignment = .center
-            b.widthAnchor.constraint(equalToConstant: 138).isActive = true
-            b.heightAnchor.constraint(equalToConstant: 130).isActive = true
+            b.widthAnchor.constraint(equalToConstant: 112).isActive = true
+            b.heightAnchor.constraint(equalToConstant: 198).isActive = true
             b.onDropFile = { [weak self, weak b] url in
                 guard let self, let b else { return }
                 self.importFile(url, intoPieceSlot: b.tag)
@@ -70,7 +70,7 @@ new_deck = r'''    private func buildV64Deck() -> NSView {
             cards.addArrangedSubview(b)
         }
 
-        cards.widthAnchor.constraint(greaterThanOrEqualToConstant: 1455).isActive = true
+        cards.widthAnchor.constraint(greaterThanOrEqualToConstant: 1195).isActive = true
         mainPieceSlotButtons = buttons
         updatePieceSlotButtons()
         stack.addArrangedSubview(scroll)
@@ -85,7 +85,7 @@ s = s[:start] + new_deck + s[end:]
 start = s.find('    private func buildV64BottomBar() -> NSView {\n')
 end = s.find('    private func importFile(_ url: URL, intoPieceSlot index: Int) {\n', start)
 if start < 0 or end < 0:
-    raise SystemExit('V6.5.1: bottom bar boundaries not found')
+    raise SystemExit('V6.5.3: bottom bar boundaries not found')
 
 new_bottom = r'''    private func buildV64BottomBar() -> NSView {
         let panel = v64Panel()
@@ -184,16 +184,16 @@ if '@objc private func v651LoadMIDIIntoSlot' not in s:
 
 '''
     if action_marker not in s:
-        raise SystemExit('V6.5.1: action insertion marker not found')
+        raise SystemExit('V6.5.3: action insertion marker not found')
     s = s.replace(action_marker, actions + action_marker, 1)
 
-# 4) Explicitly keep the main window freely resizable in width. The bottom bar no longer imposes its intrinsic width.
+# 4) Explicitly keep the main window freely resizable in width.
 view_appear = '''        view.window?.minSize = NSSize(width:1000,height:680)\n'''
 replacement = '''        view.window?.minSize = NSSize(width:900,height:680)\n        view.window?.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)\n'''
 if view_appear in s:
     s = s.replace(view_appear, replacement, 1)
 elif 'CGFloat.greatestFiniteMagnitude' not in s:
-    raise SystemExit('V6.5.1: viewDidAppear window size marker not found')
+    raise SystemExit('V6.5.3: viewDidAppear window size marker not found')
 
 p.write_text(s, encoding='utf-8')
-print('Applied V6.5.1: taller cards, right-click slot loading, freely resizable window.')
+print('Applied V6.5.3: much taller and narrower piece cards.')
