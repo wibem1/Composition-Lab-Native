@@ -8,18 +8,19 @@ BUILD=".build-native"
 # Keep the proven neutral workspace foundation from the 5.x line.
 python3 ApplyWorkspaceLayoutFix.py
 
-# Composition Lab 2 / v6 architecture: only Main + Noten are exposed as
-# workspaces. Experiment/compare code remains in the source temporarily as a
-# rollback/reference layer while its useful functions move into Main.
+# V6 base architecture: only Main + Noten are exposed as workspaces.
 python3 ApplyCompositionLab2.py
 
+# V6 rebuild: ten piece slots, integrated motif workflow and shared
+# Main/Noten comparison + playback surface.
+python3 ApplyV6Rebuild.py
+
 # Replace normal NSScrollView construction with the scroll-view subclass.
-# Scroll speed remains native; the subclass only prefers the predominant axis.
 python3 ApplyFastScrollFix.py
 
 SRC=(Sources/*.swift)
 
-echo "Baue Composition Lab Native V6.0.0 …"
+echo "Baue Composition Lab Native V6.1.0 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -116,10 +117,9 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 6.0.0 (Build 92) · Engine Build 14"
-echo "  Architektur: Composition Lab 2 · Main + Noten"
+echo "  Version: 6.1.0 (Build 93) · Engine Build 14"
+echo "  Architektur: Main + Noten · 10 Stück-Slots · Motiv 2/4/8"
 echo
 echo "Die App ist nativ (AppKit), kein HTML/WebView."
-echo "Der 5.x-Quellstand bleibt als Basis erhalten; die v6-Struktur wird reproduzierbar gepatcht."
 echo
 open "$APP" || true
