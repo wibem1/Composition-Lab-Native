@@ -19,7 +19,7 @@ s = p.read_text(encoding='utf-8')
 start = s.find('# Richer labels for the large V6.3 cards.')
 end = s.find("p.write_text(s, encoding='utf-8')", start)
 if start < 0 or end < 0:
-    raise SystemExit('V6.5.2 build preparation: V6.3 label-check block not found')
+    raise SystemExit('V6.5.3 build preparation: V6.3 label-check block not found')
 s = s[:start] + "# Card labels are patched separately.\n\n" + s[end:]
 p.write_text(s, encoding='utf-8')
 PY
@@ -34,7 +34,7 @@ python3 ApplyV652Volume.py
 python3 ApplyFastScrollFix.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native V6.5.2 …"
+echo "Baue Composition Lab Native V6.5.3 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -88,6 +88,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 6.5.2 (Build 103) · Engine Build 14"
-echo "V6.5.2: visible volume sliders on Main and Noten"
+echo "Version: 6.5.3 (Build 104) · Engine Build 14"
+echo "V6.5.3: much taller and narrower piece cards"
 open "$APP" || true
