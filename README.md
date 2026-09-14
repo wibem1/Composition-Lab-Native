@@ -10,33 +10,38 @@ Gemeinsame Grundlagen sind insbesondere Engine Build 14, CLAB, MIDI und MusicXML
 
 ## Aktiver Stand
 
-`main` ist der freigegebene aktive Quellstand:
+`main` baut aktuell:
 
-- Composition Lab Native **V5.0.12**
-- Build **84**
+- Composition Lab Native **V6.0.0**
+- Build **92**
 - Engine Build **14**
+- Architektur: **Composition Lab 2 · Main + Noten**
 
-V5.0.12 basiert auf dem gesicherten Referenzstand V5.0.11 / Build 83 und enthält die konsolidierten Core-Korrekturen:
+`Info.plist` und `Build Native App.command` stimmen auf V6.0.0 / Build 92 überein.
 
-- MIDI-Import: reale importierte Notendauer mit `gate = 1.0`
-- MusicXML-Import für zentrale `ev`-Ereignisse
-- zweistaffige Staff-Zuordnung geprüft
-- MusicXML-Tie-Import und Tie-Export
-- dokumentierte Roundtrip-Tests
+## Build-Architektur
+
+Der 5.x-Quellstand dient weiterhin als stabile Basis. Beim Build werden reproduzierbar vier aktive Transformationsschritte angewendet:
+
+- `ApplyWorkspaceLayoutFix.py`
+- `ApplyCompositionLab2.py`
+- `ApplyFullDragDrop.py`
+- `ApplyFastScrollFix.py`
+
+Diese Dateien sind **Bestandteil des aktuellen Build-Prozesses** und dürfen nicht als alte Patch-Reste gelöscht werden.
 
 ## Referenzstand
 
 Der unveränderliche Ausgangsstand liegt im Branch `reference-v5.0.11`.
 
-Der aktive `main` enthält den vollständigen Swift-Quellbaum direkt unter `Sources/`.
-
 ## Struktur
 
-- `Sources/` — vollständiger aktiver Swift-Quellbaum
+- `Sources/` — Swift-Quellbasis
 - `tests/` — reproduzierbare MusicXML-Testfixtures
-- `*.md` — Core-Vertrag, Audits und Testergebnisse; sollen schrittweise unter `docs/` gebündelt werden
-- `Info.plist` — Produktversion und macOS-Bundlekonfiguration
-- `Build Native App.command` — baut die macOS-App direkt aus `Sources/`
+- `Apply*.py` — aktive, reproduzierbare V6-Transformationen
+- `Info.plist` — V6.0.0 / Build 92
+- `Build Native App.command` — baut die Universal-App für Intel und Apple Silicon
+- technische Markdown-Dateien — Core-Vertrag, Audits und Testergebnisse
 
 ## CLAB
 
@@ -44,6 +49,4 @@ Composition Lab Native bleibt die Referenz für das gemeinsame `.clab`-Projektdo
 
 ## Entwicklungsregel
 
-Keine neue Funktion, solange eine Änderung nicht gegen den gemeinsamen Core-Vertrag geprüft wurde. Der Referenzbranch `reference-v5.0.11` bleibt unverändert.
-
-Historische Hilfs- und Apply-Skripte im Repository werden nur entfernt, wenn ihre Änderungen nachweislich vollständig im aktuellen Quellstand enthalten sind und sie vom Build nicht mehr verwendet werden.
+Der Referenzbranch `reference-v5.0.11` bleibt unverändert. Änderungen an MIDI-, MusicXML- oder CLAB-Semantik werden gegen den gemeinsamen Core geprüft. Build-Skripte werden erst entfernt, wenn ihre Transformationen vollständig in einen konsolidierten Quellbaum übernommen wurden.
