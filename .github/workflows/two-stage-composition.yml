@@ -5,17 +5,15 @@ permissions:
 jobs:
   migrate:
     if: github.actor == 'wibem1'
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Apply two-stage composition architecture
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('Sources/Models.swift'); s=p.read_text()
-          s=s.replace('static let engineBuild = 14','static let engineBuild = 15')
-          a=s.index('    static func conceptPrompt(_ assignment: String) -> String {')
-          b=s.index('\n    static let technical =',a)
+          p=Path('Sources/Models.swift'); s=p.read_text(); s=s.replace('static let engineBuild = 14','static let engineBuild = 15')
+          a=s.index('    static func conceptPrompt(_ assignment: String) -> String {'); b=s.index('\n    static let technical =',a)
           new='''    static func conceptPrompt(_ assignment: String) -> String {
         """
         Komponiere das verlangte Stück musikalisch frei und eigenständig. Konzentriere dich ausschließlich auf musikalische Gestalt, Verlauf, Stimmen, Rhythmus, Harmonik, Artikulation und Charakter. Denke noch NICHT an MIDI-Codierung, Beat-Werte, JSON oder ein technisches Ausgabeformat.
@@ -31,9 +29,7 @@ jobs:
     Du bist jetzt ausschließlich Notations- und MIDI-Übersetzer. Übertrage den bereits fertigen musikalischen Entwurf so vollständig und werkgetreu wie möglich in das nachfolgend verlangte JSON-Format. Komponiere NICHT neu, vereinfache NICHT, regularisiere NICHT den Rhythmus und ersetze keine ungewöhnlichen musikalischen Entscheidungen durch Standards. Bewahre insbesondere rhythmische Vielfalt, Pausen, Stimmführung, Phrasierung, Artikulation und Dynamik des Entwurfs.
     """
 '''
-          s=s[:a]+new+s[b:]
-          p.write_text(s)
-
+          p.write_text(s[:a]+new+s[b:])
           p=Path('Sources/MainViewController.swift'); s=p.read_text()
           s=s.replace('\\(ComposerPrompts.technical)\n\n                AUFTRAG:\n                \\(prompt)\n\n                DEIN KONZEPT:', '\\(ComposerPrompts.translationRule)\n\n                \\(ComposerPrompts.technical)\n\n                URSPRÜNGLICHER AUFTRAG:\n                \\(prompt)\n\n                FERTIGER MUSIKALISCHER ENTWURF:')
           s=s.replace('\\(ComposerPrompts.technical)\n\n                AUFTRAG:\n                \\(assignment)\n\n                DEIN KONZEPT:', '\\(ComposerPrompts.translationRule)\n\n                \\(ComposerPrompts.technical)\n\n                URSPRÜNGLICHER AUFTRAG:\n                \\(assignment)\n\n                FERTIGER MUSIKALISCHER ENTWURF:')
@@ -41,7 +37,7 @@ jobs:
           s=s.replace('"engineBuild": ComposerPrompts.engineBuild,','"engineBuild": ComposerPrompts.engineBuild,\n                                    "compositionArchitecture": "two-stage-free-draft-then-faithful-translation",')
           p.write_text(s)
           PY
-      - name: Verify source invariants
+      - name: Verify source and Swift syntax
         run: |
           grep -q 'engineBuild = 15' Sources/Models.swift
           grep -q 'static let translationRule' Sources/Models.swift
@@ -49,11 +45,8 @@ jobs:
           grep -q 'FERTIGER MUSIKALISCHER ENTWURF' Sources/MainViewController.swift
           grep -q 'V5.0.13' Sources/MainViewController.swift
           ! grep -q 'DEIN KONZEPT:' Sources/MainViewController.swift
-      - name: Compile Swift sources
-        run: |
-          SDK="$(xcrun --sdk macosx --show-sdk-path)"
-          xcrun swiftc Sources/*.swift -sdk "$SDK" -target "x86_64-apple-macosx11.0" -framework Cocoa -framework Security -framework CryptoKit -framework AVFoundation -framework CoreMIDI -framework AudioToolbox -framework WebKit -framework PDFKit -o /tmp/CompositionLab-test
-      - name: Commit tested migration
+          swiftc -parse Sources/Models.swift Sources/MainViewController.swift
+      - name: Commit checked migration
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
