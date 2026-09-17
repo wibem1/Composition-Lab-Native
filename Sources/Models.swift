@@ -195,7 +195,7 @@ struct AppSettings: Codable {
 
 enum ComposerPrompts {
     // Eingefrorener musikalischer Kern: entspricht Engine Build 14 der APK/iPad-Version.
-    static let engineBuild = 14
+    static let engineBuild = 15
 
     static let system = """
     Du bist ein Kompositions- und Produktionsassistent für MIDI.
@@ -204,21 +204,18 @@ enum ComposerPrompts {
 
     static func conceptPrompt(_ assignment: String) -> String {
         """
-        Formuliere ausschließlich einen kurzen musikalischen Gedanken/Impuls für folgenden Auftrag:
+        Komponiere das verlangte Stück musikalisch frei und eigenständig. Konzentriere dich ausschließlich auf musikalische Gestalt, Verlauf, Stimmen, Rhythmus, Harmonik, Artikulation und Charakter. Denke noch NICHT an MIDI-Codierung, Beat-Werte, JSON oder ein technisches Ausgabeformat.
 
+        AUFTRAG:
         \(assignment)
 
-        WICHTIG FÜR DIESEN SCHRITT:
-        - Nur die musikalische Idee in normaler Sprache beschreiben.
-        - Keine technische Umsetzung liefern.
-        - Kein JSON ausgeben.
-        - Keinen Python-Code oder anderen Programmcode ausgeben.
-        - Keinen MIDI-Code, keine Bibliotheken und keine Codeblöcke ausgeben.
-        - Noch keine Partitur erzeugen.
-
-        Antworte ausschließlich mit dem musikalischen Impuls.
+        Schreibe einen vollständigen, konkret ausnotierbaren musikalischen Entwurf, aus dem anschließend eine andere technische Instanz die MIDI-Daten erzeugen kann. Gib in der ersten Zeile lediglich einen kurzen passenden Werktitel als „Titel: …“ an. Mache keine Erläuterung über deine Arbeitsweise.
         """
     }
+
+    static let translationRule = """
+    Du bist jetzt ausschließlich Notations- und MIDI-Übersetzer. Übertrage den bereits fertigen musikalischen Entwurf so vollständig und werkgetreu wie möglich in das nachfolgend verlangte JSON-Format. Komponiere NICHT neu, vereinfache NICHT, regularisiere NICHT den Rhythmus und ersetze keine ungewöhnlichen musikalischen Entscheidungen durch Standards. Bewahre insbesondere rhythmische Vielfalt, Pausen, Stimmführung, Phrasierung, Artikulation und Dynamik des Entwurfs.
+    """
 
     static let technical = """
     NOTATION UND AUSGABE:

@@ -1385,12 +1385,14 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 }
 
                 let compPrompt = """
+                \(ComposerPrompts.translationRule)
+
                 \(ComposerPrompts.technical)
 
-                AUFTRAG:
+                URSPRÜNGLICHER AUFTRAG:
                 \(prompt)
 
-                DEIN KONZEPT:
+                FERTIGER MUSIKALISCHER ENTWURF:
                 \(concept.text)
 
                 \(self?.titleAvoidanceInstruction() ?? "Vergib der Komposition einen eigenständigen, prägnanten Titel.")
@@ -1414,6 +1416,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                                 self?.lastDiagnostic = [
                                     "format": "composition-lab-native-diagnostic",
                                     "engineBuild": ComposerPrompts.engineBuild,
+                                    "compositionArchitecture": "two-stage-free-draft-then-faithful-translation",
                                     "interface": "macOS AppKit",
                                     "interfaceVersion": "1.0",
                                     "provider": p.rawValue,
@@ -2442,12 +2445,14 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             case .failure(let err): DispatchQueue.main.async { window?.setStatus("Fehler: \(err.localizedDescription)",good:false) }
             case .success(let concept):
                 let prompt="""
+                \(ComposerPrompts.translationRule)
+
                 \(ComposerPrompts.technical)
 
-                AUFTRAG:
+                URSPRÜNGLICHER AUFTRAG:
                 \(assignment)
 
-                DEIN KONZEPT:
+                FERTIGER MUSIKALISCHER ENTWURF:
                 \(concept.text)
 
                 \(self?.titleAvoidanceInstruction() ?? "Vergib der Komposition einen eigenständigen, prägnanten Titel.")
@@ -2688,12 +2693,14 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             case .failure(let err): DispatchQueue.main.async { window?.setDialogText("Fehler: \(err.localizedDescription)") }
             case .success(let concept):
                 let prompt = """
+                \(ComposerPrompts.translationRule)
+
                 \(ComposerPrompts.technical)
 
-                AUFTRAG:
+                URSPRÜNGLICHER AUFTRAG:
                 \(assignment)
 
-                DEIN KONZEPT:
+                FERTIGER MUSIKALISCHER ENTWURF:
                 \(concept.text)
 
                 \(self.titleAvoidanceInstruction())
@@ -2719,7 +2726,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     private func updateWindowTitle() {
-        view.window?.title = "Composition Lab · Projekt: \(projectName) · V5.0.12"
+        view.window?.title = "Composition Lab · Projekt: \(projectName) · V5.0.13"
     }
 
     @objc func menuNameProject() {
