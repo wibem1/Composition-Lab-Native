@@ -1,0 +1,22 @@
+name: Apply Composition Lab v5.0.13
+on:
+  push:
+permissions:
+  contents: write
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/apply_two_stage_v5013.py
+      - run: swiftc -parse Sources/Models.swift Sources/MainViewController.swift
+      - run: grep -q 'FERTIGER MUSIKALISCHER ENTWURF' Sources/MainViewController.swift
+      - run: grep -q 'Komponiere NICHT neu' Sources/Models.swift
+      - run: grep -q 'V5.0.13' Sources/MainViewController.swift
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Sources/Models.swift Sources/MainViewController.swift
+          git diff --cached --quiet && exit 0
+          git commit -m 'Composition Lab v5.0.13: two-stage composition architecture'
+          git push
