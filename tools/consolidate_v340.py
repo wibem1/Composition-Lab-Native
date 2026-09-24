@@ -78,11 +78,14 @@ clean=r'''enum ComposerPrompts {
 models.write_text(s[:start]+clean,encoding="utf-8")
 
 api=root/"Sources/APIClient.swift"; a=api.read_text(encoding="utf-8")
-a=a.replace("func begin(provider: Provider, model: String, effort: Effort,\\n               system: String, user: String, wantJSON: Bool) -> Int {",
-            "func begin(provider: Provider, model: String, effort: Effort, purpose: String,\\n               system: String, user: String, wantJSON: Bool) -> Int {")
-a=a.replace('"reasoning": effort.rawValue,\\n                "wantJSON": wantJSON,','"reasoning": effort.rawValue,\\n                "purpose": purpose,\\n                "wantJSON": wantJSON,')
-a=a.replace("func call(provider: Provider, model: String, key: String, effort: Effort,\\n              system: String, user: String, wantJSON: Bool, completion: @escaping Completion) {\\n        let logID = AICommunicationLog.shared.begin(provider: provider, model: model, effort: effort,\\n                                                    system: system, user: user, wantJSON: wantJSON)",
-            "func call(provider: Provider, model: String, key: String, effort: Effort, purpose: String,\\n              system: String, user: String, wantJSON: Bool, completion: @escaping Completion) {\\n        let logID = AICommunicationLog.shared.begin(provider: provider, model: model, effort: effort, purpose: purpose,\\n                                                    system: system, user: user, wantJSON: wantJSON)")
+a=re.sub(r'func begin\(provider: Provider, model: String, effort: Effort,\s*system: String, user: String, wantJSON: Bool\) -> Int \{',
+         'func begin(provider: Provider, model: String, effort: Effort, purpose: String,\\n               system: String, user: String, wantJSON: Bool) -> Int {',a, count=1)
+a=a.replace('"reasoning": effort.rawValue,\n                "wantJSON": wantJSON,',
+            '"reasoning": effort.rawValue,\n                "purpose": purpose,\n                "wantJSON": wantJSON,',1)
+a=re.sub(r'func call\(provider: Provider, model: String, key: String, effort: Effort,\s*system: String, user: String, wantJSON: Bool, completion: @escaping Completion\) \{\s*let logID = AICommunicationLog\.shared\.begin\(provider: provider, model: model, effort: effort,\s*system: system, user: user, wantJSON: wantJSON\)',
+         'func call(provider: Provider, model: String, key: String, effort: Effort, purpose: String,\\n              system: String, user: String, wantJSON: Bool, completion: @escaping Completion) {\\n        let logID = AICommunicationLog.shared.begin(provider: provider, model: model, effort: effort, purpose: purpose,\\n                                                    system: system, user: user, wantJSON: wantJSON)',a,count=1)
+if '"purpose": purpose' not in a or 'purpose: String' not in a:
+    raise SystemExit("API purpose logging rewrite failed")
 api.write_text(a,encoding="utf-8")
 
 main=root/"Sources/MainViewController.swift"; m=main.read_text(encoding="utf-8")
