@@ -120,7 +120,7 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 6.1.0 (Build 93) · Engine Build 14"
+echo "  Version: 6.1.0 (Build 93) · Composition Engine 2.0 / Engine Build 20"
 echo "  Architektur: Composition Lab 2 · Main + Noten"
 echo "  Drag & Drop: MIDI + MusicXML + CLAB hinein und heraus"
 echo
