@@ -2326,149 +2326,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         let p = provider
         let m = model
         let e = effort
-        var visibleIdea = conceptView.string.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Composition Lab 3.0 ideas normally start with:
-        // Takte · Taktart · Tempo BPM · Tonart · Besetzung
-        // If the user edited that header manually, never let contradictory values
-        // leak into the score prompt unnoticed.
-        func normalized(_ value: String) -> String {
-            value.trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-                .replacingOccurrences(of: " ", with: "")
-                .replacingOccurrences(of: "–", with: "-")
-        }
-        func parseIdeaFrame(_ text: String) -> (measures:String, meter:String, tempo:String, key:String, ensemble:String)? {
-            guard let first = text.split(separator: "\n", omittingEmptySubsequences: true).first else { return nil }
-            let parts = first.split(separator: "·").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            guard parts.count >= 5 else { return nil }
-            let measures = parts[0].replacingOccurrences(of: "Takte", with: "", options: .caseInsensitive).trimmingCharacters(in: .whitespacesAndNewlines)
-            let meter = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-            let tempo = parts[2].replacingOccurrences(of: "BPM", with: "", options: .caseInsensitive).trimmingCharacters(in: .whitespacesAndNewlines)
-            let key = parts[3].trimmingCharacters(in: .whitespacesAndNewlines)
-            let ensemble = parts[4...].joined(separator: " · ").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !measures.isEmpty, !meter.isEmpty, !tempo.isEmpty, !key.isEmpty, !ensemble.isEmpty else { return nil }
-            return (measures, meter, tempo, key, ensemble)
-        }
-        func currentFrameHeader() -> String {
-            let bars = measuresField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let meter = meterField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let tempo = tempoField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let key = musicalKeyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let ensemble = ensembleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            return "\(bars.isEmpty ? "frei" : bars) Takte · \(meter.isEmpty ? "frei" : meter) · \(tempo.isEmpty ? "frei" : tempo) BPM · \(key.isEmpty ? "frei" : key) · \(ensemble.isEmpty ? "frei" : ensemble)"
-        }
-
-        if !visibleIdea.isEmpty, let frame = parseIdeaFrame(visibleIdea) {
-            var conflicts: [String] = []
-            let uiMeasures = measuresField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let uiMeter = meterField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let uiTempo = tempoField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let uiKey = musicalKeyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let uiEnsemble = ensembleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !uiMeasures.isEmpty && normalized(uiMeasures) != normalized(frame.measures) { conflicts.append("Takte: oben \(uiMeasures), Idee \(frame.measures)") }
-            if !uiMeter.isEmpty && normalized(uiMeter) != normalized(frame.meter) { conflicts.append("Taktart: oben \(uiMeter), Idee \(frame.meter)") }
-            if !uiTempo.isEmpty && normalized(uiTempo) != normalized(frame.tempo) { conflicts.append("Tempo: oben \(uiTempo) BPM, Idee \(frame.tempo) BPM") }
-            if !uiKey.isEmpty && normalized(uiKey) != normalized(frame.key) { conflicts.append("Tonart: oben \(uiKey), Idee \(frame.key)") }
-            if !uiEnsemble.isEmpty && normalized(uiEnsemble) != normalized(frame.ensemble) { conflicts.append("Besetzung: oben \(uiEnsemble), Idee \(frame.ensemble)") }
-
-            if !conflicts.isEmpty {
-                let alert = NSAlert()
-                alert.messageText = "Kompositionsidee und Vorgaben widersprechen sich"
-                alert.informativeText = conflicts.joined(separator: "\n") + "\n\nWelche Werte sollen für die Komposition gelten?"
-                alert.addButton(withTitle: "Kompositionsidee übernehmen")
-                alert.addButton(withTitle: "Obere Vorgaben verwenden")
-                alert.addButton(withTitle: "Abbrechen")
-                switch alert.runModal() {
-                case .alertFirstButtonReturn:
-                    measuresField.stringValue = frame.measures
-                    meterField.stringValue = frame.meter
-                    tempoField.stringValue = frame.tempo
-                    musicalKeyField.stringValue = frame.key
-                    ensembleField.stringValue = frame.ensemble
-                    saveSettingsFromUI()
-                case .alertSecondButtonReturn:
-                    let lines = visibleIdea.components(separatedBy: .newlines)
-                    var replaced = false
-                    var output: [String] = []
-                    for line in lines {
-                        if !replaced && !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            output.append(currentFrameHeader())
-                            replaced = true
-                        } else {
-                            output.append(line)
-                        }
-                    }
-                    visibleIdea = output.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-                    conceptView.string = visibleIdea
-                    lastConcept = visibleIdea
-                default:
-                    status("Komposition wegen widersprüchlicher Vorgaben abgebrochen.", good: false)
-                    return
-                }
-            }
-        }
-
         let assignment = basePrompt()
 
-        // No idea yet: create the musical idea only. This deliberate stop is what
-        // makes the concept a true editable intermediate state.
-        if visibleIdea.isEmpty {
-            let ideaPrompt = """
-            \(ComposerPrompts.conceptPrompt(assignment))
-
-            WICHTIG FÜR COMPOSITION LAB 3.0:
-            Formuliere ein konkretes, direkt editierbares MUSIKALISCHES ARBEITSKONZEPT, keine bloße Stimmungsbeschreibung.
-            Stelle zuerst die aktuellen Eckdaten in einer eigenen Zeile voran: Takte · Taktart · Tempo in BPM · Tonart · Besetzung.
-            Übernimm die im Auftrag vorhandenen Werte ausdrücklich; Tempo und Tonart dürfen nicht fehlen, wenn sie angegeben sind.
-            Beschreibe danach in etwa 4 bis 7 knappen Aussagen die musikalisch relevanten Entscheidungen. Wähle passend zur Aufgabe insbesondere aus: Motiv/Melodie oder thematisches Material; Begleitung/Satz/Textur; Harmonik bzw. tonale Bewegung; Entwicklung/Form, Wiederholung und Kontrast.
-            Formuliere konkret und veränderbar. Nicht nur „lyrisch“, „warm“, „schwebend“ usw., sondern z.B. Art und Bewegung einer Phrase, Funktion der Begleitung, harmonische Richtung oder Art der motivischen Veränderung.
-            Bei Klaviermusik sollen Rollen bzw. Verhältnis der Hände und die Satzidee greifbar sein, sofern der Nutzer nichts anderes vorgibt. Bei anderer Besetzung entsprechend idiomatisch denken.
-            Kein detaillierter Takt-für-Takt-Ablauf und kein technischer Bauplan. Keine unnötig festgelegten Höhepunkte in bestimmten Takten, sofern der Nutzer das nicht verlangt. Lass kompositorische Freiheit. Noch keine Partitur erzeugen.
-            """
-            lastDiagnostic = [
-                "format": "composition-lab-native-diagnostic",
-                "engineBuild": ComposerPrompts.engineBuild,
-                "interface": "macOS AppKit",
-                "interfaceVersion": "3.4.0",
-                "entryPoint": "compose-button",
-                "stage": "idea-request",
-                "assignment": assignment,
-                "ideaPrompt": ideaPrompt
-            ]
-            status("KI entwickelt die Kompositionsidee …", good: true)
-            APIClient.shared.call(provider: p, model: m, key: key, effort: e,
-                                  purpose: "MainViewController.currentFrameHeader", system: ComposerPrompts.system,
-                                  user: ideaPrompt,
-                                  wantJSON: false) { [weak self] result in
-                switch result {
-                case .failure(let error):
-                    DispatchQueue.main.async {
-                        self?.status("Fehler: \(error.localizedDescription)", good: false)
-                    }
-                case .success(let response):
-                    let idea = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    DispatchQueue.main.async {
-                        guard let self else { return }
-                        self.lastConcept = idea
-                        self.conceptView.string = idea
-                        if var d = self.lastDiagnostic {
-                            d["stage"] = "idea-ready"
-                            d["generatedIdea"] = idea
-                            d["inputTokens"] = response.inputTokens
-                            d["outputTokens"] = response.outputTokens
-                            self.lastDiagnostic = d
-                        }
-                        self.status("Kompositionsidee bereit. Du kannst sie direkt bearbeiten und danach erneut komponieren.", good: true)
-                    }
-                }
-            }
-            return
-        }
-
-        // An idea exists: use EXACTLY the currently visible editable text.
-        // Bind this asynchronous score request to a concrete destination slot.
-        // An explicitly selected empty slot wins; otherwise use the first free slot.
         let destinationSlot: Int
         if activePieceSlot >= 0, activePieceSlot < pieceSlots.count, pieceSlots[activePieceSlot] == nil {
             destinationSlot = activePieceSlot
@@ -2480,87 +2339,113 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         }
         pendingCompositionSlot = destinationSlot
 
-        let finalIdea = visibleIdea
-        lastConcept = finalIdea
-        let compPrompt = """
-        AUFTRAG:
-        \(assignment)
-
-        MUSIKALISCHE VORSTELLUNG:
-        \(finalIdea)
-
-        \(ComposerPrompts.technical)
-
-        \(titleAvoidanceInstruction())
-        """
-
+        let draftPrompt = ComposerPrompts.musicalDraftPrompt(assignment)
         lastDiagnostic = [
             "format": "composition-lab-native-diagnostic",
             "engineBuild": ComposerPrompts.engineBuild,
+            "engineVersion": ComposerPrompts.referenceVersion,
             "interface": "macOS AppKit",
-            "interfaceVersion": "3.4.0",
+            "interfaceVersion": "3.5.0",
             "entryPoint": "compose-button",
-            "stage": "score-request",
+            "stage": "musical-draft-request",
             "destinationSlot": destinationSlot + 1,
             "assignment": assignment,
-            "finalEditedCompositionIdea": finalIdea,
-            "compositionPrompt": compPrompt,
+            "musicalDraftPrompt": draftPrompt,
             "provider": p.rawValue,
             "model": m,
             "reasoning": e.rawValue
         ]
-        status("KI komponiert aus der aktuellen Kompositionsidee …", good: true)
 
+        status("KI komponiert den musikalischen Entwurf …", good: true)
         APIClient.shared.call(provider: p, model: m, key: key, effort: e,
-                              purpose: "MainViewController.currentFrameHeader", system: ComposerPrompts.system,
-                              user: compPrompt,
-                              wantJSON: true) { [weak self] result in
-            switch result {
+                              purpose: "composition.musical-draft",
+                              system: ComposerPrompts.system,
+                              user: draftPrompt,
+                              wantJSON: false) { [weak self] draftResult in
+            switch draftResult {
             case .failure(let error):
                 DispatchQueue.main.async {
                     self?.pendingCompositionSlot = nil
-                    if var d = self?.lastDiagnostic {
-                        d["stage"] = "score-failed"
-                        d["error"] = error.localizedDescription
-                        self?.lastDiagnostic = d
-                    }
                     self?.status("Fehler: \(error.localizedDescription)", good: false)
                 }
-            case .success(let response):
-                do {
-                    let data = try APIClient.shared.extractJSON(response.text)
-                    let score = try JSONDecoder().decode(Score.self, from: data)
-                    let costUSD = APICost.estimate(provider: p, model: m,
-                                                   inputTokens: response.inputTokens,
-                                                   outputTokens: response.outputTokens)
-                    DispatchQueue.main.async {
-                        guard let self else { return }
-                        if var d = self.lastDiagnostic {
-                            d["stage"] = "completed"
-                            d["scoreResponse"] = response.text
-                            d["inputTokens"] = response.inputTokens
-                            d["outputTokens"] = response.outputTokens
-                            self.lastDiagnostic = d
-                        }
-                        self.install(score: score,
-                                     concept: finalIdea,
-                                     provider: p,
-                                     model: m,
-                                     costUSD: costUSD,
-                                     inputTokens: response.inputTokens,
-                                     outputTokens: response.outputTokens)
-                        self.status("Komposition erfolgreich abgeschlossen! · API-Kosten ca. \(APICost.display(costUSD))", good: true)
-                    }
-                } catch {
+            case .success(let draftResponse):
+                let draft = draftResponse.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !draft.isEmpty else {
                     DispatchQueue.main.async {
                         self?.pendingCompositionSlot = nil
-                        if var d = self?.lastDiagnostic {
-                            d["stage"] = "decode-failed"
-                            d["rawResponse"] = response.text
-                            d["error"] = error.localizedDescription
-                            self?.lastDiagnostic = d
+                        self?.status("Fehler: Der musikalische Entwurf ist leer.", good: false)
+                    }
+                    return
+                }
+
+                let translationPrompt = ComposerPrompts.translationPrompt(draft: draft)
+                DispatchQueue.main.async {
+                    if var d = self?.lastDiagnostic {
+                        d["stage"] = "technical-translation-request"
+                        d["musicalDraft"] = draft
+                        d["draftInputTokens"] = draftResponse.inputTokens
+                        d["draftOutputTokens"] = draftResponse.outputTokens
+                        d["translationPrompt"] = translationPrompt
+                        self?.lastDiagnostic = d
+                    }
+                    self?.status("Technische Übertragung der fertigen Komposition …", good: true)
+                }
+
+                APIClient.shared.call(provider: p, model: m, key: key, effort: e,
+                                      purpose: "composition.technical-translation",
+                                      system: ComposerPrompts.system,
+                                      user: translationPrompt,
+                                      wantJSON: true) { [weak self] scoreResult in
+                    switch scoreResult {
+                    case .failure(let error):
+                        DispatchQueue.main.async {
+                            self?.pendingCompositionSlot = nil
+                            self?.status("Fehler: \(error.localizedDescription)", good: false)
                         }
-                        self?.status("Fehler: \(error.localizedDescription)", good: false)
+                    case .success(let response):
+                        do {
+                            let data = try APIClient.shared.extractJSON(response.text)
+                            let score = try JSONDecoder().decode(Score.self, from: data)
+                            let totalInput = draftResponse.inputTokens + response.inputTokens
+                            let totalOutput = draftResponse.outputTokens + response.outputTokens
+                            let costUSD = APICost.estimate(provider: p, model: m,
+                                                          inputTokens: totalInput,
+                                                          outputTokens: totalOutput)
+                            DispatchQueue.main.async {
+                                guard let self else { return }
+                                if var d = self.lastDiagnostic {
+                                    d["stage"] = "completed"
+                                    d["scoreResponse"] = response.text
+                                    d["translationInputTokens"] = response.inputTokens
+                                    d["translationOutputTokens"] = response.outputTokens
+                                    d["inputTokens"] = totalInput
+                                    d["outputTokens"] = totalOutput
+                                    self.lastDiagnostic = d
+                                }
+                                // In Engine 1.3 ist der musikalische Entwurf die Komposition selbst.
+                                // Das Feld wird erst nachher aus dem fertigen Entwurf befüllt und ist kein vorgeschalteter Plan.
+                                self.lastConcept = draft
+                                self.install(score: score,
+                                             concept: draft,
+                                             provider: p,
+                                             model: m,
+                                             costUSD: costUSD,
+                                             inputTokens: totalInput,
+                                             outputTokens: totalOutput)
+                                self.status("Komposition erfolgreich abgeschlossen! · Engine 1.3 Referenz · API-Kosten ca. \(APICost.display(costUSD))", good: true)
+                            }
+                        } catch {
+                            DispatchQueue.main.async {
+                                self?.pendingCompositionSlot = nil
+                                if var d = self?.lastDiagnostic {
+                                    d["stage"] = "decode-failed"
+                                    d["rawResponse"] = response.text
+                                    d["error"] = error.localizedDescription
+                                    self?.lastDiagnostic = d
+                                }
+                                self?.status("Fehler: \(error.localizedDescription)", good: false)
+                            }
+                        }
                     }
                 }
             }
