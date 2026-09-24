@@ -57,9 +57,10 @@ python3 ApplyV307CentralCLAB.py
 python3 ApplyV308MainCleanup.py
 python3 ApplyV309SessionMemory.py
 python3 ApplyV330Engine2.py
+python3 ApplyV331CompleteAILog.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native 3.3.0 …"
+echo "Baue Composition Lab Native 3.3.1 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -113,6 +114,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 3.3.0 (Build 3300) · Composition Engine 2.0 · Engine Build 20"
-echo "3.3.0: Composition Engine 2.0 mit Klangvorstellung vor Komposition und technischer Realisation."
+echo "Version: 3.3.1 (Build 3301) · Composition Engine 2.0 · vollständiges KI-Protokoll"
+echo "3.3.1: Composition Engine 2.0 · jede Kommunikation App ↔ KI wird zentral protokolliert."
 open "$APP" || true
