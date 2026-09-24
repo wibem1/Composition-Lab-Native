@@ -26,6 +26,10 @@ struct MusicXMLDisplayOptions: Codable, Equatable {
     var barStartSnapThreshold: Double = 0.25
     /// Zusammengesetzte Werte an Zählzeiten teilen und mit Haltebögen schreiben.
     var splitAtBeatBoundaries: Bool = true
+    /// Klavierdarstellung: "auto", "single" oder "two". Optional für alte Profile.
+    var pianoStaffMode: String? = "auto"
+    /// MIDI-Splitpunkt für Klavier-Zweiersystem. C4 = 60. Optional für alte Profile.
+    var pianoSplitPoint: Int? = 60
 
     static let readablePiano = MusicXMLDisplayOptions()
     static let midiNear = MusicXMLDisplayOptions(
@@ -139,6 +143,23 @@ enum MusicXMLBuilder {
             let gate: Double
         }
 
+        // Klavier-MIDI liegt häufig vollständig in einer einzigen Spur/einem Staff.
+        // Für die Notation darf daraus automatisch ein Grand Staff entstehen, ohne MIDI
+        // oder internen Score zu verändern. Ein manueller Modus kann dies erzwingen/abschalten.
+        let trackNameLower = track.nm.lowercased()
+        let pianoLike = (0...7).contains(track.pg) || trackNameLower.contains("piano") || trackNameLower.contains("klavier")
+        let sourceStaffs = track.nt.compactMap { n -> Int? in n.count > 4 ? max(1, Int(n[4].rounded())) : 1 }
+        let sourceMaxStaff = max(1, sourceStaffs.max() ?? 1)
+        let sourcePitches = track.nt.compactMap { n -> Int? in n.count >= 3 ? max(0, min(127, Int(n[2].rounded()))) : nil }
+        let splitPoint = max(0, min(127, options.pianoSplitPoint ?? 60))
+        let pianoMode = options.pianoStaffMode ?? "auto"
+        let spansBothHands: Bool = {
+            guard let lo = sourcePitches.min(), let hi = sourcePitches.max() else { return false }
+            return lo <= splitPoint - 5 && hi >= splitPoint + 5
+        }()
+        let usePianoGrandStaff = sourceMaxStaff == 1 && pianoLike &&
+            (pianoMode == "two" || (pianoMode == "auto" && spansBothHands))
+
         let rawNotes: [RawNote] = track.nt.compactMap { n in
             guard n.count >= 4 else { return nil }
             return RawNote(
@@ -146,7 +167,9 @@ enum MusicXMLBuilder {
                 duration: max(1.0 / Double(divisions), n[1]),
                 pitch: max(0, min(127, Int(n[2].rounded()))),
                 velocity: max(1, min(127, Int(n[3].rounded()))),
-                staff: n.count > 4 ? max(1, Int(n[4].rounded())) : 1,
+                staff: usePianoGrandStaff
+                    ? (max(0, min(127, Int(n[2].rounded()))) >= splitPoint ? 1 : 2)
+                    : (n.count > 4 ? max(1, Int(n[4].rounded())) : 1),
                 gate: n.count > 5 ? n[5] : 0.95
             )
         }

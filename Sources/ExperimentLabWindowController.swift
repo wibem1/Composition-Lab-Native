@@ -58,7 +58,7 @@ final class ExperimentLabWindowController: NSWindowController {
     }
 
     private func scroll(_ tv: NSTextView, height: CGFloat) -> NSScrollView {
-        let s = NSScrollView()
+        let s = FastScrollView()
         s.borderType = .bezelBorder
         s.hasVerticalScroller = true
         s.hasHorizontalScroller = false
@@ -96,7 +96,7 @@ final class ExperimentLabWindowController: NSWindowController {
         // wie in der stabilen V4.22. Geändert wird nur die innere Gestaltung.
         guard let content = window?.contentView else { return }
 
-        let sc = NSScrollView()
+        let sc = FastScrollView()
         sc.hasVerticalScroller = true
         sc.drawsBackground = false
         sc.translatesAutoresizingMaskIntoConstraints = false

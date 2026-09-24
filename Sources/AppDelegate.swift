@@ -90,6 +90,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func menuShowMainWindow() { showMainWindow() }
 
+    @MainActor @objc private func menuSaveDiagnosticFromApp() {
+        guard let mainVC else { NSSound.beep(); return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
+            mainVC.menuSaveDiagnostic()
+        }
+    }
+
     private func buildMenus() {
         let main = NSMenu()
 
@@ -143,9 +150,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         technical.addItem(withTitle: "Backup laden …", action: #selector(MainViewController.menuImportBackup), keyEquivalent: "b")
         technical.addItem(withTitle: "Backup sichern …", action: #selector(MainViewController.menuExportBackup), keyEquivalent: "")
         technical.addItem(NSMenuItem.separator())
-        technical.addItem(withTitle: "Diagnosedatei sichern …", action: #selector(MainViewController.menuSaveDiagnostic), keyEquivalent: "d")
+        let technicalDiagnostic = technical.addItem(withTitle: "Diagnosedatei sichern …", action: #selector(menuSaveDiagnosticFromApp), keyEquivalent: "d")
+        technicalDiagnostic.target = self
         technicalItem.submenu = technical
         main.addItem(technicalItem)
+
+        let diagnoseItem = NSMenuItem(title: "Diagnose", action: nil, keyEquivalent: "")
+        let diagnose = NSMenu(title: "Diagnose")
+        let saveDiagnostic = NSMenuItem(title: "Diagnosedatei sichern …", action: #selector(menuSaveDiagnosticFromApp), keyEquivalent: "d")
+        saveDiagnostic.target = self
+        saveDiagnostic.keyEquivalentModifierMask = [.command, .shift]
+        diagnose.addItem(saveDiagnostic)
+        diagnoseItem.submenu = diagnose
+        main.addItem(diagnoseItem)
 
         let displayItem = NSMenuItem(title: "Darstellung", action: nil, keyEquivalent: "")
         let display = NSMenu(title: "Darstellung")

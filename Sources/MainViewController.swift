@@ -13,7 +13,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private let keyField = NSSecureTextField()
         private let keyLabel = NSTextField(labelWithString: "API-Key")
 
-    private let measuresField = NSTextField(string: "")
+    private let measuresField = NSComboBox()
     private let meterField = NSTextField(string: "")
     private let tempoField = NSTextField(string: "")
     private let musicalKeyField = NSTextField(string: "")
@@ -50,8 +50,24 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private var apiWindow: NSWindow?
     private var draftsWindow: NSWindow?
     private let workTabs = NSTabView()
-    private let workspaceTabs = NSTabView()
-    private let workspaceSegment = NSSegmentedControl(labels: ["Komposition", "Experimentallabor", "Vergleichslabor", "Notensatz"], trackingMode: .selectOne, target: nil, action: nil)
+    private let workspaceHost = NSView()
+    private let compositionWorkspaceHost = CompositionFileDropHostView()
+    private let experimentWorkspaceHost = NSView()
+    private let compareWorkspaceHost = NSView()
+    private let notationWorkspaceHost = NSView()
+    private var workspaceViews: [NSView] {
+        [compositionWorkspaceHost, notationWorkspaceHost, experimentWorkspaceHost]
+    }
+    private let workspaceSegment = NSSegmentedControl(labels: ["Main", "Noten", "Technik"], trackingMode: .selectOne, target: nil, action: nil)
+    // V6: zehn gleichberechtigte Stück-/Varianten-Slots.
+    private var pieceSlots: [HistoryItem?] = [HistoryItem?](repeating: nil, count: 10)
+    private var activePieceSlot: Int = 0
+    private var pendingCompositionSlot: Int?
+    private var slotSelectionLoad = false
+    private var mainPieceSlotButtons: [NSButton] = []
+    private var notationPieceSlotButtons: [NSButton] = []
+    private let notationPlayerTimeLabel = NSTextField(labelWithString: "0:00 / 0:00")
+    private let notationPlayerProgress = NSSlider(value: 0, minValue: 0, maxValue: 1, target: nil, action: nil)
     private let musicXMLPresetPop = NSPopUpButton()
     private let musicXMLRhythmModePop = NSPopUpButton()
     private let musicXMLStraightNotePop = NSPopUpButton()
@@ -60,6 +76,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private let musicXMLSmoothingPop = NSPopUpButton()
     private let musicXMLBarStartPop = NSPopUpButton()
     private let musicXMLSplitBeatsCheck = NSButton(checkboxWithTitle: "Zusammengesetzte Notenwerte an Zählzeiten teilen und binden", target: nil, action: nil)
+    private let musicXMLPianoStaffPop = NSPopUpButton()
+    private let musicXMLPianoSplitPop = NSPopUpButton()
     private let musicXMLCurrentLabel = NSTextField(labelWithString: "Aktuelles Stück: –")
     private let musicXMLSummaryLabel = NSTextField(wrappingLabelWithString: "")
     private let musicXMLPreview = MusicXMLPreviewView()
@@ -81,11 +99,42 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private var lastExperimentConcept = ""
     private var lastExperimentScore: Score?
     private var lastDiagnostic: [String: Any]?
+    private var v309SessionAutosaveTimer: Timer?
+
+    private struct V309SessionMemory: Codable {
+        var format: String
+        var version: Int
+        var activeSlot: Int
+        var slots: [HistoryItem?]
+        var settings: AppSettings
+        var history: [HistoryItem]
+        var compositionAssignment: String
+        var compositionIdea: String
+        var chat: String
+        var sourceContext: String
+        var projectName: String
+        var savedAt: Date
+    }
+    private var nextCompositionEntryPoint: String = "compose-button"
+    private var musicChatCompositionContextOverride: String = ""
     private var projectName = "Unbenannt"
     private var projectURL: URL?
     private var reaperBridgeTimer: Timer?
     private var lastReaperBridgeDate: Date?
     private var lastStudioProBridgeDate: Date?
+    private let v65ProjectLabel = NSTextField(labelWithString: "Projekt: Unbenannt")
+    private let notationPlayerVolume = NSSlider(value: 0.80, minValue: 0.10, maxValue: 1.0, target: nil, action: nil)
+    private let notationPlayerTempoField = NSTextField(string: "120")
+    private let notationPlayerLoopButton = NSButton(title: "↻ Loop", target: nil, action: nil)
+
+    private struct V65ProjectDocument: Codable {
+        var format: String
+        var name: String
+        var activeSlot: Int
+        var slots: [HistoryItem?]
+        var settings: AppSettings
+        var history: [HistoryItem]
+    }
 
     override func loadView() {
         NotificationCenter.default.addObserver(self, selector: #selector(midiOutputModeChanged), name: MIDIOutputManager.changedNotification, object: nil)
@@ -93,13 +142,16 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         buildUI()
         restoreSettings()
         restoreCurrentPlayerState()
+        v309RestoreSessionMemory()
+        NotificationCenter.default.addObserver(self, selector: #selector(v309ApplicationWillTerminate(_:)), name: NSApplication.willTerminateNotification, object: nil)
         if let z = settings.zoomPercent, z != 100 { setZoom(percent: CGFloat(z), resizeWindow: false, persist: false) }
     }
 
     override func viewDidAppear() {
         super.viewDidAppear()
         updateWindowTitle()
-        view.window?.minSize = NSSize(width:1000,height:680)
+        view.window?.minSize = NSSize(width:900,height:680)
+        view.window?.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
 
         // Vorhandene Bridge-Dateien sind beim Programmstart nur Altbestand.
         // Sie dürfen nicht erneut die aktuelle Komposition im Player überschreiben.
@@ -109,21 +161,201 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             lastStudioProBridgeDate = StudioProBridge.modificationDate()
         }
         startReaperBridgeWatcher()
+        v309StartSessionAutosave()
     }
 
+
+    private let v309SessionMemoryKey = "compositionLab.v3.sessionMemory"
+
+    private func v309StartSessionAutosave() {
+        guard v309SessionAutosaveTimer == nil else { return }
+        let timer = Timer(timeInterval: 2.0,
+                          target: self,
+                          selector: #selector(v309SessionAutosaveFired(_:)),
+                          userInfo: nil,
+                          repeats: true)
+        timer.tolerance = 0.75
+        RunLoop.main.add(timer, forMode: .common)
+        v309SessionAutosaveTimer = timer
+    }
+
+    @objc private func v309SessionAutosaveFired(_ timer: Timer) {
+        v309SaveSessionMemory()
+    }
+
+    @objc private func v309ApplicationWillTerminate(_ notification: Notification) {
+        v309SaveSessionMemory()
+    }
+
+    private func v309SaveSessionMemory() {
+        // Do not call captureCurrentInActiveSlot() here. In Composition Lab 3.x
+        // the editable working idea is intentionally independent of the selected
+        // piece slot; capturing would incorrectly overwrite slot metadata.
+        saveSettingsFromUI()
+        let memory = V309SessionMemory(
+            format: "composition-lab-v3-session-memory",
+            version: 1,
+            activeSlot: max(0, min(activePieceSlot, 9)),
+            slots: Array(pieceSlots.prefix(10)),
+            settings: settings,
+            history: history,
+            compositionAssignment: promptView.string,
+            compositionIdea: conceptView.string,
+            chat: chatView.string,
+            sourceContext: musicChatCompositionContextOverride,
+            projectName: projectName,
+            savedAt: Date()
+        )
+        do {
+            let data = try JSONEncoder().encode(memory)
+            UserDefaults.standard.set(data, forKey: v309SessionMemoryKey)
+        } catch {
+            // Autosave must never interrupt musical work. A later timer run can
+            // retry; explicit CLAB/CLABPROJECT saves remain independent.
+        }
+    }
+
+    private func v309RestoreSessionMemory() {
+        guard let data = UserDefaults.standard.data(forKey: v309SessionMemoryKey),
+              let memory = try? JSONDecoder().decode(V309SessionMemory.self, from: data),
+              memory.format == "composition-lab-v3-session-memory" else { return }
+
+        settings = memory.settings
+        restoreSettings()
+        history = memory.history
+        Storage.shared.saveHistory(history)
+        refreshVisibleHistories()
+
+        pieceSlots = Array(memory.slots.prefix(10))
+        if pieceSlots.count < 10 {
+            pieceSlots.append(contentsOf: [HistoryItem?](repeating: nil, count: 10 - pieceSlots.count))
+        }
+        activePieceSlot = max(0, min(memory.activeSlot, 9))
+        projectName = memory.projectName.isEmpty ? "Unbenannt" : memory.projectName
+
+        // The MusicChat working state is global and independent of slot browsing.
+        promptView.string = memory.compositionAssignment
+        conceptView.string = memory.compositionIdea
+        lastConcept = memory.compositionIdea
+        chatView.string = memory.chat
+        musicChatCompositionContextOverride = memory.sourceContext
+
+        updatePieceSlotButtons()
+
+        if let item = pieceSlots[activePieceSlot] {
+            let preservedAssignment = memory.compositionAssignment
+            let preservedIdea = memory.compositionIdea
+            let preservedChat = memory.chat
+            let preservedSourceContext = memory.sourceContext
+
+            slotSelectionLoad = true
+            install(score: item.score,
+                    concept: item.concept,
+                    provider: item.provider,
+                    model: item.model,
+                    addHistory: false,
+                    costUSD: item.costUSD,
+                    inputTokens: item.inputTokens,
+                    outputTokens: item.outputTokens)
+            slotSelectionLoad = false
+
+            promptView.string = preservedAssignment
+            conceptView.string = preservedIdea
+            lastConcept = preservedIdea
+            chatView.string = preservedChat
+            musicChatCompositionContextOverride = preservedSourceContext
+        }
+
+        updatePieceSlotButtons()
+        scheduleMusicXMLPreviewRefresh()
+        status("Letzte Arbeitssitzung mit \(pieceSlots.compactMap { $0 }.count) Stück(en) wiederhergestellt.", good: true)
+    }
 
     private func startReaperBridgeWatcher() {
         guard reaperBridgeTimer == nil else { return }
-        reaperBridgeTimer = Timer.scheduledTimer(timeInterval: 0.75,
-                                                 target: self,
-                                                 selector: #selector(reaperBridgeTimerFired(_:)),
-                                                 userInfo: nil,
-                                                 repeats: true)
+        let timer = Timer(timeInterval: 3.0,
+                          target: self,
+                          selector: #selector(reaperBridgeTimerFired(_:)),
+                          userInfo: nil,
+                          repeats: true)
+        timer.tolerance = 1.0
+        // Intentionally .default: bridge polling pauses while AppKit is tracking
+        // scroll wheels, sliders, menus and mouse drags. UI interaction wins.
+        RunLoop.main.add(timer, forMode: .default)
+        reaperBridgeTimer = timer
     }
 
+    private var dawBridgeCheckInFlight = false
+
     @objc private func reaperBridgeTimerFired(_ timer: Timer) {
-        checkReaperBridge()
-        checkStudioProBridge()
+        // File-system access and bridge parsing must never block AppKit's main thread.
+        // The timer only launches a background check; UI/state updates return to main.
+        guard !dawBridgeCheckInFlight else { return }
+        dawBridgeCheckInFlight = true
+
+        let previousReaperDate = lastReaperBridgeDate
+        let previousStudioDate = lastStudioProBridgeDate
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            // Build immutable snapshots in the background. Swift 6 then does not
+            // see mutable captured variables crossing into the main-queue closure.
+            let reaperResult: (Date, Result<Score, Error>)? = {
+                guard let date = ReaperBridge.modificationDate(),
+                      previousReaperDate == nil || date > previousReaperDate! else { return nil }
+                return (date, Result { try ReaperBridge.loadScore() })
+            }()
+
+            let studioResult: (Date, Result<Score, Error>)? = {
+                guard let date = StudioProBridge.modificationDate(),
+                      previousStudioDate == nil || date > previousStudioDate! else { return nil }
+                return (date, Result { try StudioProBridge.loadScore() })
+            }()
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.dawBridgeCheckInFlight = false
+
+                if let (date, result) = reaperResult {
+                    self.lastReaperBridgeDate = date
+                    switch result {
+                    case .success(let score):
+                        self.importedReferenceScore = score
+                        self.importedReferenceName = "REAPER: " + score.ti
+                        self.lastConcept = ""
+                        self.conceptView.string = ""
+                        self.install(score: score, concept: "", provider: self.provider, model: self.model, addHistory: false)
+                        self.conceptView.string = ""
+                        self.workspaceSegment.selectedSegment = 0
+                        self.workspaceChanged()
+                        NSApp.activate(ignoringOtherApps: true)
+                        self.view.window?.makeKeyAndOrderFront(nil)
+                        self.status("REAPER-Vorlage übernommen – \(score.tr.reduce(0) { $0 + $1.nt.count }) Noten.", good: true)
+                    case .failure(let error):
+                        self.status("REAPER-Übergabe fehlgeschlagen: \(error.localizedDescription)", good: false)
+                    }
+                }
+
+                if let (date, result) = studioResult {
+                    self.lastStudioProBridgeDate = date
+                    switch result {
+                    case .success(let score):
+                        self.importedReferenceScore = score
+                        self.importedReferenceName = "Studio Pro: " + score.ti
+                        self.lastConcept = ""
+                        self.conceptView.string = ""
+                        self.install(score: score, concept: "", provider: self.provider, model: self.model, addHistory: false)
+                        self.conceptView.string = ""
+                        self.workspaceSegment.selectedSegment = 0
+                        self.workspaceChanged()
+                        NSApp.activate(ignoringOtherApps: true)
+                        self.view.window?.makeKeyAndOrderFront(nil)
+                        self.status("Studio-Pro-Vorlage übernommen – \(score.tr.reduce(0) { $0 + $1.nt.count }) Noten.", good: true)
+                    case .failure(let error):
+                        self.status("Studio-Pro-Übergabe fehlgeschlagen: \(error.localizedDescription)", good: false)
+                    }
+                }
+            }
+        }
     }
 
     private func checkReaperBridge() {
@@ -139,7 +371,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             conceptView.string = ""
             install(score: score, concept: "", provider: provider, model: model, addHistory: false)
             conceptView.string = ""
-            workspaceTabs.selectTabViewItem(at: 0)
+            selectWorkspace(0)
             workspaceSegment.selectedSegment = 0
             NSApp.activate(ignoringOtherApps: true)
             view.window?.makeKeyAndOrderFront(nil)
@@ -162,7 +394,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             conceptView.string = ""
             install(score: score, concept: "", provider: provider, model: model, addHistory: false)
             conceptView.string = ""
-            workspaceTabs.selectTabViewItem(at: 0)
+            selectWorkspace(0)
             workspaceSegment.selectedSegment = 0
             NSApp.activate(ignoringOtherApps: true)
             view.window?.makeKeyAndOrderFront(nil)
@@ -175,8 +407,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private func buildUI() {
         view.wantsLayer = true
         view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        workspaceTabs.wantsLayer = true
-        workspaceTabs.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        workspaceHost.wantsLayer = true
+        workspaceHost.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         let header = NSVisualEffectView()
         header.material = .headerView
         header.translatesAutoresizingMaskIntoConstraints = false
@@ -194,27 +426,12 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         project.translatesAutoresizingMaskIntoConstraints = false
         header.addSubview(project)
 
-        workspaceTabs.tabViewType = .noTabsNoBorder
-        workspaceTabs.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(workspaceTabs)
+        workspaceHost.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(workspaceHost)
 
-        let compositionItem = NSTabViewItem(identifier: "composition")
-        let experimentItem = NSTabViewItem(identifier: "experiment")
-        let compareItem = NSTabViewItem(identifier: "compare")
-        let notationItem = NSTabViewItem(identifier: "notation")
-        compositionItem.label = "Komposition"
-        experimentItem.label = "Experimentallabor"
-        compareItem.label = "Vergleichslabor"
-        notationItem.label = "Notensatz"
-        workspaceTabs.addTabViewItem(compositionItem)
-        workspaceTabs.addTabViewItem(experimentItem)
-        workspaceTabs.addTabViewItem(compareItem)
-        workspaceTabs.addTabViewItem(notationItem)
-
-        let compositionHost = CompositionFileDropHostView()
+        let compositionHost = compositionWorkspaceHost
         compositionHost.wantsLayer = true
         compositionHost.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        compositionItem.view = compositionHost
         compositionHost.onDropFile = { [weak self] url in
             self?.loadCompositionReference(url: url)
         }
@@ -243,7 +460,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         experimentWindow = experiment
         if let labView = experiment.window?.contentView {
             experiment.window?.contentView = NSView()
-            let host = NSView()
+            let host = experimentWorkspaceHost
             host.wantsLayer = true
             host.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
             labView.translatesAutoresizingMaskIntoConstraints = false
@@ -254,7 +471,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 labView.topAnchor.constraint(equalTo: host.topAnchor),
                 labView.bottomAnchor.constraint(equalTo: host.bottomAnchor)
             ])
-            experimentItem.view = host
         }
 
         history = Storage.shared.loadHistory()
@@ -275,7 +491,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         if let labView = compare.window?.contentView {
             compare.window?.contentView = NSView()
             labView.translatesAutoresizingMaskIntoConstraints = false
-            let host = NSView()
+            let host = compareWorkspaceHost
             host.wantsLayer = true
             host.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
             host.addSubview(labView)
@@ -285,14 +501,29 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 labView.topAnchor.constraint(equalTo: host.topAnchor),
                 labView.bottomAnchor.constraint(equalTo: host.bottomAnchor)
             ])
-            compareItem.view = host
         }
 
-        let notationHost = NSView()
+        let notationHost = notationWorkspaceHost
         notationHost.wantsLayer = true
         notationHost.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        notationItem.view = notationHost
         buildMusicXMLWorkspace(notationHost)
+
+        experimentWorkspaceHost.subviews.forEach { $0.removeFromSuperview() }
+        buildTechnicalWorkspace(experimentWorkspaceHost)
+
+        // V6 workspaces live in one neutral container. Switching only
+        // toggles visibility and never changes NSWindow geometry.
+        for (index, host) in workspaceViews.enumerated() {
+            host.translatesAutoresizingMaskIntoConstraints = false
+            if host.superview !== workspaceHost { workspaceHost.addSubview(host) }
+            NSLayoutConstraint.activate([
+                host.leadingAnchor.constraint(equalTo: workspaceHost.leadingAnchor),
+                host.trailingAnchor.constraint(equalTo: workspaceHost.trailingAnchor),
+                host.topAnchor.constraint(equalTo: workspaceHost.topAnchor),
+                host.bottomAnchor.constraint(equalTo: workspaceHost.bottomAnchor)
+            ])
+            host.isHidden = index != 0
+        }
 
         refreshVisibleHistories()
 
@@ -313,12 +544,12 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             project.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             workspaceSegment.centerXAnchor.constraint(equalTo: header.centerXAnchor),
             workspaceSegment.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            workspaceSegment.widthAnchor.constraint(equalToConstant: 650),
+            workspaceSegment.widthAnchor.constraint(equalToConstant: 390),
 
-            workspaceTabs.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            workspaceTabs.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            workspaceTabs.topAnchor.constraint(equalTo: header.bottomAnchor),
-            workspaceTabs.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
+            workspaceHost.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            workspaceHost.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            workspaceHost.topAnchor.constraint(equalTo: header.bottomAnchor),
+            workspaceHost.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
 
             statusBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             statusBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -332,7 +563,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private func buildMusicXMLWorkspace(_ parent: NSView) {
         // Feste, schmale Parameterleiste links. Die Notenbildfläche rechts
         // wird direkt an den rechten Fensterrand geheftet und füllt den Rest.
-        let leftScroll = NSScrollView()
+        let leftScroll = FastScrollView()
         leftScroll.hasVerticalScroller = true
         leftScroll.drawsBackground = false
         leftScroll.translatesAutoresizingMaskIntoConstraints = false
@@ -387,7 +618,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             left.bottomAnchor.constraint(lessThanOrEqualTo:leftDoc.bottomAnchor)
         ])
 
-        left.addArrangedSubview(title("Notensatz"))
+        left.addArrangedSubview(title("Noten"))
         let intro = NSTextField(wrappingLabelWithString:
             "Darstellungsquantisierung für MusicXML. Die MIDI-Daten und die Komposition bleiben unverändert.")
         intro.textColor = .secondaryLabelColor
@@ -402,6 +633,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         musicXMLRestPop.removeAllItems()
         musicXMLSmoothingPop.removeAllItems()
         musicXMLBarStartPop.removeAllItems()
+        musicXMLPianoStaffPop.removeAllItems()
+        musicXMLPianoSplitPop.removeAllItems()
 
         musicXMLPresetPop.addItems(withTitles: ["Klavier – lesbar", "MIDI-nah", "Benutzerdefiniert"])
         musicXMLRhythmModePop.addItems(withTitles: ["Auto", "Gerade", "Triolisch"])
@@ -410,10 +643,13 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         musicXMLRestPop.addItems(withTitles: ["Alle Pausen zeigen", "bis 32tel glätten", "bis 16tel glätten", "bis Achtel glätten"])
         musicXMLSmoothingPop.addItems(withTitles: ["Aus", "Leicht", "Mittel", "Stark"])
         musicXMLBarStartPop.addItems(withTitles: ["Aus", "bis 32tel", "bis 16tel", "bis Achtel"])
+        musicXMLPianoStaffPop.addItems(withTitles: ["Automatisch", "Ein System", "Zwei Systeme"])
+        let splitNotes = ["C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"]
+        musicXMLPianoSplitPop.addItems(withTitles: splitNotes)
 
         musicXMLPresetPop.target = self
         musicXMLPresetPop.action = #selector(musicXMLPresetChanged)
-        for pop in [musicXMLRhythmModePop, musicXMLStraightNotePop, musicXMLTripletNotePop, musicXMLRestPop, musicXMLSmoothingPop, musicXMLBarStartPop] {
+        for pop in [musicXMLRhythmModePop, musicXMLStraightNotePop, musicXMLTripletNotePop, musicXMLRestPop, musicXMLSmoothingPop, musicXMLBarStartPop, musicXMLPianoStaffPop, musicXMLPianoSplitPop] {
             pop.target = self
             pop.action = #selector(musicXMLSettingChanged)
         }
@@ -435,6 +671,13 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         left.addArrangedSubview(musicXMLSmoothingPop)
         left.addArrangedSubview(label("Mini-Pausen am Taktanfang"))
         left.addArrangedSubview(musicXMLBarStartPop)
+
+        left.addArrangedSubview(separatorBox())
+        left.addArrangedSubview(title("Klaviersystem"))
+        left.addArrangedSubview(label("Darstellung"))
+        left.addArrangedSubview(musicXMLPianoStaffPop)
+        left.addArrangedSubview(label("Splitpunkt"))
+        left.addArrangedSubview(musicXMLPianoSplitPop)
 
         left.addArrangedSubview(separatorBox())
         left.addArrangedSubview(title("Notenwerte"))
@@ -464,6 +707,14 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             rightStack.topAnchor.constraint(equalTo:right.topAnchor),
             rightStack.bottomAnchor.constraint(equalTo:right.bottomAnchor)
         ])
+
+        let notationSlotBar = buildNotationPieceSlotBar()
+        rightStack.addArrangedSubview(notationSlotBar)
+        notationSlotBar.widthAnchor.constraint(equalTo: rightStack.widthAnchor).isActive = true
+
+        let notationTransport = buildNotationTransport()
+        rightStack.addArrangedSubview(notationTransport)
+        notationTransport.widthAnchor.constraint(equalTo: rightStack.widthAnchor).isActive = true
 
         let topRow = NSStackView()
         topRow.orientation = .horizontal
@@ -601,7 +852,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             minimumStraightNoteValue: straight,
             minimumTripletNoteValue: triplet,
             barStartSnapThreshold: bs,
-            splitAtBeatBoundaries: musicXMLSplitBeatsCheck.state == .on
+            splitAtBeatBoundaries: musicXMLSplitBeatsCheck.state == .on,
+            pianoStaffMode: ["auto", "single", "two"][max(0, min(musicXMLPianoStaffPop.indexOfSelectedItem, 2))],
+            pianoSplitPoint: [48,50,52,53,55,57,59,60,62,64,65,67,69,71,72][max(0, min(musicXMLPianoSplitPop.indexOfSelectedItem, 14))]
         )
     }
 
@@ -665,6 +918,15 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         }) ?? 0
         musicXMLSmoothingPop.selectItem(at: smoothingIndex)
         musicXMLSplitBeatsCheck.state = o.splitAtBeatBoundaries ? .on : .off
+        switch o.pianoStaffMode ?? "auto" {
+        case "single": musicXMLPianoStaffPop.selectItem(at: 1)
+        case "two": musicXMLPianoStaffPop.selectItem(at: 2)
+        default: musicXMLPianoStaffPop.selectItem(at: 0)
+        }
+        let splitMIDIs = [48,50,52,53,55,57,59,60,62,64,65,67,69,71,72]
+        let targetSplit = o.pianoSplitPoint ?? 60
+        let splitIndex = splitMIDIs.indices.min(by: { abs(splitMIDIs[$0] - targetSplit) < abs(splitMIDIs[$1] - targetSplit) }) ?? 7
+        musicXMLPianoSplitPop.selectItem(at: splitIndex)
     }
 
     private func saveNotationProfile() {
@@ -745,16 +1007,24 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             "triolisch \(tripletText(o.minimumTripletNoteValue)) · " +
             "Pausenglättung bis \(o.shortRestThreshold) Beat · " +
             "Taktanfang bis \(o.barStartSnapThreshold) Beat · " +
+            "Klavier \((o.pianoStaffMode ?? "auto") == "two" ? "2 Systeme" : ((o.pianoStaffMode ?? "auto") == "single" ? "1 System" : "automatisch")), Split \(o.pianoSplitPoint ?? 60) · " +
             (o.splitAtBeatBoundaries ? "Bindungen an Zählzeiten aktiv." : "keine automatische Zählzeitenteilung.")
     }
 
     private func scheduleMusicXMLPreviewRefresh() {
         musicXMLPreviewTimer?.invalidate()
-        musicXMLPreviewTimer = Timer.scheduledTimer(timeInterval: 0.35,
-                                                    target: self,
-                                                    selector: #selector(musicXMLPreviewTimerFired(_:)),
-                                                    userInfo: nil,
-                                                    repeats: false)
+        musicXMLPreviewTimer = nil
+        // Notation is expensive (MusicXML generation + WebKit/Verovio rendering).
+        // Only refresh it while the Noten workspace is actually visible.
+        guard workspaceSegment.selectedSegment == 1 else { return }
+        let timer = Timer(timeInterval: 0.20,
+                          target: self,
+                          selector: #selector(musicXMLPreviewTimerFired(_:)),
+                          userInfo: nil,
+                          repeats: false)
+        timer.tolerance = 0.08
+        RunLoop.main.add(timer, forMode: .default)
+        musicXMLPreviewTimer = timer
     }
 
     @objc private func musicXMLPreviewTimerFired(_ timer: Timer) {
@@ -776,45 +1046,524 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     private func buildCompositionWorkspace(_ parent: NSView) {
-        let split = NSSplitView()
-        split.isVertical = true
-        split.dividerStyle = .thin
-        split.translatesAutoresizingMaskIntoConstraints = false
-        parent.addSubview(split)
+        let root = NSStackView()
+        root.orientation = .vertical
+        root.alignment = .leading
+        root.spacing = 14
+        root.edgeInsets = NSEdgeInsets(top: 18, left: 24, bottom: 18, right: 24)
+        root.translatesAutoresizingMaskIntoConstraints = false
+        parent.addSubview(root)
         NSLayoutConstraint.activate([
-            split.leadingAnchor.constraint(equalTo: parent.leadingAnchor),
-            split.trailingAnchor.constraint(equalTo: parent.trailingAnchor),
-            split.topAnchor.constraint(equalTo: parent.topAnchor),
-            split.bottomAnchor.constraint(equalTo: parent.bottomAnchor)
+            root.leadingAnchor.constraint(equalTo: parent.leadingAnchor),
+            root.trailingAnchor.constraint(equalTo: parent.trailingAnchor),
+            root.topAnchor.constraint(equalTo: parent.topAnchor),
+            root.bottomAnchor.constraint(equalTo: parent.bottomAnchor)
         ])
 
-        let leftScroll = NSScrollView()
-        leftScroll.hasVerticalScroller = true
-        leftScroll.drawsBackground = false
-        let left = TopAlignedDocumentView()
-        left.translatesAutoresizingMaskIntoConstraints = false
-        leftScroll.documentView = left
-        leftScroll.addConstraint(left.widthAnchor.constraint(equalToConstant: 350))
-        leftScroll.widthAnchor.constraint(equalToConstant: 350).isActive = true
+        let controls = buildV64Controls(); root.addArrangedSubview(controls); controls.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
+        let work = buildV64WorkArea(); root.addArrangedSubview(work); work.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
+        work.setContentHuggingPriority(.defaultLow, for: .vertical); work.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        let deck = buildV64Deck(); root.addArrangedSubview(deck); deck.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
+        let bottom = buildV64BottomBar(); root.addArrangedSubview(bottom); bottom.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
+    }
 
-        let right = NSView()
-        split.addArrangedSubview(leftScroll)
-        split.addArrangedSubview(right)
-        split.setPosition(365, ofDividerAt: 0)
+    private func v64Panel() -> NSBox {
+        let b = NSBox(); b.boxType = .custom; b.cornerRadius = 12; b.borderWidth = 1; b.contentViewMargins = NSSize(width: 14, height: 12); return b
+    }
 
-        buildLeft(left)
-        buildRight(right)
+    private func buildV64Controls() -> NSView {
+        let box = v64Panel(); let row = NSStackView(); row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 10; box.contentView = row
+        if providerPop.numberOfItems == 0 { providerPop.addItems(withTitles: Provider.allCases.map(\.displayName)); providerPop.target = self; providerPop.action = #selector(providerChanged) }
+        if effortPop.numberOfItems == 0 { effortPop.addItems(withTitles: Effort.allCases.map(\.displayName)) }
+        let ai = NSTextField(labelWithString: "KI"); ai.font = .systemFont(ofSize: 12, weight: .semibold); row.addArrangedSubview(ai)
+        row.addArrangedSubview(providerPop); row.addArrangedSubview(modelPop); row.addArrangedSubview(effortPop); row.addArrangedSubview(NSView())
+        func label(_ text: String) { row.addArrangedSubview(NSTextField(labelWithString: text)) }
+        func field(_ f: NSTextField, _ placeholder: String, _ width: CGFloat) { f.placeholderString = placeholder; f.widthAnchor.constraint(equalToConstant: width).isActive = true; row.addArrangedSubview(f) }
+        if measuresField.numberOfItems == 0 {
+            measuresField.addItems(withObjectValues: [2, 4, 8, 16, 24, 32, 48, 64].map(String.init))
+            measuresField.isEditable = true
+            measuresField.completes = false
+        }
+        label("Takte"); field(measuresField, "24", 62); field(meterField, "4/4", 54); label("Tempo"); field(tempoField, "96", 58); label("Tonart"); field(musicalKeyField, "C-Dur", 86)
+        label("Instrumente"); ensembleField.placeholderString = "Piano"; ensembleField.widthAnchor.constraint(equalToConstant: 150).isActive = true; row.addArrangedSubview(ensembleField)
+        return box
+    }
+
+    private func buildV64WorkArea() -> NSView {
+        let row = NSStackView(); row.orientation = .horizontal; row.alignment = .top; row.spacing = 14
+        let chat = v64Panel(); let cs = NSStackView(); cs.orientation = .vertical; cs.alignment = .leading; cs.spacing = 10; chat.contentView = cs
+        let title = NSTextField(labelWithString: "MusicChat"); title.font = .systemFont(ofSize: 20, weight: .bold); cs.addArrangedSubview(title)
+        chatView.isEditable = false; chatView.isSelectable = true; chatView.font = .systemFont(ofSize: 13); let log = textScroll(chatView, minHeight: 230); cs.addArrangedSubview(log); log.widthAnchor.constraint(equalTo: cs.widthAnchor).isActive = true; log.heightAnchor.constraint(greaterThanOrEqualToConstant: 250).isActive = true; log.setContentHuggingPriority(.defaultLow, for: .vertical)
+        let input = NSStackView(); input.orientation = .horizontal; input.alignment = .centerY; input.spacing = 8; chatInput.placeholderString = "Kompositionsauftrag, Frage oder Änderungswunsch …"; chatInput.isBezeled = true; chatInput.bezelStyle = .roundedBezel; chatInput.heightAnchor.constraint(equalToConstant: 38).isActive = true; input.addArrangedSubview(chatInput)
+        let send = NSButton(title: "Senden", target: self, action: #selector(chatPressed)); send.bezelStyle = .rounded; send.widthAnchor.constraint(equalToConstant: 92).isActive = true; input.addArrangedSubview(send); cs.addArrangedSubview(input); input.widthAnchor.constraint(equalTo: cs.widthAnchor).isActive = true
+
+        let idea = v64Panel(); let isv = NSStackView(); isv.orientation = .vertical; isv.alignment = .leading; isv.spacing = 9; idea.contentView = isv
+        let it = NSTextField(labelWithString: "Aktuelle Kompositionsidee"); it.font = .systemFont(ofSize: 16, weight: .bold); isv.addArrangedSubview(it)
+        conceptView.isEditable = true; conceptView.isSelectable = true; conceptView.font = .systemFont(ofSize: 13); let ideaScroll = textScroll(conceptView, minHeight: 260); ideaScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 285).isActive = true; ideaScroll.setContentHuggingPriority(.defaultLow, for: .vertical); ideaScroll.setContentCompressionResistancePriority(.defaultLow, for: .vertical); isv.addArrangedSubview(ideaScroll); ideaScroll.widthAnchor.constraint(equalTo: isv.widthAnchor).isActive = true
+        row.addArrangedSubview(chat); row.addArrangedSubview(idea); chat.widthAnchor.constraint(equalTo: row.widthAnchor, multiplier: 0.66, constant: -7).isActive = true; idea.widthAnchor.constraint(equalTo: row.widthAnchor, multiplier: 0.34, constant: -7).isActive = true; chat.heightAnchor.constraint(greaterThanOrEqualToConstant: 340).isActive = true; idea.heightAnchor.constraint(equalTo: chat.heightAnchor).isActive = true
+        return row
+    }
+
+    private func buildV64Deck() -> NSView {
+        let panel = v64Panel()
+        panel.contentViewMargins = NSSize(width: 7, height: 5)
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 3
+        panel.contentView = stack
+
+        let title = NSTextField(labelWithString: "Stücke (1–10)")
+        title.font = .systemFont(ofSize: 14, weight: .semibold)
+        stack.addArrangedSubview(title)
+
+        let scroll = FastScrollView()
+        scroll.hasHorizontalScroller = true
+        scroll.hasVerticalScroller = false
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = false
+        scroll.borderType = .noBorder
+        scroll.heightAnchor.constraint(equalToConstant: 184).isActive = true
+
+        let cards = NSStackView()
+        cards.orientation = .horizontal
+        cards.alignment = .centerY
+        cards.spacing = 8
+        cards.edgeInsets = NSEdgeInsets(top: 2, left: 1, bottom: 2, right: 1)
+        cards.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = cards
+
+        var buttons: [PieceSlotDropButton] = []
+        for i in 0..<10 {
+            let b = PieceSlotDropButton(title: "\(i + 1)", target: self, action: #selector(pieceSlotPressed(_:)))
+            b.tag = i
+            b.setButtonType(.toggle)
+            b.font = .systemFont(ofSize: 12, weight: .medium)
+            b.alignment = .center
+            b.widthAnchor.constraint(equalToConstant: 116).isActive = true
+            b.heightAnchor.constraint(equalToConstant: 164).isActive = true
+            b.onDropFile = { [weak self, weak b] url in
+                guard let self, let b else { return }
+                self.importFile(url, intoPieceSlot: b.tag)
+            }
+
+            let menu = NSMenu()
+            let midi = NSMenuItem(title: "MIDI-Datei laden …", action: #selector(v651LoadMIDIIntoSlot(_:)), keyEquivalent: "")
+            midi.target = self
+            midi.tag = i
+            menu.addItem(midi)
+            let clab = NSMenuItem(title: "CLAB-Datei laden …", action: #selector(v651LoadCLABIntoSlot(_:)), keyEquivalent: "")
+            clab.target = self
+            clab.tag = i
+            menu.addItem(clab)
+            menu.addItem(NSMenuItem.separator())
+            let clear = NSMenuItem(title: "Stück löschen", action: #selector(v662DeletePieceSlot(_:)), keyEquivalent: "")
+            clear.target = self
+            clear.tag = i
+            menu.addItem(clear)
+            b.menu = menu
+
+            buttons.append(b)
+            cards.addArrangedSubview(b)
+        }
+
+        cards.widthAnchor.constraint(greaterThanOrEqualToConstant: 1235).isActive = true
+        mainPieceSlotButtons = buttons
+        updatePieceSlotButtons()
+        stack.addArrangedSubview(scroll)
+        scroll.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        return panel
+    }
+
+    private func buildV64BottomBar() -> NSView {
+        let panel = v64Panel()
+        panel.contentViewMargins = NSSize(width: 8, height: 5)
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 5
+        panel.contentView = stack
+
+        // Zeile 1: reiner MIDI-Player.
+        let playerRow = NSStackView()
+        playerRow.orientation = .horizontal
+        playerRow.alignment = .centerY
+        playerRow.spacing = 7
+
+        playerRow.addArrangedSubview(NSButton(title: "▶", target: self, action: #selector(playCurrentMIDI)))
+        playerRow.addArrangedSubview(NSButton(title: "■", target: self, action: #selector(stopCurrentMIDI)))
+        playerLoopButton.setButtonType(.toggle)
+        playerLoopButton.target = self
+        playerLoopButton.action = #selector(playerLoopChanged)
+        playerRow.addArrangedSubview(playerLoopButton)
+        playerRow.addArrangedSubview(playerTimeLabel)
+
+        playerProgress.target = self
+        playerProgress.action = #selector(playerSeekChanged)
+        playerProgress.isContinuous = true
+        playerProgress.widthAnchor.constraint(equalToConstant: 260).isActive = true
+        playerRow.addArrangedSubview(playerProgress)
+
+        playerRow.addArrangedSubview(NSTextField(labelWithString: "Tempo"))
+        playerTempoField.widthAnchor.constraint(equalToConstant: 50).isActive = true
+        playerTempoField.target = self
+        playerTempoField.action = #selector(playerTempoChanged)
+        playerRow.addArrangedSubview(playerTempoField)
+
+        playerRow.addArrangedSubview(NSTextField(labelWithString: "Lautstärke"))
+        playerVolume.widthAnchor.constraint(equalToConstant: 130).isActive = true
+        playerVolume.target = self
+        playerVolume.action = #selector(playerVolumeChanged)
+        playerRow.addArrangedSubview(playerVolume)
+
+        stack.addArrangedSubview(playerRow)
+
+        // Zeile 2: Funktionen. Alles linksbündig, keine nach rechts gedrückte Aktionsgruppe.
+        let functionRow = NSStackView()
+        functionRow.orientation = .horizontal
+        functionRow.alignment = .centerY
+        functionRow.spacing = 8
+
+        functionRow.addArrangedSubview(NSButton(title: "MIDI sichern", target: self, action: #selector(saveMIDIPressed)))
+        functionRow.addArrangedSubview(NSButton(title: "CLAB sichern", target: self, action: #selector(v307SaveCLABPressed)))
+        functionRow.addArrangedSubview(NSButton(title: "CLAB laden …", target: self, action: #selector(v307LoadCLABPressed)))
+
+        let gap = NSView()
+        gap.widthAnchor.constraint(equalToConstant: 22).isActive = true
+        functionRow.addArrangedSubview(gap)
+
+        functionRow.addArrangedSubview(NSButton(title: "Import …", target: self, action: #selector(importIntoActivePieceSlotPressed)))
+        functionRow.addArrangedSubview(NSButton(title: "Motiv …", target: self, action: #selector(generateMotifPressed)))
+
+        let compose = NSButton(title: "Mit gewählter KI komponieren", target: self, action: #selector(composePressed))
+        compose.bezelStyle = .rounded
+        compose.keyEquivalent = "\r"
+        functionRow.addArrangedSubview(compose)
+
+        stack.addArrangedSubview(functionRow)
+        return panel
+    }
+
+    private func importFile(_ url: URL, intoPieceSlot index: Int) {
+        guard index >= 0, index < pieceSlots.count else { return }; if index != activePieceSlot { captureCurrentInActiveSlot() }; activePieceSlot = index; updatePieceSlotButtons(); loadCompositionReference(url: url); if lastScore != nil { captureCurrentInActiveSlot() }; status("Datei in Stück-Slot \(index + 1) übernommen.", good: true)
+    }
+
+    @objc private func importIntoActivePieceSlotPressed() {
+        let panel = NSOpenPanel(); panel.allowedFileTypes = ["mid", "midi", "musicxml", "xml", "clab", "clabproject"]; panel.allowsMultipleSelection = false; panel.canChooseDirectories = false; panel.message = "Datei in Stück-Slot \(activePieceSlot + 1) laden"; guard panel.runModal() == .OK, let url = panel.url else { return }; importFile(url, intoPieceSlot: activePieceSlot)
+    }
+
+    private func buildTechnicalWorkspace(_ parent: NSView) {
+        let root = NSStackView()
+        root.orientation = .vertical
+        root.alignment = .leading
+        root.spacing = 12
+        root.edgeInsets = NSEdgeInsets(top: 16, left: 18, bottom: 16, right: 18)
+        root.translatesAutoresizingMaskIntoConstraints = false
+        parent.addSubview(root)
+        NSLayoutConstraint.activate([
+            root.leadingAnchor.constraint(equalTo: parent.leadingAnchor),
+            root.trailingAnchor.constraint(equalTo: parent.trailingAnchor),
+            root.topAnchor.constraint(equalTo: parent.topAnchor),
+            root.bottomAnchor.constraint(equalTo: parent.bottomAnchor)
+        ])
+
+        root.addArrangedSubview(title("Technik"))
+        let intro = NSTextField(wrappingLabelWithString: "API-Schlüssel, MIDI-Ausgabe, technische Prüfung, JSON, Diagnose und Verlauf. Diese Werkzeuge sind bewusst von der musikalischen Hauptseite getrennt.")
+        intro.textColor = .secondaryLabelColor
+        root.addArrangedSubview(intro)
+        intro.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
+
+        let actions = NSStackView()
+        actions.orientation = .horizontal
+        actions.spacing = 8
+        actions.addArrangedSubview(NSButton(title: "API-Schlüssel …", target: self, action: #selector(menuAPIKeys)))
+        actions.addArrangedSubview(NSButton(title: "MIDI-Ausgabe …", target: self, action: #selector(menuMIDIOutput)))
+        actions.addArrangedSubview(NSButton(title: "CLAB öffnen …", target: self, action: #selector(openCLABPressed)))
+        actions.addArrangedSubview(NSButton(title: "CLAB sichern …", target: self, action: #selector(saveCLABPressed)))
+        actions.addArrangedSubview(NSButton(title: "JSON sichern …", target: self, action: #selector(saveJSONPressed)))
+        root.addArrangedSubview(actions)
+
+        let tabs = NSTabView()
+        tabs.translatesAutoresizingMaskIntoConstraints = false
+
+        let validationTab = NSTabViewItem(identifier: "validation")
+        validationTab.label = "Technische Prüfung"
+        validationView.isEditable = false
+        validationTab.view = textScroll(validationView, minHeight: 360)
+        tabs.addTabViewItem(validationTab)
+
+        let jsonTab = NSTabViewItem(identifier: "json")
+        jsonTab.label = "JSON"
+        jsonView.isEditable = false
+        jsonTab.view = textScroll(jsonView, minHeight: 360)
+        tabs.addTabViewItem(jsonTab)
+
+        let historyTab = NSTabViewItem(identifier: "history")
+        historyTab.label = "Verlauf"
+        historyTab.view = buildHistoryTab()
+        tabs.addTabViewItem(historyTab)
+
+        root.addArrangedSubview(tabs)
+        tabs.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
+        tabs.heightAnchor.constraint(greaterThanOrEqualToConstant: 430).isActive = true
+    }
+
+    @objc private func v662DeletePieceSlot(_ sender: NSMenuItem) {
+        let index = sender.tag
+        guard index >= 0, index < pieceSlots.count else { return }
+        guard pieceSlots[index] != nil else {
+            status("Stück-Slot \(index + 1) ist bereits leer.", good: true)
+            return
+        }
+        pieceSlots[index] = nil
+        updatePieceSlotButtons()
+        status("Stück-Slot \(index + 1) gelöscht.", good: true)
+    }
+
+    @objc private func v307SaveCLABPressed() {
+        guard let score = lastScore else {
+            status("Keine Komposition zum Sichern vorhanden.", good: false)
+            NSSound.beep()
+            return
+        }
+
+        saveSettingsFromUI()
+        let currentProvider = lastProvider ?? provider
+        let currentModel = lastModel ?? model
+        let doc = V307CLABDocument(
+            format: "composition-lab-clab",
+            version: 3,
+            title: score.ti,
+            score: score,
+            compositionAssignment: promptView.string,
+            compositionIdea: conceptView.string,
+            provider: currentProvider,
+            model: currentModel,
+            settings: settings,
+            createdAt: Date()
+        )
+
+        let panel = NSSavePanel()
+        panel.allowedFileTypes = ["clab"]
+        panel.nameFieldStringValue = safeFilename(score.ti) + ".clab"
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let data = try JSONEncoder.pretty.encode(doc)
+            try data.write(to: url, options: .atomic)
+            status("CLAB gespeichert: \(url.lastPathComponent) · Auftrag und Kompositionsidee sind enthalten.", good: true)
+        } catch {
+            status("CLAB konnte nicht gespeichert werden: \(error.localizedDescription)", good: false)
+            NSSound.beep()
+        }
+    }
+
+    @objc private func v307LoadCLABPressed() {
+        let panel = NSOpenPanel()
+        panel.allowedFileTypes = ["clab"]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "CLAB-Datei laden"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        v307LoadCLAB(url, intoPieceSlot: activePieceSlot)
+    }
+
+    private func v307LoadCLAB(_ url: URL, intoPieceSlot index: Int) {
+        guard index >= 0, index < pieceSlots.count else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            let doc = try JSONDecoder().decode(V307CLABDocument.self, from: data)
+            guard doc.format == "composition-lab-clab", doc.version >= 3 else {
+                throw NSError(domain: "CompositionLab.CLAB", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "Kein Composition-Lab-3-CLAB-Dokument."])
+            }
+
+            // Explicit CLAB loading restores the musical working state as well
+            // as the score. This is different from merely browsing another slot.
+            settings = doc.settings
+            restoreSettings()
+            activePieceSlot = index
+            promptView.string = doc.compositionAssignment
+            conceptView.string = doc.compositionIdea
+            lastConcept = doc.compositionIdea
+
+            slotSelectionLoad = true
+            install(score: doc.score,
+                    concept: doc.compositionIdea,
+                    provider: doc.provider,
+                    model: doc.model,
+                    addHistory: false)
+            slotSelectionLoad = false
+
+            // install() may touch legacy state; assert the CLAB working text again.
+            promptView.string = doc.compositionAssignment
+            conceptView.string = doc.compositionIdea
+            lastConcept = doc.compositionIdea
+
+            captureCurrentInActiveSlot()
+            updatePieceSlotButtons()
+            scheduleMusicXMLPreviewRefresh()
+            saveSettingsFromUI()
+            status("CLAB geladen: \(doc.title) · Auftrag und Kompositionsidee wiederhergestellt.", good: true)
+        } catch {
+            // Backward compatibility: let the existing legacy CLAB importer try
+            // older files created before the 3.x central CLAB document.
+            status("Älteres CLAB-Format erkannt – versuche kompatibles Laden …", good: true)
+            importFile(url, intoPieceSlot: index)
+        }
+    }
+
+    @objc private func v651LoadMIDIIntoSlot(_ sender: NSMenuItem) {
+        let panel = NSOpenPanel()
+        panel.allowedFileTypes = ["mid", "midi"]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "MIDI-Datei in Stück-Slot \(sender.tag + 1) laden"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importFile(url, intoPieceSlot: sender.tag)
+    }
+
+    @objc private func v651LoadCLABIntoSlot(_ sender: NSMenuItem) {
+        let panel = NSOpenPanel()
+        panel.allowedFileTypes = ["clab"]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "CLAB-Datei in Stück-Slot \(sender.tag + 1) laden"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        v307LoadCLAB(url, intoPieceSlot: sender.tag)
+    }
+
+    @objc private func v65ProjectAction(_ sender: NSPopUpButton) {
+        let choice = sender.indexOfSelectedItem
+        sender.selectItem(at: 0)
+        switch choice {
+        case 1:
+            menuNameProject()
+            v65ProjectLabel.stringValue = "Projekt: \(projectName)"
+        case 2:
+            v65SaveProject()
+        case 3:
+            v65LoadProject()
+        case 4:
+            menuExportBackup()
+        case 5:
+            menuImportBackup()
+        default:
+            break
+        }
+    }
+
+    @objc private func v65NotationTempoChanged() {
+        playerTempoField.stringValue = notationPlayerTempoField.stringValue
+        playerTempoChanged()
+        notationPlayerTempoField.stringValue = playerTempoField.stringValue
+    }
+
+    @objc private func v65NotationVolumeChanged() {
+        playerVolume.doubleValue = notationPlayerVolume.doubleValue
+        playerVolumeChanged()
+    }
+
+    @objc private func v65NotationLoopChanged() {
+        playerLoopButton.state = notationPlayerLoopButton.state
+        playerLoopChanged()
+        notationPlayerLoopButton.title = playerLoopButton.title
+        notationPlayerLoopButton.contentTintColor = playerLoopButton.contentTintColor
+    }
+
+    private func v65SaveProject() {
+        captureCurrentInActiveSlot()
+        saveSettingsFromUI()
+        let doc = V65ProjectDocument(format: "composition-lab-v6-project",
+                                     name: projectName,
+                                     activeSlot: activePieceSlot,
+                                     slots: pieceSlots,
+                                     settings: settings,
+                                     history: history)
+        let panel = NSSavePanel()
+        panel.allowedFileTypes = ["clabproject"]
+        panel.nameFieldStringValue = safeFilename(projectName) + ".clabproject"
+        if let url = projectURL { panel.directoryURL = url.deletingLastPathComponent() }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let data = try JSONEncoder.pretty.encode(doc)
+            try data.write(to: url, options: .atomic)
+            projectURL = url
+            v65ProjectLabel.stringValue = "Projekt: \(projectName)"
+            updateWindowTitle()
+            status("Projekt „\(projectName)“ mit allen 10 Stück-Slots gespeichert.", good: true)
+        } catch {
+            status("Projekt konnte nicht gespeichert werden: \(error.localizedDescription)", good: false)
+        }
+    }
+
+    private func v65LoadProject() {
+        let panel = NSOpenPanel()
+        panel.allowedFileTypes = ["clabproject"]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            let doc = try JSONDecoder().decode(V65ProjectDocument.self, from: data)
+            guard doc.format == "composition-lab-v6-project" else {
+                throw NSError(domain: "CompositionLab.V65", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "Unbekanntes V6-Projektformat."])
+            }
+            projectName = doc.name
+            projectURL = url
+            settings = doc.settings
+            history = doc.history
+            pieceSlots = Array(doc.slots.prefix(10))
+            if pieceSlots.count < 10 { pieceSlots.append(contentsOf: [HistoryItem?](repeating: nil, count: 10 - pieceSlots.count)) }
+            activePieceSlot = max(0, min(doc.activeSlot, 9))
+            restoreSettings()
+            Storage.shared.saveHistory(history)
+            refreshVisibleHistories()
+            updatePieceSlotButtons()
+            v65ProjectLabel.stringValue = "Projekt: \(projectName)"
+            updateWindowTitle()
+            if let item = pieceSlots[activePieceSlot] {
+                slotSelectionLoad = true
+                install(score: item.score, concept: item.concept, provider: item.provider, model: item.model,
+                        addHistory: false, costUSD: item.costUSD,
+                        inputTokens: item.inputTokens, outputTokens: item.outputTokens)
+                slotSelectionLoad = false
+            }
+            scheduleMusicXMLPreviewRefresh()
+            status("Projekt „\(projectName)“ geladen.", good: true)
+        } catch {
+            status("Projekt konnte nicht geladen werden: \(error.localizedDescription)", good: false)
+        }
+    }
+
+    private struct V307CLABDocument: Codable {
+        var format: String
+        var version: Int
+        var title: String
+        var score: Score
+        var compositionAssignment: String
+        var compositionIdea: String
+        var provider: Provider
+        var model: String
+        var settings: AppSettings
+        var createdAt: Date
     }
 
     @objc private func workspaceChanged() {
-        let i = max(0, min(workspaceSegment.selectedSegment, workspaceTabs.numberOfTabViewItems - 1))
-        workspaceTabs.selectTabViewItem(at: i)
+        let i = max(0, min(workspaceSegment.selectedSegment, workspaceViews.count - 1))
+        for (index, host) in workspaceViews.enumerated() {
+            host.isHidden = index != i
+        }
         refreshVisibleHistories()
-        if i == 3 { scheduleMusicXMLPreviewRefresh() }
+        if i == 1 { scheduleMusicXMLPreviewRefresh() }
     }
 
     private func selectWorkspace(_ index: Int) {
-        workspaceSegment.selectedSegment = max(0, min(index, 3))
+        workspaceSegment.selectedSegment = max(0, min(index, 2))
         workspaceChanged()
     }
 
@@ -844,7 +1593,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             container.widthTracksTextView = true
         }
 
-        let s = NSScrollView()
+        let s = FastScrollView()
         s.borderType = .bezelBorder
         s.hasVerticalScroller = true
         s.hasHorizontalScroller = false
@@ -948,6 +1697,211 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         }
     }
 
+    private func buildNotationPieceSlotBar() -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 6
+
+        let titleRow = NSStackView()
+        titleRow.orientation = .horizontal
+        titleRow.alignment = .centerY
+        titleRow.addArrangedSubview(title("Stücke / Varianten"))
+        titleRow.addArrangedSubview(NSView())
+        let hint = NSTextField(labelWithString: "Stück auswählen und direkt im Notenbild ansehen")
+        hint.textColor = .secondaryLabelColor
+        hint.font = .systemFont(ofSize: 11)
+        titleRow.addArrangedSubview(hint)
+        stack.addArrangedSubview(titleRow)
+        titleRow.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.distribution = .fillEqually
+        row.spacing = 7
+        var buttons: [NSButton] = []
+        for i in 0..<10 {
+            let b = NSButton(title: "\(i + 1)", target: self, action: #selector(pieceSlotPressed(_:)))
+            b.tag = i
+            b.bezelStyle = .rounded
+            b.setButtonType(.toggle)
+            b.heightAnchor.constraint(equalToConstant: 38).isActive = true
+            buttons.append(b)
+            row.addArrangedSubview(b)
+        }
+        notationPieceSlotButtons = buttons
+        stack.addArrangedSubview(row)
+        row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        updatePieceSlotButtons()
+        return stack
+    }
+
+    private func updatePieceSlotButtons() {
+        for (i, b) in mainPieceSlotButtons.enumerated() where i < pieceSlots.count {
+            if let item = pieceSlots[i] {
+                let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let short = title.count > 54 ? String(title.prefix(53)) + "…" : title
+                b.title = "\(i + 1)\n\(short)"
+                b.toolTip = item.title
+            } else {
+                // Keep empty cards visually quiet. The whole card remains a drop target.
+                b.title = "\(i + 1)"
+                b.toolTip = "Datei auf Stück \(i + 1) ziehen"
+            }
+            b.state = i == activePieceSlot ? .on : .off
+        }
+        for (i, b) in notationPieceSlotButtons.enumerated() where i < pieceSlots.count {
+            let filled = pieceSlots[i] != nil
+            b.title = filled ? "●\(i + 1)" : "\(i + 1)"
+            b.state = i == activePieceSlot ? .on : .off
+            b.toolTip = pieceSlots[i].map { $0.title } ?? "Stück \(i + 1)"
+        }
+    }
+
+    private func captureCurrentInActiveSlot() {
+        guard activePieceSlot >= 0, activePieceSlot < pieceSlots.count,
+              let score = lastScore else { return }
+        let p = lastProvider ?? provider
+        let m = lastModel ?? model
+        pieceSlots[activePieceSlot] = HistoryItem(id: UUID(),
+                                                  time: Date(),
+                                                  title: score.ti,
+                                                  provider: p,
+                                                  model: m,
+                                                  concept: lastConcept,
+                                                  score: score,
+                                                  costUSD: lastCostUSD,
+                                                  inputTokens: lastInputTokens,
+                                                  outputTokens: lastOutputTokens,
+                                                  area: .composition)
+        updatePieceSlotButtons()
+    }
+
+    @objc private func pieceSlotPressed(_ sender: NSButton) {
+        let newIndex = sender.tag
+        guard newIndex >= 0, newIndex < pieceSlots.count else { return }
+
+        // Composition Lab 3.x: the right-hand composition idea is one global,
+        // user-editable working state. Merely browsing a piece slot must never
+        // replace it with the historical concept stored in that slot.
+        let preservedWorkingIdea = conceptView.string
+        let preservedLastConcept = lastConcept
+        let preservedAssignment = promptView.string
+        let preservedSourceContext = musicChatCompositionContextOverride
+
+        activePieceSlot = newIndex
+        guard let item = pieceSlots[newIndex] else {
+            updatePieceSlotButtons()
+            status("Stück-Slot \(newIndex + 1) ist leer. Die nächste Komposition oder importierte Datei landet hier.", good: true)
+            return
+        }
+
+        slotSelectionLoad = true
+        install(score: item.score,
+                concept: item.concept,
+                provider: item.provider,
+                model: item.model,
+                addHistory: false,
+                costUSD: item.costUSD,
+                inputTokens: item.inputTokens,
+                outputTokens: item.outputTokens)
+        slotSelectionLoad = false
+
+        // install() intentionally loads the piece metadata for legacy workflows.
+        // Restore the independent 3.x working state immediately afterwards.
+        conceptView.string = preservedWorkingIdea
+        lastConcept = preservedLastConcept
+        promptView.string = preservedAssignment
+        musicChatCompositionContextOverride = preservedSourceContext
+
+        updatePieceSlotButtons()
+        scheduleMusicXMLPreviewRefresh()
+        status("Stück \(newIndex + 1) geladen: \(item.title) · Kompositionsidee bleibt unverändert.", good: true)
+    }
+
+    @objc private func generateMotifPressed() {
+        let alert = NSAlert()
+        alert.messageText = "Musikalisches Motiv"
+        alert.informativeText = "Wie lang soll das neue Motiv sein? Es wird in den nächsten freien Stück-Slot gelegt."
+        alert.addButton(withTitle: "2 Takte")
+        alert.addButton(withTitle: "4 Takte")
+        alert.addButton(withTitle: "8 Takte")
+        alert.addButton(withTitle: "Abbrechen")
+        let response = alert.runModal()
+        let bars: Int
+        switch response {
+        case .alertFirstButtonReturn: bars = 2
+        case .alertSecondButtonReturn: bars = 4
+        case .alertThirdButtonReturn: bars = 8
+        default: return
+        }
+
+        captureCurrentInActiveSlot()
+        if let free = pieceSlots.firstIndex(where: { $0 == nil }) { activePieceSlot = free }
+        updatePieceSlotButtons()
+
+        let oldMeasures = measuresField.stringValue
+        let oldPrompt = promptView.string
+        let oldChatInput = chatInput.stringValue
+        measuresField.stringValue = String(bars)
+        let motifTask = "Komponiere ein prägnantes musikalisches Motiv als Ausgangspunkt für eine spätere Komposition. Übernimm Tonart, Taktart, Tempo und Instrumentierung aus den eingestellten Feldern."
+        promptView.string = motifTask
+        chatInput.stringValue = motifTask
+        composePressed()
+        measuresField.stringValue = oldMeasures
+        promptView.string = oldPrompt
+        chatInput.stringValue = oldChatInput
+        saveSettingsFromUI()
+    }
+
+    private func buildNotationTransport() -> NSView {
+        let panel = v64Panel()
+        panel.contentViewMargins = NSSize(width: 10, height: 6)
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 7
+        panel.contentView = row
+
+        row.addArrangedSubview(NSButton(title: "▶", target: self, action: #selector(playCurrentMIDI)))
+        row.addArrangedSubview(NSButton(title: "■", target: self, action: #selector(stopCurrentMIDI)))
+        notationPlayerLoopButton.setButtonType(.toggle)
+        notationPlayerLoopButton.bezelStyle = .rounded
+        notationPlayerLoopButton.target = self
+        notationPlayerLoopButton.action = #selector(v65NotationLoopChanged)
+        row.addArrangedSubview(notationPlayerLoopButton)
+        row.addArrangedSubview(notationPlayerTimeLabel)
+
+        notationPlayerProgress.target = self
+        notationPlayerProgress.action = #selector(notationPlayerSeekChanged)
+        notationPlayerProgress.isContinuous = true
+        notationPlayerProgress.widthAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
+        row.addArrangedSubview(notationPlayerProgress)
+
+        row.addArrangedSubview(NSTextField(labelWithString: "Tempo"))
+        notationPlayerTempoField.stringValue = playerTempoField.stringValue
+        notationPlayerTempoField.widthAnchor.constraint(equalToConstant: 50).isActive = true
+        notationPlayerTempoField.target = self
+        notationPlayerTempoField.action = #selector(v65NotationTempoChanged)
+        row.addArrangedSubview(notationPlayerTempoField)
+
+        row.addArrangedSubview(NSTextField(labelWithString: "Lautstärke"))
+        notationPlayerVolume.doubleValue = playerVolume.doubleValue
+        notationPlayerVolume.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        notationPlayerVolume.target = self
+        notationPlayerVolume.action = #selector(v65NotationVolumeChanged)
+        notationPlayerVolume.isContinuous = true
+        row.addArrangedSubview(notationPlayerVolume)
+        return panel
+    }
+
+    @objc private func notationPlayerSeekChanged() {
+        midiPlayer.seek(fraction: notationPlayerProgress.doubleValue)
+        playerProgress.doubleValue = notationPlayerProgress.doubleValue
+        updatePlayerTime()
+    }
+
     private func separatorBox() -> NSBox {
         let box = NSBox()
         box.boxType = .separator
@@ -997,10 +1951,10 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                                      cstack.trailingAnchor.constraint(equalTo:cbox.trailingAnchor),
                                      cstack.topAnchor.constraint(equalTo:cbox.topAnchor),
                                      cstack.bottomAnchor.constraint(equalTo:cbox.bottomAnchor)])
-        cstack.addArrangedSubview(title("Musikalischer Impuls"))
+        cstack.addArrangedSubview(title("Kompositionsidee"))
         let cs = textScroll(conceptView, minHeight:275)
         cstack.addArrangedSubview(cs); cs.widthAnchor.constraint(equalTo:cstack.widthAnchor).isActive = true
-        conceptView.isEditable = false
+        conceptView.isEditable = true
 
         let rstack = NSStackView()
         rstack.orientation = .vertical; rstack.alignment = .leading; rstack.spacing = 8
@@ -1179,7 +2133,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         deleteOne.target = self
         historyMenu.addItem(deleteOne)
         historyTable.menu = historyMenu
-        let scroll = NSScrollView()
+        let scroll = FastScrollView()
         scroll.documentView = historyTable; scroll.hasVerticalScroller = true
         scroll.translatesAutoresizingMaskIntoConstraints = false
         v.addSubview(scroll)
@@ -1309,8 +2263,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             let v=raw.trimmingCharacters(in:.whitespacesAndNewlines)
             return v.isEmpty ? fallback : v
         }
-        let taskRaw=promptView.string.trimmingCharacters(in:.whitespacesAndNewlines)
-        let task=taskRaw.isEmpty ? "" : taskRaw
+        let visibleTask = chatInput.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let legacyTask = promptView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let task = !visibleTask.isEmpty ? visibleTask : legacyTask
         var result = """
         Besetzung: \(value(ensembleField.stringValue, fallback:"frei"))
         Takte: \(value(measuresField.stringValue, fallback:"32"))
@@ -1321,10 +2276,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         Auftrag:
         \(task)
         """
-        if let imported=importedReferenceScore,
-           let data=try? JSONEncoder().encode(imported),
-           let json=String(data:data,encoding:.utf8) {
-            result += "\n\nVORHANDENES MATERIAL (\(imported.ti)):\n\(json)"
+        if !musicChatCompositionContextOverride.isEmpty {
+            result += "\n\nMUSICCHAT-ARBEITSMATERIAL:\n" + musicChatCompositionContextOverride
         }
         return result
     }
@@ -1357,82 +2310,257 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             status("Tempo bitte als Zahl eingeben oder das Feld leer lassen.", good: false)
             return
         }
+
         var key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if key.isEmpty { key = SessionSecrets.shared.key(for:provider); if !key.isEmpty { keyField.stringValue=key } }
-        if !key.isEmpty { SessionSecrets.shared.set(key, for:provider) }
-        guard !key.isEmpty else { status("Bitte API-Key für \(provider.displayName) eingeben.", good: false); return }
+        if key.isEmpty {
+            key = SessionSecrets.shared.key(for: provider)
+            if !key.isEmpty { keyField.stringValue = key }
+        }
+        if !key.isEmpty { SessionSecrets.shared.set(key, for: provider) }
+        guard !key.isEmpty else {
+            status("Bitte API-Key für \(provider.displayName) eingeben.", good: false)
+            return
+        }
         saveSettingsFromUI()
-        // Kein Zugriff auf den macOS-Schlüsselbund: Schlüssel gelten nur für diese Sitzung.
 
         let p = provider
         let m = model
         let e = effort
-        let prompt = basePrompt()
-        status("KI entwickelt musikalischen Impuls …", good: true)
+        var visibleIdea = conceptView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Composition Lab 3.0 ideas normally start with:
+        // Takte · Taktart · Tempo BPM · Tonart · Besetzung
+        // If the user edited that header manually, never let contradictory values
+        // leak into the score prompt unnoticed.
+        func normalized(_ value: String) -> String {
+            value.trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: " ", with: "")
+                .replacingOccurrences(of: "–", with: "-")
+        }
+        func parseIdeaFrame(_ text: String) -> (measures:String, meter:String, tempo:String, key:String, ensemble:String)? {
+            guard let first = text.split(separator: "\n", omittingEmptySubsequences: true).first else { return nil }
+            let parts = first.split(separator: "·").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            guard parts.count >= 5 else { return nil }
+            let measures = parts[0].replacingOccurrences(of: "Takte", with: "", options: .caseInsensitive).trimmingCharacters(in: .whitespacesAndNewlines)
+            let meter = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            let tempo = parts[2].replacingOccurrences(of: "BPM", with: "", options: .caseInsensitive).trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = parts[3].trimmingCharacters(in: .whitespacesAndNewlines)
+            let ensemble = parts[4...].joined(separator: " · ").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !measures.isEmpty, !meter.isEmpty, !tempo.isEmpty, !key.isEmpty, !ensemble.isEmpty else { return nil }
+            return (measures, meter, tempo, key, ensemble)
+        }
+        func currentFrameHeader() -> String {
+            let bars = measuresField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let meter = meterField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let tempo = tempoField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = musicalKeyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let ensemble = ensembleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            return "\(bars.isEmpty ? "frei" : bars) Takte · \(meter.isEmpty ? "frei" : meter) · \(tempo.isEmpty ? "frei" : tempo) BPM · \(key.isEmpty ? "frei" : key) · \(ensemble.isEmpty ? "frei" : ensemble)"
+        }
+
+        if !visibleIdea.isEmpty, let frame = parseIdeaFrame(visibleIdea) {
+            var conflicts: [String] = []
+            let uiMeasures = measuresField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let uiMeter = meterField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let uiTempo = tempoField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let uiKey = musicalKeyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let uiEnsemble = ensembleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !uiMeasures.isEmpty && normalized(uiMeasures) != normalized(frame.measures) { conflicts.append("Takte: oben \(uiMeasures), Idee \(frame.measures)") }
+            if !uiMeter.isEmpty && normalized(uiMeter) != normalized(frame.meter) { conflicts.append("Taktart: oben \(uiMeter), Idee \(frame.meter)") }
+            if !uiTempo.isEmpty && normalized(uiTempo) != normalized(frame.tempo) { conflicts.append("Tempo: oben \(uiTempo) BPM, Idee \(frame.tempo) BPM") }
+            if !uiKey.isEmpty && normalized(uiKey) != normalized(frame.key) { conflicts.append("Tonart: oben \(uiKey), Idee \(frame.key)") }
+            if !uiEnsemble.isEmpty && normalized(uiEnsemble) != normalized(frame.ensemble) { conflicts.append("Besetzung: oben \(uiEnsemble), Idee \(frame.ensemble)") }
+
+            if !conflicts.isEmpty {
+                let alert = NSAlert()
+                alert.messageText = "Kompositionsidee und Vorgaben widersprechen sich"
+                alert.informativeText = conflicts.joined(separator: "\n") + "\n\nWelche Werte sollen für die Komposition gelten?"
+                alert.addButton(withTitle: "Kompositionsidee übernehmen")
+                alert.addButton(withTitle: "Obere Vorgaben verwenden")
+                alert.addButton(withTitle: "Abbrechen")
+                switch alert.runModal() {
+                case .alertFirstButtonReturn:
+                    measuresField.stringValue = frame.measures
+                    meterField.stringValue = frame.meter
+                    tempoField.stringValue = frame.tempo
+                    musicalKeyField.stringValue = frame.key
+                    ensembleField.stringValue = frame.ensemble
+                    saveSettingsFromUI()
+                case .alertSecondButtonReturn:
+                    let lines = visibleIdea.components(separatedBy: .newlines)
+                    var replaced = false
+                    var output: [String] = []
+                    for line in lines {
+                        if !replaced && !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            output.append(currentFrameHeader())
+                            replaced = true
+                        } else {
+                            output.append(line)
+                        }
+                    }
+                    visibleIdea = output.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                    conceptView.string = visibleIdea
+                    lastConcept = visibleIdea
+                default:
+                    status("Komposition wegen widersprüchlicher Vorgaben abgebrochen.", good: false)
+                    return
+                }
+            }
+        }
+
+        let assignment = basePrompt()
+
+        // No idea yet: create the musical idea only. This deliberate stop is what
+        // makes the concept a true editable intermediate state.
+        if visibleIdea.isEmpty {
+            let ideaPrompt = """
+            \(ComposerPrompts.conceptPrompt(assignment))
+
+            WICHTIG FÜR COMPOSITION LAB 3.0:
+            Formuliere ein konkretes, direkt editierbares MUSIKALISCHES ARBEITSKONZEPT, keine bloße Stimmungsbeschreibung.
+            Stelle zuerst die aktuellen Eckdaten in einer eigenen Zeile voran: Takte · Taktart · Tempo in BPM · Tonart · Besetzung.
+            Übernimm die im Auftrag vorhandenen Werte ausdrücklich; Tempo und Tonart dürfen nicht fehlen, wenn sie angegeben sind.
+            Beschreibe danach in etwa 4 bis 7 knappen Aussagen die musikalisch relevanten Entscheidungen. Wähle passend zur Aufgabe insbesondere aus: Motiv/Melodie oder thematisches Material; Begleitung/Satz/Textur; Harmonik bzw. tonale Bewegung; Entwicklung/Form, Wiederholung und Kontrast.
+            Formuliere konkret und veränderbar. Nicht nur „lyrisch“, „warm“, „schwebend“ usw., sondern z.B. Art und Bewegung einer Phrase, Funktion der Begleitung, harmonische Richtung oder Art der motivischen Veränderung.
+            Bei Klaviermusik sollen Rollen bzw. Verhältnis der Hände und die Satzidee greifbar sein, sofern der Nutzer nichts anderes vorgibt. Bei anderer Besetzung entsprechend idiomatisch denken.
+            Kein detaillierter Takt-für-Takt-Ablauf und kein technischer Bauplan. Keine unnötig festgelegten Höhepunkte in bestimmten Takten, sofern der Nutzer das nicht verlangt. Lass kompositorische Freiheit. Noch keine Partitur erzeugen.
+            """
+            lastDiagnostic = [
+                "format": "composition-lab-native-diagnostic",
+                "engineBuild": ComposerPrompts.engineBuild,
+                "interface": "macOS AppKit",
+                "interfaceVersion": "3.4.0",
+                "entryPoint": "compose-button",
+                "stage": "idea-request",
+                "assignment": assignment,
+                "ideaPrompt": ideaPrompt
+            ]
+            status("KI entwickelt die Kompositionsidee …", good: true)
+            APIClient.shared.call(provider: p, model: m, key: key, effort: e,
+                                  purpose: "MainViewController.currentFrameHeader", system: ComposerPrompts.system,
+                                  user: ideaPrompt,
+                                  wantJSON: false) { [weak self] result in
+                switch result {
+                case .failure(let error):
+                    DispatchQueue.main.async {
+                        self?.status("Fehler: \(error.localizedDescription)", good: false)
+                    }
+                case .success(let response):
+                    let idea = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        self.lastConcept = idea
+                        self.conceptView.string = idea
+                        if var d = self.lastDiagnostic {
+                            d["stage"] = "idea-ready"
+                            d["generatedIdea"] = idea
+                            d["inputTokens"] = response.inputTokens
+                            d["outputTokens"] = response.outputTokens
+                            self.lastDiagnostic = d
+                        }
+                        self.status("Kompositionsidee bereit. Du kannst sie direkt bearbeiten und danach erneut komponieren.", good: true)
+                    }
+                }
+            }
+            return
+        }
+
+        // An idea exists: use EXACTLY the currently visible editable text.
+        // Bind this asynchronous score request to a concrete destination slot.
+        // An explicitly selected empty slot wins; otherwise use the first free slot.
+        let destinationSlot: Int
+        if activePieceSlot >= 0, activePieceSlot < pieceSlots.count, pieceSlots[activePieceSlot] == nil {
+            destinationSlot = activePieceSlot
+        } else if let freeSlot = pieceSlots.firstIndex(where: { $0 == nil }) {
+            destinationSlot = freeSlot
+        } else {
+            status("Alle 10 Stück-Slots sind belegt. Bitte zuerst einen Slot löschen.", good: false)
+            return
+        }
+        pendingCompositionSlot = destinationSlot
+
+        let finalIdea = visibleIdea
+        lastConcept = finalIdea
+        let compPrompt = """
+        AUFTRAG:
+        \(assignment)
+
+        MUSIKALISCHE VORSTELLUNG:
+        \(finalIdea)
+
+        \(ComposerPrompts.technical)
+
+        \(titleAvoidanceInstruction())
+        """
+
+        lastDiagnostic = [
+            "format": "composition-lab-native-diagnostic",
+            "engineBuild": ComposerPrompts.engineBuild,
+            "interface": "macOS AppKit",
+            "interfaceVersion": "3.4.0",
+            "entryPoint": "compose-button",
+            "stage": "score-request",
+            "destinationSlot": destinationSlot + 1,
+            "assignment": assignment,
+            "finalEditedCompositionIdea": finalIdea,
+            "compositionPrompt": compPrompt,
+            "provider": p.rawValue,
+            "model": m,
+            "reasoning": e.rawValue
+        ]
+        status("KI komponiert aus der aktuellen Kompositionsidee …", good: true)
 
         APIClient.shared.call(provider: p, model: m, key: key, effort: e,
-                              system: ComposerPrompts.system,
-                              user: ComposerPrompts.conceptPrompt(prompt),
-                              wantJSON: false) { [weak self] firstResult in
-            switch firstResult {
+                              purpose: "MainViewController.currentFrameHeader", system: ComposerPrompts.system,
+                              user: compPrompt,
+                              wantJSON: true) { [weak self] result in
+            switch result {
             case .failure(let error):
-                DispatchQueue.main.async { self?.status("Fehler: \(error.localizedDescription)", good: false) }
-            case .success(let concept):
                 DispatchQueue.main.async {
-                    self?.lastConcept = concept.text
-                    self?.conceptView.string = self?.conceptDisplay(concept.text, provider: p, model: m) ?? concept.text
-                    self?.status("KI komponiert …", good: true)
+                    self?.pendingCompositionSlot = nil
+                    if var d = self?.lastDiagnostic {
+                        d["stage"] = "score-failed"
+                        d["error"] = error.localizedDescription
+                        self?.lastDiagnostic = d
+                    }
+                    self?.status("Fehler: \(error.localizedDescription)", good: false)
                 }
-
-                let compPrompt = """
-                \(ComposerPrompts.technical)
-
-                AUFTRAG:
-                \(prompt)
-
-                DEIN KONZEPT:
-                \(concept.text)
-
-                \(self?.titleAvoidanceInstruction() ?? "Vergib der Komposition einen eigenständigen, prägnanten Titel.")
-
-                Gib jetzt die fertige JSON-Partitur aus.
-                """
-
-                APIClient.shared.call(provider: p, model: m, key: key, effort: e,
-                                      system: ComposerPrompts.system, user: compPrompt, wantJSON: true) { [weak self] secondResult in
-                    switch secondResult {
-                    case .failure(let error):
-                        DispatchQueue.main.async { self?.status("Fehler: \(error.localizedDescription)", good: false) }
-                    case .success(let response):
-                        do {
-                            let data = try APIClient.shared.extractJSON(response.text)
-                            let score = try JSONDecoder().decode(Score.self, from: data)
-                            let inputTokens = concept.inputTokens + response.inputTokens
-                            let outputTokens = concept.outputTokens + response.outputTokens
-                            let costUSD = APICost.estimate(provider: p, model: m, inputTokens: inputTokens, outputTokens: outputTokens)
-                            DispatchQueue.main.async {
-                                self?.lastDiagnostic = [
-                                    "format": "composition-lab-native-diagnostic",
-                                    "engineBuild": ComposerPrompts.engineBuild,
-                                    "interface": "macOS AppKit",
-                                    "interfaceVersion": "1.0",
-                                    "provider": p.rawValue,
-                                    "model": m,
-                                    "reasoning": e.rawValue,
-                                    "assignment": prompt,
-                                    "systemPrompt": ComposerPrompts.system,
-                                    "conceptPrompt": ComposerPrompts.conceptPrompt(prompt),
-                                    "conceptResponse": concept.text,
-                                    "compositionPrompt": compPrompt,
-                                    "scoreResponse": response.text
-                                ]
-                                self?.install(score: score, concept: concept.text, provider: p, model: m,
-                                              costUSD: costUSD, inputTokens: inputTokens, outputTokens: outputTokens)
-                                self?.status("Komposition erfolgreich abgeschlossen! · API-Kosten ca. \(APICost.display(costUSD))", good: true)
-                            }
-                        } catch {
-                            DispatchQueue.main.async { self?.status("Fehler: \(error.localizedDescription)", good: false) }
+            case .success(let response):
+                do {
+                    let data = try APIClient.shared.extractJSON(response.text)
+                    let score = try JSONDecoder().decode(Score.self, from: data)
+                    let costUSD = APICost.estimate(provider: p, model: m,
+                                                   inputTokens: response.inputTokens,
+                                                   outputTokens: response.outputTokens)
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        if var d = self.lastDiagnostic {
+                            d["stage"] = "completed"
+                            d["scoreResponse"] = response.text
+                            d["inputTokens"] = response.inputTokens
+                            d["outputTokens"] = response.outputTokens
+                            self.lastDiagnostic = d
                         }
+                        self.install(score: score,
+                                     concept: finalIdea,
+                                     provider: p,
+                                     model: m,
+                                     costUSD: costUSD,
+                                     inputTokens: response.inputTokens,
+                                     outputTokens: response.outputTokens)
+                        self.status("Komposition erfolgreich abgeschlossen! · API-Kosten ca. \(APICost.display(costUSD))", good: true)
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        self?.pendingCompositionSlot = nil
+                        if var d = self?.lastDiagnostic {
+                            d["stage"] = "decode-failed"
+                            d["rawResponse"] = response.text
+                            d["error"] = error.localizedDescription
+                            self?.lastDiagnostic = d
+                        }
+                        self?.status("Fehler: \(error.localizedDescription)", good: false)
                     }
                 }
             }
@@ -1441,6 +2569,10 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
     private func install(score:Score, concept:String, provider:Provider, model:String, addHistory:Bool = true,
                          costUSD: Double? = nil, inputTokens: Int? = nil, outputTokens: Int? = nil) {
+        if addHistory, let requestedSlot = pendingCompositionSlot {
+            activePieceSlot = max(0, min(requestedSlot, pieceSlots.count - 1))
+            pendingCompositionSlot = nil
+        }
         lastScore = score; lastConcept = concept; lastProvider = provider; lastModel = model
         musicXMLCurrentLabel.stringValue = "Aktuelles Stück: " + score.ti
         scheduleMusicXMLPreviewRefresh()
@@ -1478,9 +2610,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         resultLabel.stringValue = info
         if let jd = try? JSONEncoder.pretty.encode(score) { jsonView.string = String(data:jd,encoding:.utf8) ?? "" }
         validationView.string = validate(score)
-        conceptView.string = concept.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? ""
-            : conceptDisplay(concept, provider: provider, model: model)
+        conceptView.string = concept.trimmingCharacters(in: .whitespacesAndNewlines)
         Storage.shared.saveCurrentPlayerState(
             CurrentPlayerState(score: score,
                                concept: concept,
@@ -1493,6 +2623,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                                importedReferenceName: importedReferenceName,
                                importedReferenceMusicXMLData: importedReferenceMusicXMLData)
         )
+
+        if !slotSelectionLoad { captureCurrentInActiveSlot() }
+        updatePieceSlotButtons()
 
         if addHistory {
             let scoreData = try? JSONEncoder().encode(score)
@@ -1526,6 +2659,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         midiPlayer.loopEnabled = active
         playerLoopButton.title = active ? "↻ Loop AN" : "↻ Loop"
         playerLoopButton.contentTintColor = active ? .systemGreen : nil
+        notationPlayerLoopButton.state = playerLoopButton.state
+        notationPlayerLoopButton.title = playerLoopButton.title
+        notationPlayerLoopButton.contentTintColor = playerLoopButton.contentTintColor
     }
     @objc private func pauseCurrentMIDI() { midiPlayer.pause(); updatePlayerTime(); status("Wiedergabe pausiert.", good:true) }
     @objc private func stopCurrentMIDI() { midiPlayer.stop(); updatePlayerTime(); playerTimer?.invalidate(); status("Wiedergabe gestoppt.", good:true) }
@@ -1548,7 +2684,15 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         func t(_ x:TimeInterval)->String { let n=max(0,Int(x.rounded())); return String(format:"%d:%02d",n/60,n%60) }
         let pos = midiPlayer.position, dur = midiPlayer.duration
         playerTimeLabel.stringValue="\(t(pos)) / \(t(dur))"
-        if dur > 0 { playerProgress.doubleValue = max(0, min(1, pos / dur)) } else { playerProgress.doubleValue = 0 }
+        notationPlayerTimeLabel.stringValue = playerTimeLabel.stringValue
+        if dur > 0 {
+            let f = max(0, min(1, pos / dur))
+            playerProgress.doubleValue = f
+            notationPlayerProgress.doubleValue = f
+        } else {
+            playerProgress.doubleValue = 0
+            notationPlayerProgress.doubleValue = 0
+        }
     }
 
     @objc private func playerSeekChanged() {
@@ -1596,10 +2740,12 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     @objc private func playerTempoChanged() {
+        notationPlayerTempoField.stringValue = playerTempoField.stringValue
         reloadMainPlayerForPlaybackSettings(errorPrefix: "Player-Tempo konnte nicht geändert werden")
     }
 
     @objc private func playerVolumeChanged() {
+        notationPlayerVolume.doubleValue = playerVolume.doubleValue
         reloadMainPlayerForPlaybackSettings(errorPrefix: "Player-Lautstärke konnte nicht geändert werden")
     }
 
@@ -1668,110 +2814,332 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         return out.joined(separator:"\n")
     }
 
-    @objc private func chatPressed() {
-        let msg = chatInput.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !msg.isEmpty, let score = lastScore else { return }
-        var key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if key.isEmpty { key = SessionSecrets.shared.key(for:provider); if !key.isEmpty { keyField.stringValue=key } }
-        if !key.isEmpty { SessionSecrets.shared.set(key, for:provider) }
-        guard !key.isEmpty else { status("Bitte API-Key eingeben.", good: false); return }
-        let p = provider
-        let m = model
-        let e = effort
-        let conceptSnapshot = lastConcept
-        appendChat("Du", msg)
-        chatInput.stringValue = ""
-        status("KI arbeitet mit Konzept und Partitur …", good: true)
+    private func musicChatWorkspaceContext() -> String {
+        var slotObjects: [[String: Any]] = []
+        for (index, item) in pieceSlots.enumerated() {
+            guard let item else { continue }
+            slotObjects.append(["slot":index+1,"title":item.title,"concept":item.concept,
+                                "provider":item.provider.rawValue,"model":item.model])
+        }
+        let fullConversation = chatView.string
+        let limit = 12000
+        let recentConversation = fullConversation.count > limit
+            ? "[Älterer Dialog lokal gespeichert; für diesen Aufruf gekürzt.]\\n" + String(fullConversation.suffix(limit))
+            : fullConversation
+        let object: [String: Any] = [
+            "settings":["measures":measuresField.stringValue,"meter":meterField.stringValue,
+                        "tempo":tempoField.stringValue,"key":musicalKeyField.stringValue,"ensemble":ensembleField.stringValue],
+            "activeSlot":activePieceSlot+1,
+            "slotIndex":slotObjects,
+            "recentConversation":recentConversation,
+            "currentAssignment":promptView.string,
+            "currentCompositionIdea":conceptView.string
+        ]
+        guard JSONSerialization.isValidJSONObject(object),
+              let data=try? JSONSerialization.data(withJSONObject:object,options:[.sortedKeys]),
+              let text=String(data:data,encoding:.utf8) else { return "{}" }
+        return text
+    }
 
-        do {
-            let scoreData = try JSONEncoder().encode(score)
-            let scoreText = String(data: scoreData, encoding: .utf8) ?? "{}"
-            let prompt = """
-            \(ComposerPrompts.technical)
+    private func musicChatSourceMaterial(_ slots: [Int]) -> String {
+        var selected: [[String: Any]] = []
+        let unique = Array(NSOrderedSet(array: slots).compactMap { $0 as? Int })
+        for oneBased in unique {
+            let index = oneBased - 1
+            guard index >= 0, index < pieceSlots.count, let item = pieceSlots[index] else { continue }
+            var obj: [String: Any] = [
+                "slot": oneBased,
+                "title": item.title,
+                "concept": item.concept
+            ]
+            if let data = try? JSONEncoder().encode(item.score),
+               let scoreObject = try? JSONSerialization.jsonObject(with: data) {
+                obj["score"] = scoreObject
+            }
+            selected.append(obj)
+        }
+        guard !selected.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: selected, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else { return "" }
+        return text
+    }
 
-            URSPRÜNGLICHE / AKTUELLE KOMPOSITIONSIDEE:
-            \(conceptSnapshot.isEmpty ? "Keine Kompositionsidee gespeichert." : conceptSnapshot)
+    private func executeMusicChatRevision(targetSlot oneBased: Int,
+                                          sourceSlots: [Int],
+                                          task: String,
+                                          replyLead: String?,
+                                          provider p: Provider,
+                                          model m: String,
+                                          effort e: Effort,
+                                          key: String) {
+        let targetIndex = oneBased - 1
+        guard targetIndex >= 0, targetIndex < pieceSlots.count, let targetItem = pieceSlots[targetIndex] else {
+            appendChat(p.displayName, "Welches vorhandene Stück soll ich bearbeiten?")
+            status("MusicChat braucht einen eindeutigen Ziel-Slot.", good: false)
+            return
+        }
+        if let lead = replyLead?.trimmingCharacters(in: .whitespacesAndNewlines), !lead.isEmpty {
+            appendChat(p.displayName, lead)
+        }
 
-            AKTUELLE PARTITUR (JSON):
-            \(scoreText)
+        var materialSlots = sourceSlots
+        if !materialSlots.contains(oneBased) { materialSlots.append(oneBased) }
+        let sourceText = musicChatSourceMaterial(materialSlots)
+        let revisionPrompt = """
+        \(ComposerPrompts.technical)
 
-            NUTZER-ANWEISUNG / FRAGE:
-            \(msg)
+        Du arbeitest im Composition Lab mit mehreren gleichzeitig verfügbaren Stücken.
+        Bearbeite ausschließlich das als ZIEL bezeichnete Stück. Andere angegebene Slots sind Vergleichs- oder Quellenmaterial.
+        Wenn der Nutzer nur eine Teiländerung verlangt, bewahre alle nicht verlangten musikalischen Eigenschaften möglichst unverändert.
 
-            Du kannst mit dem Nutzer sowohl die Kompositionsidee als auch die konkrete Partitur besprechen. Wenn der Nutzer nur eine Frage stellt, ändere nichts. Wenn er ausdrücklich die Kompositionsidee ändern möchte, gib die überarbeitete vollständige Kompositionsidee im Feld concept zurück. Wenn er Änderungen an der Musik verlangt, darfst du die Partitur entsprechend ändern. Bewahre nicht verlangte Aspekte nach Möglichkeit unverändert.
+        AKTUELLE RAHMENBEDINGUNGEN:
+        Takte: \(measuresField.stringValue)
+        Taktart: \(meterField.stringValue)
+        Tempo: \(tempoField.stringValue)
+        Tonart: \(musicalKeyField.stringValue)
+        Besetzung: \(ensembleField.stringValue)
 
-            Antworte ausschließlich mit einem JSON-Objekt im Format: {"reply":"Deine Textantwort", "concept": null ODER "vollständige geänderte Kompositionsidee", "score": null ODER modifizierte Partitur falls Noten geändert wurden}
-            """
+        ZIEL: Stück \(oneBased) – \(targetItem.title)
 
-            APIClient.shared.call(provider: p, model: m, key: key, effort: e,
-                                  system: ComposerPrompts.system, user: prompt, wantJSON: true) { [weak self] result in
-                switch result {
-                case .failure(let error):
+        ARBEITSMATERIAL:
+        \(sourceText)
+
+        NUTZER-AUFTRAG:
+        \(task)
+
+        Antworte ausschließlich mit einem JSON-Objekt im Format:
+        {"reply":"kurze Antwort an den Nutzer", "concept": null ODER "vollständige neue Kompositionsidee", "score": vollständige bearbeitete Partitur}
+        """
+
+        lastDiagnostic = [
+            "format": "composition-lab-native-diagnostic",
+            "engineBuild": ComposerPrompts.engineBuild,
+            "interface": "macOS AppKit",
+            "interfaceVersion": "3.4.0",
+            "entryPoint": "musicchat-context-revise",
+            "stage": "revision-request",
+            "targetSlot": oneBased,
+            "sourceSlots": materialSlots,
+            "resolvedTask": task,
+            "revisionPrompt": revisionPrompt
+        ]
+        status("KI bearbeitet Stück \(oneBased) …", good: true)
+
+        APIClient.shared.call(provider: p, model: m, key: key, effort: e,
+                              purpose: "MainViewController.executeMusicChatRevision", system: ComposerPrompts.system, user: revisionPrompt, wantJSON: true) { [weak self] result in
+            switch result {
+            case .failure(let error):
+                DispatchQueue.main.async {
+                    if var d = self?.lastDiagnostic {
+                        d["stage"] = "revision-failed"
+                        d["error"] = error.localizedDescription
+                        self?.lastDiagnostic = d
+                    }
+                    self?.appendChat("Fehler", error.localizedDescription)
+                    self?.status("Fehler: \(error.localizedDescription)", good: false)
+                }
+            case .success(let response):
+                do {
+                    let data = try APIClient.shared.extractJSON(response.text)
+                    let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+                    let reply = object["reply"] as? String ?? "Bearbeitung abgeschlossen."
+                    let concept = (object["concept"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard let scoreObject = object["score"], !(scoreObject is NSNull) else {
+                        throw NSError(domain: "CompositionLab.MusicChat", code: 2,
+                                      userInfo: [NSLocalizedDescriptionKey: "Die KI hat keine bearbeitete Partitur zurückgegeben."])
+                    }
+                    let scoreData = try JSONSerialization.data(withJSONObject: scoreObject)
+                    let score = try JSONDecoder().decode(Score.self, from: scoreData)
+                    let cost = APICost.estimate(provider: p, model: m,
+                                                inputTokens: response.inputTokens,
+                                                outputTokens: response.outputTokens)
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        self.activePieceSlot = targetIndex
+                        self.pendingCompositionSlot = targetIndex
+                        self.install(score: score,
+                                     concept: (concept?.isEmpty == false ? concept! : targetItem.concept),
+                                     provider: p,
+                                     model: m,
+                                     costUSD: cost,
+                                     inputTokens: response.inputTokens,
+                                     outputTokens: response.outputTokens)
+                        self.appendChat(p.displayName, reply)
+                        if var d = self.lastDiagnostic {
+                            d["stage"] = "revision-completed"
+                            d["response"] = response.text
+                            self.lastDiagnostic = d
+                        }
+                        self.status("Stück \(oneBased) wurde bearbeitet. · API-Kosten ca. \(APICost.display(cost))", good: true)
+                    }
+                } catch {
                     DispatchQueue.main.async {
                         self?.appendChat("Fehler", error.localizedDescription)
                         self?.status("Fehler: \(error.localizedDescription)", good: false)
                     }
-                case .success(let response):
-                    do {
-                        let data = try APIClient.shared.extractJSON(response.text)
-                        let object = try JSONSerialization.jsonObject(with: data) as? [String:Any] ?? [:]
-                        let reply = object["reply"] as? String ?? "Antwort erhalten."
-                        var newConcept: String? = nil
-                        var newScore: Score? = nil
-                        if let c = object["concept"] as? String, !c.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { newConcept = c }
-                        if let scObj = object["score"], !(scObj is NSNull) {
-                            let sd = try JSONSerialization.data(withJSONObject: scObj)
-                            newScore = try JSONDecoder().decode(Score.self, from: sd)
+                }
+            }
+        }
+    }
+
+    @objc private func chatPressed() {
+        let msg = chatInput.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !msg.isEmpty else { return }
+
+        var key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if key.isEmpty {
+            key = SessionSecrets.shared.key(for: provider)
+            if !key.isEmpty { keyField.stringValue = key }
+        }
+        if !key.isEmpty { SessionSecrets.shared.set(key, for: provider) }
+        guard !key.isEmpty else {
+            status("Bitte API-Key für \(provider.displayName) eingeben.", good: false)
+            return
+        }
+
+        let p = provider
+        let m = model
+        let e = effort
+        appendChat("Du", msg)
+        chatInput.stringValue = ""
+
+        let workspace = musicChatWorkspaceContext()
+        let dialoguePrompt = """
+        Du bist der musikalische Gesprächspartner im MusicChat von Composition Lab.
+        Dieser Aufruf dient ausschließlich Gespräch und Ideenarbeit; er erzeugt keine Partitur.
+
+        Der ARBEITSRAUM ist Gedächtnis und Orientierung, nicht automatisch musikalisches Ausgangsmaterial.
+        Vorhandene Slots oder eine frühere Kompositionsidee werden nur dann zu Material, wenn der aktuelle
+        Nutzerwunsch erkennbar darauf Bezug nimmt. sourceSlots nennt ausschließlich solche tatsächlich
+        gewünschten Quellen. Bei einem neuen Kompositionsvorhaben entwickelst du die Idee aus dem aktuellen
+        Nutzerwunsch und den ausdrücklich gesetzten Rahmenbedingungen.
+
+        Antworte ausschließlich als JSON:
+        {
+          "reply":"natürliche Dialogantwort",
+          "compositionAssignment": null ODER "aktueller Kompositionsauftrag",
+          "compositionIdea": null ODER "aktuelle musikalische Vorstellung",
+          "sourceSlots":[1,2]
+        }
+
+        ARBEITSRAUM:
+        \(workspace)
+
+        AKTUELLER NUTZERBEITRAG:
+        \(msg)
+        """
+
+        lastDiagnostic = [
+            "format": "composition-lab-native-diagnostic",
+            "engineBuild": ComposerPrompts.engineBuild,
+            "interface": "macOS AppKit",
+            "interfaceVersion": "3.4.0",
+            "entryPoint": "musicchat",
+            "stage": "dialogue-request",
+            "userMessage": msg,
+            "workspaceContext": workspace,
+            "dialoguePrompt": dialoguePrompt
+        ]
+        status("KI denkt im MusicChat mit …", good: true)
+
+        APIClient.shared.call(provider: p, model: m, key: key, effort: e,
+                              purpose: "MainViewController.chatPressed", system: ComposerPrompts.system,
+                              user: dialoguePrompt,
+                              wantJSON: true) { [weak self] result in
+            switch result {
+            case .failure(let error):
+                DispatchQueue.main.async {
+                    if var d = self?.lastDiagnostic {
+                        d["stage"] = "dialogue-failed"
+                        d["error"] = error.localizedDescription
+                        self?.lastDiagnostic = d
+                    }
+                    self?.appendChat("Fehler", error.localizedDescription)
+                    self?.status("Fehler: \(error.localizedDescription)", good: false)
+                }
+
+            case .success(let response):
+                do {
+                    let data = try APIClient.shared.extractJSON(response.text)
+                    let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+                    let reply = (object["reply"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let assignment = (object["compositionAssignment"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let idea = (object["compositionIdea"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let sourceSlots = (object["sourceSlots"] as? [Any] ?? []).compactMap { value -> Int? in
+                        if let n = value as? Int { return n }
+                        if let n = value as? NSNumber { return n.intValue }
+                        return nil
+                    }.filter { $0 >= 1 && $0 <= 10 }
+                    let resolvedSettings = object["resolvedSettings"] as? [String: Any] ?? [:]
+                    func resolvedString(_ key: String) -> String? {
+                        let value = resolvedSettings[key]
+                        if value == nil || value is NSNull { return nil }
+                        if let x = value as? String {
+                            let t = x.trimmingCharacters(in: .whitespacesAndNewlines)
+                            return t.isEmpty ? nil : t
                         }
-                        let chatCostUSD = APICost.estimate(provider: p, model: m, inputTokens: response.inputTokens, outputTokens: response.outputTokens)
-                        DispatchQueue.main.async {
-                            guard let self = self else { return }
-                            self.lastCostUSD += chatCostUSD
-                            self.lastInputTokens += response.inputTokens
-                            self.lastOutputTokens += response.outputTokens
-                            self.appendChat(p.displayName, reply)
-                            var changed = false
-                            if let c = newConcept {
-                                self.lastConcept = c
-                                self.conceptView.string = self.conceptDisplay(c, provider: p, model: m)
-                                changed = true
-                            }
-                            if let sc = newScore {
-                                self.lastScore = sc
-                                self.lastMidi = MIDIBuilder.build(sc)
-                                do {
-                                    try StudioProBridge.writeReturnScore(sc)
-                                    if let midi = self.lastMidi {
-                                        try StudioProBridge.writeReturnMIDI(midi)
-                                    }
-                                } catch {
-                                    print("Studio Pro return update failed: \(error.localizedDescription)")
-                                }
-                                self.resultLabel.stringValue = "\(sc.ti) (Überarbeitet)\nAPI-Kosten bisher ca.: \(APICost.display(self.lastCostUSD))"
-                                self.validationView.string = self.validate(sc)
-                                if let jd = try? JSONEncoder.pretty.encode(sc) { self.jsonView.string = String(data: jd, encoding: .utf8) ?? "" }
-                                changed = true
-                            }
-                            if changed, let sc = self.lastScore {
-                                self.history.insert(HistoryItem(id: UUID(), time: Date(), title: sc.ti, provider: p, model: m, concept: self.lastConcept, score: sc,
-                                                                costUSD: self.lastCostUSD, inputTokens: self.lastInputTokens, outputTokens: self.lastOutputTokens, area: .composition), at: 0)
-                                self.history = self.trimmedHistory(self.history)
-                                Storage.shared.saveHistory(self.history)
-                                self.refreshVisibleHistories()
-                            }
-                            self.status("Antwort erhalten. · Diese KI-Anfrage ca. \(APICost.display(chatCostUSD))", good: true)
+                        if let x = value as? NSNumber { return x.stringValue }
+                        return nil
+                    }
+                    let resolvedMeasures = resolvedString("measures")
+                    let resolvedMeter = resolvedString("meter")
+                    let resolvedTempo = resolvedString("tempo")
+                    let resolvedKey = resolvedString("key")
+                    let resolvedEnsemble = resolvedString("ensemble")
+
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        let answer = (reply?.isEmpty == false) ? reply! : "Ich habe den musikalischen Zusammenhang aufgenommen."
+                        self.appendChat(p.displayName, answer)
+
+                        // The newest explicit natural-language instruction wins and is
+                        // made visible immediately in the top controls. This keeps the UI,
+                        // assignment and idea in one coherent state.
+                        if let x = resolvedMeasures { self.measuresField.stringValue = x }
+                        if let x = resolvedMeter { self.meterField.stringValue = x }
+                        if let x = resolvedTempo { self.tempoField.stringValue = x }
+                        if let x = resolvedKey { self.musicalKeyField.stringValue = x }
+                        if let x = resolvedEnsemble { self.ensembleField.stringValue = x }
+
+                        if let assignment, !assignment.isEmpty {
+                            self.promptView.string = assignment
                         }
-                    } catch {
-                        DispatchQueue.main.async {
-                            self?.appendChat("Fehler", error.localizedDescription)
-                            self?.status("Fehler: \(error.localizedDescription)", good: false)
+                        if let idea, !idea.isEmpty {
+                            self.conceptView.string = idea
+                            self.lastConcept = idea
                         }
+                        if assignment?.isEmpty == false || idea?.isEmpty == false {
+                            self.musicChatCompositionContextOverride = self.musicChatSourceMaterial(sourceSlots)
+                            self.saveSettingsFromUI()
+                        }
+
+                        if var d = self.lastDiagnostic {
+                            d["stage"] = "dialogue-completed"
+                            d["dialogueResponse"] = response.text
+                            d["reply"] = answer
+                            d["sourceSlots"] = sourceSlots
+                            d["resolvedSettings"] = resolvedSettings
+                            if let assignment, !assignment.isEmpty { d["compositionAssignment"] = assignment }
+                            if let idea, !idea.isEmpty { d["compositionIdea"] = idea }
+                            d["inputTokens"] = response.inputTokens
+                            d["outputTokens"] = response.outputTokens
+                            self.lastDiagnostic = d
+                        }
+                        self.status(idea?.isEmpty == false ? "Kompositionsidee bereit und direkt editierbar." : "MusicChat-Antwort erhalten.", good: true)
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        if var d = self?.lastDiagnostic {
+                            d["stage"] = "dialogue-decode-failed"
+                            d["rawResponse"] = response.text
+                            d["error"] = error.localizedDescription
+                            self?.lastDiagnostic = d
+                        }
+                        self?.appendChat("Fehler", error.localizedDescription)
+                        self?.status("Fehler: \(error.localizedDescription)", good: false)
                     }
                 }
             }
-        } catch {
-            appendChat("Fehler", error.localizedDescription)
-            status("Fehler: \(error.localizedDescription)", good: false)
         }
     }
 
@@ -1831,7 +3199,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             conceptView.string = ""
             install(score: score, concept: "", provider: provider, model: model, addHistory: false)
             conceptView.string = ""
-            workspaceTabs.selectTabViewItem(at: 0)
+            selectWorkspace(0)
             workspaceSegment.selectedSegment = 0
             status("MIDI-Vorlage geladen – jetzt Auftrag formulieren oder im KI-Chat weiterarbeiten.", good: true)
         } catch {
@@ -1854,7 +3222,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             conceptView.string = ""
             install(score: score, concept: "", provider: provider, model: model, addHistory: false)
             conceptView.string = ""
-            workspaceTabs.selectTabViewItem(at: 0)
+            selectWorkspace(0)
             workspaceSegment.selectedSegment = 0
             status("MusicXML-Vorlage geladen – jetzt Auftrag formulieren oder im KI-Chat weiterarbeiten.", good: true)
         } catch {
@@ -2038,7 +3406,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             projectURL = url
             saveSettingsFromUI()
             updateWindowTitle()
-            workspaceTabs.selectTabViewItem(at: 0)
+            selectWorkspace(0)
             workspaceSegment.selectedSegment = 0
             status("CLAB-Datei „\(doc.title)“ vollständig geladen.", good:true)
         } catch {
@@ -2118,11 +3486,43 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     @objc private func saveDiagnosticPressed() {
-        guard let d=lastDiagnostic, JSONSerialization.isValidJSONObject(d), let data=try? JSONSerialization.data(withJSONObject:d,options:[.prettyPrinted,.sortedKeys]) else {
-            status("Noch keine Diagnosedatei vorhanden. Bitte zuerst komponieren.",good:false); return
+        guard var diagnostic = lastDiagnostic else {
+            status("Noch keine Diagnosedaten vorhanden.", good: false)
+            NSSound.beep()
+            return
         }
-        let p=NSSavePanel(); p.allowedFileTypes=["json"]; p.nameFieldStringValue=safeFilename(lastScore?.ti ?? "Komposition")+"-Diagnose-Engine14.json"
-        if p.runModal() == .OK, let url = p.url { do { try data.write(to:url); status("Diagnosedatei gespeichert.",good:true) } catch { status("Speichern fehlgeschlagen: \(error.localizedDescription)",good:false) } }
+
+        do {
+            diagnostic["aiCommunication"] = AICommunicationLog.shared.snapshot()
+            diagnostic["aiCommunicationLogging"] = "complete-central-APIClient-log; API keys and authorization secrets excluded"
+            diagnostic["interfaceVersion"] = "3.3.1"
+
+            guard JSONSerialization.isValidJSONObject(diagnostic) else {
+                throw NSError(domain: "CompositionLab.Diagnostic", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "Die Diagnosedaten enthalten einen nicht speicherbaren Wert."])
+            }
+            let data = try JSONSerialization.data(withJSONObject: diagnostic,
+                                                  options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+
+            let fm = FileManager.default
+            let downloads = fm.urls(for: .downloadsDirectory, in: .userDomainMask).first
+                ?? fm.homeDirectoryForCurrentUser.appendingPathComponent("Downloads", isDirectory: true)
+            try fm.createDirectory(at: downloads, withIntermediateDirectories: true)
+
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+            let stamp = formatter.string(from: Date())
+            let base = lastScore?.ti.trimmingCharacters(in: .whitespacesAndNewlines)
+            let stem = safeFilename((base?.isEmpty == false ? base! : "Composition-Lab") + "-Diagnose-" + stamp)
+            let url = downloads.appendingPathComponent(stem).appendingPathExtension("json")
+
+            try data.write(to: url, options: .atomic)
+            status("Diagnose gespeichert in Downloads: \(url.lastPathComponent)", good: true)
+        } catch {
+            status("Diagnose konnte nicht gespeichert werden: \(error.localizedDescription)", good: false)
+            NSSound.beep()
+        }
     }
 
     private func safeFilename(_ s:String)->String {
@@ -2401,7 +3801,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                          styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         w.title = "Entwürfe"
         w.minSize = NSSize(width: 620, height: 320); w.isReleasedWhenClosed = false
-        let content = NSView(); let scroll = NSScrollView()
+        let content = NSView(); let scroll = FastScrollView()
         scroll.documentView = historyTable; scroll.hasVerticalScroller = true; scroll.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(scroll)
         let load = NSButton(title: "Entwurf laden", target: self, action: #selector(loadHistorySelection))
@@ -2437,24 +3837,22 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         Auftrag:
         \(stylePrefix)\(r.task)
         """
-        APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,system:ComposerPrompts.system,user:ComposerPrompts.conceptPrompt(assignment),wantJSON:false){ [weak self, weak window] first in
+        APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,purpose: "MainViewController.generateExperiment", system:ComposerPrompts.system,user:ComposerPrompts.conceptPrompt(assignment),wantJSON:false){ [weak self, weak window] first in
             switch first {
             case .failure(let err): DispatchQueue.main.async { window?.setStatus("Fehler: \(err.localizedDescription)",good:false) }
             case .success(let concept):
                 let prompt="""
-                \(ComposerPrompts.technical)
-
                 AUFTRAG:
                 \(assignment)
 
-                DEIN KONZEPT:
+                MUSIKALISCHE VORSTELLUNG:
                 \(concept.text)
 
-                \(self?.titleAvoidanceInstruction() ?? "Vergib der Komposition einen eigenständigen, prägnanten Titel.")
+                \(ComposerPrompts.technical)
 
-                Gib jetzt die fertige JSON-Partitur aus.
+                \(self?.titleAvoidanceInstruction() ?? "Vergib der Komposition einen eigenständigen, prägnanten Titel.")
                 """
-                APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,system:ComposerPrompts.system,user:prompt,wantJSON:true){ second in
+                APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,purpose: "MainViewController.generateExperiment", system:ComposerPrompts.system,user:prompt,wantJSON:true){ second in
                     switch second {
                     case .failure(let err): DispatchQueue.main.async { window?.setStatus("Fehler: \(err.localizedDescription)",good:false) }
                     case .success(let response):
@@ -2538,7 +3936,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         FRAGE / WUNSCH:
         \(question)
         """
-        APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,system:"Du bist ein musikalischer Analyse- und Kompositionspartner. Besprich die vorliegende musikalische Vorlage konkret und musikalisch. Ändere nicht automatisch die MIDI-Daten; antworte zunächst als Gesprächspartner.",user:user,wantJSON:false){ [weak window] result in
+        APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,purpose: "MainViewController.chatExperiment", system:"Du bist ein musikalischer Analyse- und Kompositionspartner. Besprich die vorliegende musikalische Vorlage konkret und musikalisch. Ändere nicht automatisch die MIDI-Daten; antworte zunächst als Gesprächspartner.",user:user,wantJSON:false){ [weak window] result in
             DispatchQueue.main.async { switch result { case .failure(let err): window?.appendChat("Fehler",err.localizedDescription); case .success(let r): window?.appendChat(p.displayName,r.text) } }
         }
     }
@@ -2564,7 +3962,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
         Beurteile knapp: Charakter, motivische Arbeit, Harmonik, Rhythmik, Form, Eigenständigkeit und welche Fassung musikalisch überzeugender ist. Begründe konkret.
         """
-        APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,system:"Du bist ein musikalischer Analytiker und vergleichst zwei MIDI-Kompositionen sachlich und konkret.",user:user,wantJSON:false){ [weak window] result in DispatchQueue.main.async { switch result { case .failure(let err):window?.setDialogText("Fehler: \(err.localizedDescription)");case .success(let r):window?.setDialogText(r.text) } } }
+        APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,purpose: "MainViewController.compare", system:"Du bist ein musikalischer Analytiker und vergleichst zwei MIDI-Kompositionen sachlich und konkret.",user:user,wantJSON:false){ [weak window] result in DispatchQueue.main.async { switch result { case .failure(let err):window?.setDialogText("Fehler: \(err.localizedDescription)");case .success(let r):window?.setDialogText(r.text) } } }
     }
 
     private func routeCompareDialog(a: HistoryItem, b: HistoryItem, text: String, window: CompareLabWindowController?) {
@@ -2603,7 +4001,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         WICHTIG: Erzeuge in diesem Dialog niemals Python-Code, MIDI-Binärdaten, Base64, ein MIDI-Skript oder Anweisungen zum Erzeugen einer Datei. Behaupte auch nicht, dass du keine Binärdatei anhängen kannst. Die App erzeugt MIDI selbst.
         """
         APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
-                              system: system, user: user, wantJSON: false) { [weak self, weak window] result in
+                              purpose: "MainViewController.routeCompareDialog", system: system, user: user, wantJSON: false) { [weak self, weak window] result in
             DispatchQueue.main.async {
                 guard let self else { return }
                 switch result {
@@ -2644,7 +4042,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         \(question)
         """
         APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
-                              system: "Du bist ein musikalischer Analyse- und Kompositionspartner. Besprich zwei vorliegende MIDI-Kompositionen konkret und musikalisch. Antworte zunächst als Gesprächspartner und erzeuge in diesem Dialog keine JSON-Partitur.",
+                              purpose: "MainViewController.chatCompare", system: "Du bist ein musikalischer Analyse- und Kompositionspartner. Besprich zwei vorliegende MIDI-Kompositionen konkret und musikalisch. Antworte zunächst als Gesprächspartner und erzeuge in diesem Dialog keine JSON-Partitur.",
                               user: user, wantJSON: false) { [weak window] result in
             DispatchQueue.main.async {
                 switch result {
@@ -2681,27 +4079,25 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         """
 
         APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
-                              system: ComposerPrompts.system,
+                              purpose: "MainViewController.createCompareResult", system: ComposerPrompts.system,
                               user: ComposerPrompts.conceptPrompt(assignment),
                               wantJSON: false) { [weak window] first in
             switch first {
             case .failure(let err): DispatchQueue.main.async { window?.setDialogText("Fehler: \(err.localizedDescription)") }
             case .success(let concept):
                 let prompt = """
-                \(ComposerPrompts.technical)
-
                 AUFTRAG:
                 \(assignment)
 
-                DEIN KONZEPT:
+                MUSIKALISCHE VORSTELLUNG:
                 \(concept.text)
 
-                \(self.titleAvoidanceInstruction())
+                \(ComposerPrompts.technical)
 
-                Gib jetzt die fertige JSON-Partitur aus.
+                \(self.titleAvoidanceInstruction())
                 """
                 APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
-                                      system: ComposerPrompts.system, user: prompt, wantJSON: true) { second in
+                                      purpose: "MainViewController.createCompareResult", system: ComposerPrompts.system, user: prompt, wantJSON: true) { second in
                     switch second {
                     case .failure(let err): DispatchQueue.main.async { window?.setDialogText("Fehler: \(err.localizedDescription)") }
                     case .success(let response):
@@ -2719,7 +4115,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     private func updateWindowTitle() {
-        view.window?.title = "Composition Lab · Projekt: \(projectName) · V5.0.12"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        view.window?.title = "Composition Lab · Projekt: \(projectName) · V\(version)"
     }
 
     @objc func menuNameProject() {
@@ -2733,11 +4130,11 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     @objc func menuSaveProject() {
-        saveCLABDocument()
+        v65SaveProject()
     }
 
     @objc func menuLoadProject() {
-        openCLABPressed()
+        v65LoadProject()
     }
 
     @objc func menuExportBackup() {
@@ -2782,7 +4179,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         w.title = "Composition Lab · Kurzhilfe"
         w.minSize = NSSize(width: 540, height: 400)
 
-        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 720, height: 620))
+        let scroll = FastScrollView(frame: NSRect(x: 0, y: 0, width: 720, height: 620))
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.autoresizingMask = [.width, .height]

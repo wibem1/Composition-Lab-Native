@@ -4,7 +4,7 @@ import Cocoa
 final class HistoryFooterView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     private var items: [HistoryItem] = []
     private let table = NSTableView()
-    private let scroll = NSScrollView()
+    private let scroll = FastScrollView()
     private let buttons: [NSButton]
     var onAction: ((Int, HistoryItem) -> Void)?
     var onDelete: ((HistoryItem) -> Void)?

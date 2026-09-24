@@ -45,7 +45,7 @@ final class CompareLabWindowController: NSWindowController {
     }
 
     private func scroll(_ tv: NSTextView, _ h: CGFloat) -> NSScrollView {
-        let s = NSScrollView()
+        let s = FastScrollView()
         s.borderType = .lineBorder
         s.hasVerticalScroller = true
         s.autohidesScrollers = true
@@ -289,7 +289,7 @@ final class CompareLabWindowController: NSWindowController {
         w.contentView = root
         contentRoot = root
 
-        let outerScroll = NSScrollView()
+        let outerScroll = FastScrollView()
         outerScroll.hasVerticalScroller = true
         outerScroll.autohidesScrollers = true
         outerScroll.drawsBackground = false

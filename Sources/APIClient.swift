@@ -20,6 +20,56 @@ enum APIError: LocalizedError {
     }
 }
 
+final class AICommunicationLog {
+    static let shared = AICommunicationLog()
+    private let queue = DispatchQueue(label: "CompositionLab.AICommunicationLog")
+    private var entries: [[String: Any]] = []
+    private var sequence = 0
+
+    func begin(provider: Provider, model: String, effort: Effort, purpose: String,
+               system: String, user: String, wantJSON: Bool) -> Int {
+        queue.sync {
+            sequence += 1
+            entries.append([
+                "sequence": sequence,
+                "startedAt": ISO8601DateFormatter().string(from: Date()),
+                "provider": provider.rawValue,
+                "model": model,
+                "reasoning": effort.rawValue,
+                "purpose": purpose,
+                "wantJSON": wantJSON,
+                "systemPrompt": system,
+                "userPrompt": user,
+                "status": "request-sent"
+            ])
+            return sequence
+        }
+    }
+
+    func finish(_ id: Int, response: LLMResponse) {
+        queue.sync {
+            guard let i = entries.firstIndex(where: { ($0["sequence"] as? Int) == id }) else { return }
+            entries[i]["completedAt"] = ISO8601DateFormatter().string(from: Date())
+            entries[i]["status"] = "response-received"
+            entries[i]["responseText"] = response.text
+            entries[i]["inputTokens"] = response.inputTokens
+            entries[i]["outputTokens"] = response.outputTokens
+        }
+    }
+
+    func fail(_ id: Int, error: Error) {
+        queue.sync {
+            guard let i = entries.firstIndex(where: { ($0["sequence"] as? Int) == id }) else { return }
+            entries[i]["completedAt"] = ISO8601DateFormatter().string(from: Date())
+            entries[i]["status"] = "failed"
+            entries[i]["error"] = error.localizedDescription
+        }
+    }
+
+    func snapshot() -> [[String: Any]] { queue.sync { entries } }
+    func reset() { queue.sync { entries.removeAll(); sequence = 0 } }
+}
+
 final class APIClient {
     static let shared = APIClient()
 
@@ -32,15 +82,26 @@ final class APIClient {
 
     typealias Completion = (Result<LLMResponse, Error>) -> Void
 
-    func call(provider: Provider, model: String, key: String, effort: Effort,
+    func call(provider: Provider, model: String, key: String, effort: Effort, purpose: String,
               system: String, user: String, wantJSON: Bool, completion: @escaping Completion) {
+        let logID = AICommunicationLog.shared.begin(provider: provider, model: model, effort: effort, purpose: purpose,
+                                                    system: system, user: user, wantJSON: wantJSON)
+        let loggedCompletion: Completion = { result in
+            switch result {
+            case .success(let response):
+                AICommunicationLog.shared.finish(logID, response: response)
+            case .failure(let error):
+                AICommunicationLog.shared.fail(logID, error: error)
+            }
+            completion(result)
+        }
         switch provider {
         case .anthropic:
-            callAnthropic(model: model, key: key, effort: effort, system: system, user: user, completion: completion)
+            callAnthropic(model: model, key: key, effort: effort, system: system, user: user, completion: loggedCompletion)
         case .gemini:
-            callGemini(model: model, key: key, effort: effort, system: system, user: user, wantJSON: wantJSON, completion: completion)
+            callGemini(model: model, key: key, effort: effort, system: system, user: user, wantJSON: wantJSON, completion: loggedCompletion)
         case .openai:
-            callOpenAI(model: model, key: key, effort: effort, system: system, user: user, wantJSON: wantJSON, completion: completion)
+            callOpenAI(model: model, key: key, effort: effort, system: system, user: user, wantJSON: wantJSON, completion: loggedCompletion)
         }
     }
 

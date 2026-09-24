@@ -5,64 +5,8 @@ cd "$(dirname "$0")"
 APP="Composition Lab.app"
 BUILD=".build-native"
 
-python3 ApplyWorkspaceLayoutFix.py
-python3 ApplyCompositionLab2.py
-python3 ApplyV6SlotsState.py
-python3 ApplyV6MainLayout.py
-python3 ApplyV6MainLayoutFix.py
-python3 ApplyV6CompileFixes.py
-
-python3 - <<'PY'
-from pathlib import Path
-p = Path('ApplyV63MainLayout.py')
-s = p.read_text(encoding='utf-8')
-start = s.find('# Richer labels for the large V6.3 cards.')
-end = s.find("p.write_text(s, encoding='utf-8')", start)
-if start < 0 or end < 0:
-    raise SystemExit('V3.0 build preparation: V6.3 label-check block not found')
-s = s[:start] + "# Card labels are patched separately.\n\n" + s[end:]
-p.write_text(s, encoding='utf-8')
-PY
-python3 ApplyV63MainLayout.py
-python3 ApplyV63CardLabels.py
-python3 ApplyV64Layout.py
-python3 ApplyV63TechnicalWorkspace.py
-python3 ApplyV65Polish.py
-python3 ApplyV65PlayerSync.py
-python3 ApplyV651Fix.py
-python3 ApplyV652Volume.py
-python3 ApplyV662BottomAndSlotMenu.py
-python3 ApplyV663Workflow.py
-python3 ApplyFastScrollFix.py
-python3 ApplyV664Performance.py
-python3 ApplyV667AsyncBridge.py
-python3 ApplyV668PianoSplitAndMeasures.py
-python3 ApplyV669ConceptAndDiagnostic.py
-python3 ApplyV6610DiagnosticPipeline.py
-python3 ApplyV6611UnifiedMusicChat.py
-python3 ApplyV670ContextMusicChat.py
-python3 ApplyV671DialogFirst.py
-python3 ApplyV672DiagnosticSaveFix.py
-python3 ApplyV673ActorFix.py
-python3 ApplyV674DialogAndDiagnosticUX.py
-python3 ApplyV675DiagnosticModalAndPreparedState.py
-python3 ApplyV300MusicChatCore.py
-python3 ApplyV301Corrections.py
-python3 ApplyV302SlotAndSourceFix.py
-python3 ApplyV303Consistency.py
-python3 ApplyV304IdeaPanelCleanup.py
-python3 ApplyV305MusicalIdeaQuality.py
-python3 ApplyV306PreserveWorkingIdea.py
-python3 ApplyV307CentralCLAB.py
-python3 ApplyV308MainCleanup.py
-python3 ApplyV309SessionMemory.py
-python3 ApplyV330Engine2.py
-python3 ApplyV331CompleteAILog.py
-python3 ApplyV332FreshCompositionContext.py
-python3 ApplyV333CreativeAutonomy.py
-
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native 3.3.3 …"
+echo "Baue Composition Lab Native 3.4.0 · Build 3400 · Engine 2.2 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -116,6 +60,4 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 3.3.3 (Build 3303) · Composition Engine 2.1 · kreative Autonomie · vollständiges KI-Protokoll"
-echo "3.3.3: Engine 2.1 · keine kompositorischen Lehrmeister-Regeln; technische Regeln dienen nur der Ausgabe."
-open "$APP" || true
+echo "Version: 3.4.0 (Build 3400) · Composition Engine 2.2 · Engine Build 22 · Clean Source"
