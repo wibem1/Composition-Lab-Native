@@ -56,9 +56,10 @@ python3 ApplyV306PreserveWorkingIdea.py
 python3 ApplyV307CentralCLAB.py
 python3 ApplyV308MainCleanup.py
 python3 ApplyV309SessionMemory.py
+python3 ApplyV330Engine2.py
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native 3.0.9 …"
+echo "Baue Composition Lab Native 3.3.0 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -112,6 +113,6 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 3.0.9 (Build 309) · Engine Build 14"
-echo "3.0.9: automatisches Sitzungsgedächtnis für alle 10 Stück-Slots, Kompositionsidee, Auftrag, MusicChat, Einstellungen und aktiven Slot; bleibt über Updates erhalten."
+echo "Version: 3.3.0 (Build 3300) · Composition Engine 2.0 · Engine Build 20"
+echo "3.3.0: Composition Engine 2.0 mit Klangvorstellung vor Komposition und technischer Realisation."
 open "$APP" || true
