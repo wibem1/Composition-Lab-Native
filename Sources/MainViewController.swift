@@ -2279,6 +2279,21 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         if !musicChatCompositionContextOverride.isEmpty {
             result += "\n\nMUSICCHAT-ARBEITSMATERIAL:\n" + musicChatCompositionContextOverride
         }
+        if let reference = importedReferenceScore {
+            let source = importedReferenceName ?? "importierte Vorlage"
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            if let data = try? encoder.encode(reference),
+               let json = String(data: data, encoding: .utf8) {
+                result += """
+
+                VORHANDENES MUSIKALISCHES MATERIAL AUS \(source):
+                Das folgende Material ist bereits vorhanden und gehört zum musikalischen Auftrag. Behandle es entsprechend dem freien Auftrag als Kontext, Ausgangsmaterial oder zu bearbeitende Musik. Erfinde keine technischen TARGET-/CONTEXT-Rollen.
+
+                \(json)
+                """
+            }
+        }
         return result
     }
 
