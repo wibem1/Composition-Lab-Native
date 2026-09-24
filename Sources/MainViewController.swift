@@ -421,7 +421,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         workspaceSegment.translatesAutoresizingMaskIntoConstraints = false
         header.addSubview(workspaceSegment)
 
-        let project = NSTextField(labelWithString: "Composition Lab")
+        let project = NSTextField(labelWithString: "Composition Lab · Composition Engine \(ComposerPrompts.referenceVersion) · Build \(ComposerPrompts.engineBuild)")
         project.font = .systemFont(ofSize: 15, weight: .semibold)
         project.translatesAutoresizingMaskIntoConstraints = false
         header.addSubview(project)
@@ -2345,7 +2345,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             "engineBuild": ComposerPrompts.engineBuild,
             "engineVersion": ComposerPrompts.referenceVersion,
             "interface": "macOS AppKit",
-            "interfaceVersion": "3.5.0",
+            "interfaceVersion": "3.5.1",
             "entryPoint": "compose-button",
             "stage": "musical-draft-request",
             "destinationSlot": destinationSlot + 1,
@@ -2800,7 +2800,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             "format": "composition-lab-native-diagnostic",
             "engineBuild": ComposerPrompts.engineBuild,
             "interface": "macOS AppKit",
-            "interfaceVersion": "3.4.0",
+            "interfaceVersion": "3.5.1",
             "entryPoint": "musicchat-context-revise",
             "stage": "revision-request",
             "targetSlot": oneBased,
@@ -2918,7 +2918,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             "format": "composition-lab-native-diagnostic",
             "engineBuild": ComposerPrompts.engineBuild,
             "interface": "macOS AppKit",
-            "interfaceVersion": "3.4.0",
+            "interfaceVersion": "3.5.1",
             "entryPoint": "musicchat",
             "stage": "dialogue-request",
             "userMessage": msg,
