@@ -107,20 +107,26 @@ api.write_text(s, encoding="utf-8")
 main = Path("Sources/MainViewController.swift")
 m = main.read_text(encoding="utf-8")
 old_save = '''    @objc private func saveDiagnosticPressed() {
-        guard let d=lastDiagnostic, JSONSerialization.isValidJSONObject(d), let data=try? JSONSerialization.data(withJSONObject:d,options:[.prettyPrinted,.sortedKeys]) else {
+        guard let diagnostic = lastDiagnostic else {
 '''
 new_save = '''    @objc private func saveDiagnosticPressed() {
-        guard var d=lastDiagnostic else {
-            status("Noch keine Diagnosedatei vorhanden. Bitte zuerst mit der KI arbeiten.",good:false); return
-        }
-        d["aiCommunication"] = AICommunicationLog.shared.snapshot()
-        d["aiCommunicationLogging"] = "complete-central-APIClient-log; API keys and authorization secrets excluded"
-        d["interfaceVersion"] = "3.3.1"
-        guard JSONSerialization.isValidJSONObject(d), let data=try? JSONSerialization.data(withJSONObject:d,options:[.prettyPrinted,.sortedKeys]) else {
+        guard var diagnostic = lastDiagnostic else {
 '''
 if old_save not in m:
-    raise SystemExit("V3.3.1: saveDiagnosticPressed anchor not found")
+    raise SystemExit("V3.3.1: saveDiagnosticPressed guard not found")
 m = m.replace(old_save, new_save, 1)
+
+insertion_anchor = '''            guard JSONSerialization.isValidJSONObject(diagnostic) else {
+'''
+insertion = '''            diagnostic["aiCommunication"] = AICommunicationLog.shared.snapshot()
+            diagnostic["aiCommunicationLogging"] = "complete-central-APIClient-log; API keys and authorization secrets excluded"
+            diagnostic["interfaceVersion"] = "3.3.1"
+
+            guard JSONSerialization.isValidJSONObject(diagnostic) else {
+'''
+if insertion_anchor not in m:
+    raise SystemExit("V3.3.1: diagnostic serialization anchor not found")
+m = m.replace(insertion_anchor, insertion, 1)
 main.write_text(m, encoding="utf-8")
 
 plist = Path("Info.plist")
