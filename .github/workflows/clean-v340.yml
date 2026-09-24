@@ -1,8 +1,8 @@
-name: Clean V3.4 Build
+name: Reference V3.5 Engine 1.3 Build
 
 on:
   push:
-    branches: [v3.4-clean]
+    branches: [v3.5-reference-engine13]
   workflow_dispatch:
 
 permissions:
@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: v3.4-clean
+          ref: v3.5-reference-engine13
           fetch-depth: 0
       - name: Consolidate historical patches into clean source
         shell: bash
@@ -28,7 +28,7 @@ jobs:
             git config user.name "Composition Lab Build"
             git config user.email "actions@users.noreply.github.com"
             git commit -m "V3.4.0 clean source: remove patch chain and sanitize AI communication"
-            git push origin HEAD:v3.4-clean
+            git push origin HEAD:v3.5-reference-engine13
           else
             echo "Source is already consolidated."
           fi
@@ -43,12 +43,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: v3.4-clean
+          ref: v3.5-reference-engine13
       - name: Verify clean source invariants
         run: |
           test -z "$(find . -maxdepth 1 -name 'Apply*.py' -print)"
-          grep -q 'static let engineBuild = 22' Sources/Models.swift
-          grep -q 'Du bist ein eigenständiger Komponist.' Sources/Models.swift
+          grep -q 'static let engineBuild = 13' Sources/Models.swift
+          grep -q 'static let referenceVersion = "1.3.0"' Sources/Models.swift
           grep -q '"purpose": purpose' Sources/APIClient.swift
           ! grep -q 'python3 Apply' "Build Native App.command"
           ! grep -q 'höchstens drei kurzen Sätzen' Sources/MainViewController.swift
@@ -60,9 +60,9 @@ jobs:
           ./"Build Native App.command"
       - name: Verify bundle metadata
         run: |
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' 'Composition Lab.app/Contents/Info.plist')" = "3.4.0"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' 'Composition Lab.app/Contents/Info.plist')" = "3400"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' 'Composition Lab.app/Contents/Info.plist')" = "3.5.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' 'Composition Lab.app/Contents/Info.plist')" = "3500"
       - uses: actions/upload-artifact@v4
         with:
-          name: Composition-Lab-V3.4.0-Build3400
+          name: Composition-Lab-V3.5.0-Build3500
           path: Composition Lab.app
