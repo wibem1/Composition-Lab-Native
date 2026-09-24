@@ -1,0 +1,68 @@
+name: Clean V3.4 Build
+
+on:
+  push:
+    branches: [v3.4-clean]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  consolidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v3.4-clean
+          fetch-depth: 0
+      - name: Consolidate historical patches into clean source
+        shell: bash
+        run: |
+          if [ -f tools/consolidate_v340.py ]; then
+            python3 tools/consolidate_v340.py
+            git rm -f Apply*.py
+            git rm -f tools/consolidate_v340.py
+            rmdir tools 2>/dev/null || true
+            git add Sources Info.plist "Build Native App.command" ENGINE_COMMUNICATION.md
+            git config user.name "Composition Lab Build"
+            git config user.email "actions@users.noreply.github.com"
+            git commit -m "V3.4.0 clean source: remove patch chain and sanitize AI communication"
+            git push origin HEAD:v3.4-clean
+          else
+            echo "Source is already consolidated."
+          fi
+      - name: Verify no patch chain remains
+        run: |
+          test -z "$(find . -maxdepth 1 -name 'Apply*.py' -print)"
+          ! grep -q "python3 Apply" "Build Native App.command"
+
+  build:
+    needs: consolidate
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v3.4-clean
+      - name: Verify clean source invariants
+        run: |
+          test -z "$(find . -maxdepth 1 -name 'Apply*.py' -print)"
+          grep -q 'static let engineBuild = 22' Sources/Models.swift
+          grep -q 'Du bist ein eigenständiger Komponist.' Sources/Models.swift
+          grep -q '"purpose": purpose' Sources/APIClient.swift
+          ! grep -q 'python3 Apply' "Build Native App.command"
+          ! grep -q 'höchstens drei kurzen Sätzen' Sources/MainViewController.swift
+          ! grep -q 'vermeide stereotype' Sources/Models.swift
+          ! grep -q 'Pedal musikalisch' Sources/Models.swift
+      - name: Build universal macOS app
+        run: |
+          chmod +x "Build Native App.command"
+          ./"Build Native App.command"
+      - name: Verify bundle metadata
+        run: |
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' 'Composition Lab.app/Contents/Info.plist')" = "3.4.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' 'Composition Lab.app/Contents/Info.plist')" = "3400"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Composition-Lab-V3.4.0-Build3400
+          path: Composition Lab.app
