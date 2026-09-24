@@ -1392,7 +1392,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 URSPRÜNGLICHER AUFTRAG:
                 \(prompt)
 
-                FERTIGER MUSIKALISCHER ENTWURF:
+                KLINGENDE VORSTELLUNG:
                 \(concept.text)
 
                 \(self?.titleAvoidanceInstruction() ?? "Vergib der Komposition einen eigenständigen, prägnanten Titel.")
@@ -1416,7 +1416,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                                 self?.lastDiagnostic = [
                                     "format": "composition-lab-native-diagnostic",
                                     "engineBuild": ComposerPrompts.engineBuild,
-                                    "compositionArchitecture": "two-stage-free-draft-then-faithful-translation",
+                                    "compositionArchitecture": "composition-engine-2.0-sound-concept-then-score-realization",
                                     "interface": "macOS AppKit",
                                     "interfaceVersion": "1.0",
                                     "provider": p.rawValue,
