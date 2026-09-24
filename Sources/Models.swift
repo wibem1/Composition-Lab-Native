@@ -195,26 +195,23 @@ struct AppSettings: Codable {
 
 enum ComposerPrompts {
     // Eingefrorener musikalischer Kern: entspricht Engine Build 14 der APK/iPad-Version.
-    static let engineBuild = 15
+    static let engineBuild = 20
 
-    static let system = """
-    Du bist ein Kompositions- und Produktionsassistent für MIDI.
-    Erfinde selbständige, geschlossene Musik nach dem Auftrag des Nutzers. Achte auf Stimmführung, Dynamik (Velocity 1-127), Rhythmik und Artikulation.
-    """
+    static let system = ""
 
     static func conceptPrompt(_ assignment: String) -> String {
         """
-        Komponiere das verlangte Stück musikalisch frei und eigenständig. Konzentriere dich ausschließlich auf musikalische Gestalt, Verlauf, Stimmen, Rhythmus, Harmonik, Artikulation und Charakter. Denke noch NICHT an MIDI-Codierung, Beat-Werte, JSON oder ein technisches Ausgabeformat.
+        Stelle dir das verlangte Musikstück zunächst ausschließlich als klingenden musikalischen Verlauf vor. Beschreibe die musikalische Idee, Gestik, Spannung, Bewegung, Dichte, Registerentwicklung, Kontraste, Phrasierung und den dramaturgischen Verlauf so konkret, dass daraus anschließend komponiert werden kann.
+
+        WICHTIG: Noch keine Notation und keine ausnotierten Töne. Verwende weder LilyPond, ABC, MusicXML, JSON, MIDI-Daten noch Notennamen, Tonhöhenlisten oder taktweise Notencodierung. Lege keine schematischen Begleitmuster nur der Vollständigkeit halber fest. Dieser Schritt ist ausschließlich die klingende Vorstellung des Werks – noch nicht seine technische Realisierung. Mache keine Erläuterung über deine Arbeitsweise.
 
         AUFTRAG:
         \(assignment)
-
-        Schreibe einen vollständigen, konkret ausnotierbaren musikalischen Entwurf, aus dem anschließend eine andere technische Instanz die MIDI-Daten erzeugen kann. Gib in der ersten Zeile lediglich einen kurzen passenden Werktitel als „Titel: …“ an. Mache keine Erläuterung über deine Arbeitsweise.
         """
     }
 
     static let translationRule = """
-    Du bist jetzt ausschließlich Notations- und MIDI-Übersetzer. Übertrage den bereits fertigen musikalischen Entwurf so vollständig und werkgetreu wie möglich in das nachfolgend verlangte JSON-Format. Komponiere NICHT neu, vereinfache NICHT, regularisiere NICHT den Rhythmus und ersetze keine ungewöhnlichen musikalischen Entscheidungen durch Standards. Bewahre insbesondere rhythmische Vielfalt, Pausen, Stimmführung, Phrasierung, Artikulation und Dynamik des Entwurfs.
+    Komponiere jetzt aus der folgenden klingenden Vorstellung das vollständige verlangte Musikstück. Triff alle dafür nötigen musikalischen Entscheidungen selbst. Bewahre Charakter, Dramaturgie, Kontraste und Entwicklung der Vorstellung; vermeide mechanische Dauerpatterns, sofern sie nicht musikalisch begründet sind. Erzeuge unmittelbar die vollständige Partitur im technischen JSON-Format. Keine Erklärung und keine Analyse.
     """
 
     static let technical = """
