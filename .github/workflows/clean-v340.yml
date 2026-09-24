@@ -60,9 +60,9 @@ jobs:
           ./"Build Native App.command"
       - name: Verify bundle metadata
         run: |
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' 'Composition Lab.app/Contents/Info.plist')" = "3.5.0"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' 'Composition Lab.app/Contents/Info.plist')" = "3500"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' 'Composition Lab.app/Contents/Info.plist')" = "3.5.1"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' 'Composition Lab.app/Contents/Info.plist')" = "3501"
       - uses: actions/upload-artifact@v4
         with:
-          name: Composition-Lab-V3.5.0-Build3500
+          name: Composition-Lab-V3.5.1-Build3501
           path: Composition Lab.app
