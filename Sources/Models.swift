@@ -189,27 +189,36 @@ struct AppSettings: Codable {
 }
 
 enum ComposerPrompts {
-    static let engineBuild = 22
+    // Lokale Native-Portierung der zentral freigegebenen Composition Engine 1.3.
+    // Die musikalische Strategie darf hier nicht app-spezifisch verändert werden.
+    static let engineBuild = 13
+    static let referenceVersion = "1.3.0"
 
-    static let system = """
-    Du bist ein eigenständiger Komponist.
-    """
+    // Engine 1.3 verwendet keinen zusätzlichen kompositorischen System-Prompt.
+    static let system = ""
 
-    static func conceptPrompt(_ assignment: String) -> String {
+    static func musicalDraftPrompt(_ assignment: String) -> String {
         """
-        Entwickle zunächst deine eigene musikalische Vorstellung zu diesem Kompositionsauftrag:
+        Komponiere das verlangte Stück musikalisch frei und eigenständig. Konzentriere dich ausschließlich auf musikalische Gestalt, Verlauf, Stimmen, Rhythmus, Harmonik, Artikulation und Charakter. Denke noch NICHT an MIDI-Codierung, QN-Werte, CS-Zeilen oder ein technisches Ausgabeformat. Schreibe einen vollständigen, konkret ausnotierbaren musikalischen Entwurf, aus dem anschließend eine andere technische Instanz die MIDI-Daten erzeugen kann. Gib der Komposition einen Namen. Schreibe am Anfang zwingend einen kurzen passenden Werktitel als „Titel: …“ sowie, soweit musikalisch bestimmbar, „Tonart: …“ und „Tempo: …“ als musikalische Tempoangabe (z. B. Andante, Allegro moderato) an; dies soll die musikalische Gestaltung nicht einschränken. Mache keine Erläuterung über deine Arbeitsweise.
 
+        AUFTRAG:
         \(assignment)
+        """
+    }
 
-        In diesem Schritt noch keine technische Ausgabe: kein JSON, MIDI, MusicXML, LilyPond,
-        ABC oder Programmcode. Antworte nur mit deiner musikalischen Vorstellung.
+    static func translationPrompt(draft: String) -> String {
+        """
+        Übertrage den fertigen musikalischen Entwurf vollständig und unverändert in das technische Format. Keine Analyse, keine Erklärung, keine Neukomposition.
+
+        \(draft)
+
+        \(technical)
         """
     }
 
     static let technical = """
     TECHNISCHES AUSGABEFORMAT
-
-    Gib die bereits komponierte Musik ausschließlich als valides JSON in dieser Struktur aus:
+    Nur valides JSON:
     {
       "ti": "Titel",
       "bpm": 96,
@@ -223,21 +232,11 @@ enum ComposerPrompts {
     - nt: [StartBeat, DauerInViertelnoten, MIDIPitch, Velocity, Staff, Gate].
       Staff: 0=Standard, 1=oberes System, 2=unteres System. Gate ist optional; Standard 0.95.
     - ct: [Beat, CC, Wert].
-    - me: optionale rohe Nicht-Noten-MIDI-Ereignisse als
-      {"b":Beat,"m":"HEX-BYTES","selected":true/false,"muted":true/false}.
-      Vorhandene me-Ereignisse einer geladenen Vorlage unverändert erhalten, sofern der Nutzer nicht ihre Änderung verlangt.
-    - ev: optionale Notations-/Ausdrucksereignisse als
-      {"b":Beat,"t":Typ,"v":Wert,"e":EndBeat,"st":Staff,"p":MIDIPitch,"n":BPM}.
-      Nur tatsächlich in der komponierten Musik vorhandene Angaben kodieren.
-      Typen: dyn, art, orn, pedal, wedge, tempo, slur, words.
-      dyn: pp,p,mp,mf,f,ff,sf,sfz,fp
-      art: staccato,tenuto,accent,marcato,fermata
-      orn: trill,acciaccatura,appoggiatura
-      pedal: start,change,stop
-      wedge: crescendo,diminuendo
-      Bei semantischen pedal-Ereignissen dasselbe Pedal nicht zusätzlich als CC64 in ct kodieren.
-
-    Die technischen Felder beschreiben die Musik; sie geben keine musikalischen Entscheidungen vor.
+    - me: optionale rohe Nicht-Noten-MIDI-Ereignisse.
+    - ev: optionale Notations-/Ausdrucksereignisse.
+    - Kodiere jede klingende Note des fertigen musikalischen Entwurfs genau einmal.
+    - Pausen entstehen durch Lücken.
+    - Die technischen Felder treffen keine musikalischen Entscheidungen.
     Gib ausschließlich das JSON-Objekt aus.
     """
 }
