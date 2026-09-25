@@ -1837,22 +1837,19 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         default: return
         }
 
-        captureCurrentInActiveSlot()
-        if let free = pieceSlots.firstIndex(where: { $0 == nil }) { activePieceSlot = free }
-        updatePieceSlotButtons()
-
-        let oldMeasures = measuresField.stringValue
-        let oldPrompt = promptView.string
-        let oldChatInput = chatInput.stringValue
+        // A motif request first prepares the editable composition idea.
+        // Only the explicit Compose button starts the musical draft pipeline.
         measuresField.stringValue = String(bars)
-        let motifTask = "Komponiere ein prägnantes musikalisches Motiv als Ausgangspunkt für eine spätere Komposition. Übernimm Tonart, Taktart, Tempo und Instrumentierung aus den eingestellten Feldern."
-        promptView.string = motifTask
-        chatInput.stringValue = motifTask
-        composePressed()
-        measuresField.stringValue = oldMeasures
-        promptView.string = oldPrompt
-        chatInput.stringValue = oldChatInput
+        let task = "Komponiere ein prägnantes musikalisches Motiv von \\(bars) Takten als Ausgangspunkt für eine spätere Komposition. Übernimm die aktuell gewählte Besetzung, Tonart, Taktart und das Tempo."
+        promptView.string = task
+        conceptView.string = "\\(bars) Takte · \\(meterField.stringValue) · \\(tempoField.stringValue) BPM · \\(musicalKeyField.stringValue) · \\(ensembleField.stringValue)\\n\\nKurzes, eigenständiges Motiv; musikalische Ausarbeitung erfolgt erst mit Komponieren."
+        lastConcept = conceptView.string
+        musicChatCompositionContextOverride = ""
+        importedReferenceScore = nil
+        importedReferenceName = nil
+        chatInput.stringValue = ""
         saveSettingsFromUI()
+        status("Motivauftrag und Kompositionsidee vorbereitet. Mit Komponieren umsetzen.", good: true)
     }
 
     private func buildNotationTransport() -> NSView {
@@ -2360,7 +2357,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             "engineBuild": ComposerPrompts.engineBuild,
             "engineVersion": ComposerPrompts.referenceVersion,
             "interface": "macOS AppKit",
-            "interfaceVersion": "3.5.1",
+            "interfaceVersion": "3.5.3",
             "entryPoint": "compose-button",
             "stage": "musical-draft-request",
             "destinationSlot": destinationSlot + 1,
@@ -2815,7 +2812,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             "format": "composition-lab-native-diagnostic",
             "engineBuild": ComposerPrompts.engineBuild,
             "interface": "macOS AppKit",
-            "interfaceVersion": "3.5.1",
+            "interfaceVersion": "3.5.3",
             "entryPoint": "musicchat-context-revise",
             "stage": "revision-request",
             "targetSlot": oneBased,
@@ -2919,8 +2916,11 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
           "reply":"natürliche Dialogantwort",
           "compositionAssignment": null ODER "aktueller Kompositionsauftrag",
           "compositionIdea": null ODER "aktuelle musikalische Vorstellung",
-          "sourceSlots":[1,2]
+          "sourceSlots":[1,2],
+          "resolvedSettings":{"measures":"4","meter":"4/4","tempo":null,"key":"d-Moll","ensemble":"Klavier"}
         }
+        Gib resolvedSettings nur für im aktuellen Nutzerwunsch ausdrücklich genannte Werte zurück; sonst null.
+        Ein neuer Kompositionsauftrag darf alte Einstellungen nicht stillschweigend übernehmen, wenn sie ihm widersprechen.
 
         ARBEITSRAUM:
         \(workspace)
@@ -2933,7 +2933,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             "format": "composition-lab-native-diagnostic",
             "engineBuild": ComposerPrompts.engineBuild,
             "interface": "macOS AppKit",
-            "interfaceVersion": "3.5.1",
+            "interfaceVersion": "3.5.3",
             "entryPoint": "musicchat",
             "stage": "dialogue-request",
             "userMessage": msg,
@@ -3010,6 +3010,10 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                         }
                         if assignment?.isEmpty == false || idea?.isEmpty == false {
                             self.musicChatCompositionContextOverride = self.musicChatSourceMaterial(sourceSlots)
+                            if sourceSlots.isEmpty, assignment?.isEmpty == false {
+                                self.importedReferenceScore = nil
+                                self.importedReferenceName = nil
+                            }
                             self.saveSettingsFromUI()
                         }
 
