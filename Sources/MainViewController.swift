@@ -1823,7 +1823,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     @objc private func generateMotifPressed() {
         let alert = NSAlert()
         alert.messageText = "Musikalisches Motiv"
-        alert.informativeText = "Wie lang soll das neue Motiv sein? Es wird in den nächsten freien Stück-Slot gelegt."
+        alert.informativeText = "Wie lang soll das Motiv sein? Der Auftrag wird als Kompositionsidee vorbereitet; Komponieren setzt ihn anschließend um."
         alert.addButton(withTitle: "2 Takte")
         alert.addButton(withTitle: "4 Takte")
         alert.addButton(withTitle: "8 Takte")
@@ -1840,9 +1840,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         // A motif request first prepares the editable composition idea.
         // Only the explicit Compose button starts the musical draft pipeline.
         measuresField.stringValue = String(bars)
-        let task = "Komponiere ein prägnantes musikalisches Motiv von \\(bars) Takten als Ausgangspunkt für eine spätere Komposition. Übernimm die aktuell gewählte Besetzung, Tonart, Taktart und das Tempo."
+        let task = "Komponiere ein prägnantes musikalisches Motiv von \(bars) Takten als Ausgangspunkt für eine spätere Komposition. Übernimm die aktuell gewählte Besetzung, Tonart, Taktart und das Tempo."
         promptView.string = task
-        conceptView.string = "\\(bars) Takte · \\(meterField.stringValue) · \\(tempoField.stringValue) BPM · \\(musicalKeyField.stringValue) · \\(ensembleField.stringValue)\\n\\nKurzes, eigenständiges Motiv; musikalische Ausarbeitung erfolgt erst mit Komponieren."
+        conceptView.string = "\(bars) Takte · \(meterField.stringValue) · \(tempoField.stringValue) BPM · \(musicalKeyField.stringValue) · \(ensembleField.stringValue)\n\nKurzes, eigenständiges Motiv; musikalische Ausarbeitung erfolgt erst mit Komponieren."
         lastConcept = conceptView.string
         musicChatCompositionContextOverride = ""
         importedReferenceScore = nil
