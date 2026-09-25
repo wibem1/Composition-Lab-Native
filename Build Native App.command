@@ -60,4 +60,4 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 3.4.0 (Build 3400) · Composition Engine 2.2 · Engine Build 22 · Clean Source"
+echo "Version: 3.5.2 (Build 3502) · Composition Engine 1.3 · Engine Build 13 · Clean Source + Motivfunktion"
