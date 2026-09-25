@@ -1,0 +1,37 @@
+name: Composition Lab 3.5.2 macOS verification
+on:
+  push:
+    branches: [release/v3.5.2-motif]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify version and isolated motif path
+        shell: bash
+        run: |
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)" = "3.5.2"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)" = "3502"
+          grep -q 'experiment-motif-isolated-v1' Sources/MainViewController.swift
+          grep -q 'MainViewController.generateExperiment.motif' Sources/MainViewController.swift
+          ! grep -q 'python3 Apply' 'Build Native App.command'
+      - name: Build Intel and Apple Silicon
+        shell: bash
+        run: |
+          chmod +x 'Build Native App.command'
+          ./Build\ Native\ App.command
+          test -f 'Composition Lab.app/Contents/MacOS/Composition Lab'
+          file 'Composition Lab.app/Contents/MacOS/Composition Lab'
+          lipo -verify_arch x86_64 arm64 'Composition Lab.app/Contents/MacOS/Composition Lab'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' 'Composition Lab.app/Contents/Info.plist')" = "3.5.2"
+      - name: Package app without replacing installed version
+        shell: bash
+        run: |
+          ditto -c -k --keepParent 'Composition Lab.app' Composition-Lab-V3.5.2-Build3502.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Composition-Lab-V3.5.2-Build3502
+          path: Composition-Lab-V3.5.2-Build3502.zip
