@@ -1,5 +1,9 @@
 # Composition Lab Native
 
+> **VERALTET / ARCHIVSTAND: Versionsreihe 6.x** (Kennzeichnung vom 25.09.2026)
+>
+> Die 6er-Serie ist vom Projektinhaber ausdrücklich als veraltet eingestuft und **nicht zur Neuinstallation oder Weiterentwicklung vorgesehen**. Eine höhere Versionsnummer bedeutet hier nicht einen neueren Projektstand: Nach dem Abbruch der 6er-Serie wurde die Versionszählung neu begonnen; der Nutzer arbeitet derzeit mit **3.3.1**. Der genaue Git-Commit dieser neueren Linie ist noch nicht zugeordnet. Die nachfolgenden Angaben zu 6.1.1 / Build 94 dokumentieren nur den historischen Repository-Stand und sind **keine aktuelle Release-Empfehlung**. Vor weiteren Builds zuerst die aktive 3.x-Quellbasis identifizieren.
+
 Native macOS-Fassung des gemeinsamen Kompositionssystems.
 
 ## Rolle
