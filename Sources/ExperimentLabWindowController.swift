@@ -186,12 +186,12 @@ final class ExperimentLabWindowController: NSWindowController {
         task.string = "Erfinde eine eigenständige, interessante musikalische Keimzelle."
         task.textContainerInset = NSSize(width: 8, height: 8)
         let taskScroll = scroll(task, height: 110)
-        let taskField = field("Auftrag für die Vorlage", taskScroll)
+        let taskField = field("Auftrag für das Motiv", taskScroll)
         setup.addArrangedSubview(taskField)
         taskField.widthAnchor.constraint(equalTo: setup.widthAnchor).isActive = true
         taskScroll.widthAnchor.constraint(equalTo: setup.widthAnchor).isActive = true
 
-        let b = NSButton(title: "Vorlage mit gewählter KI erzeugen", target: self, action: #selector(generate))
+        let b = NSButton(title: "Motiv mit gewählter KI erzeugen", target: self, action: #selector(generate))
         b.bezelStyle = .rounded
         setup.addArrangedSubview(b)
 
@@ -201,7 +201,7 @@ final class ExperimentLabWindowController: NSWindowController {
         stack.addArrangedSubview(setupCard)
         setupCard.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
-        // Aktuelle Vorlage.
+        // Aktuelles Motiv.
         let resultCard = makeCard()
         let result = NSStackView()
         result.orientation = .vertical
@@ -216,7 +216,7 @@ final class ExperimentLabWindowController: NSWindowController {
             result.bottomAnchor.constraint(equalTo: resultCard.bottomAnchor, constant: -20)
         ])
 
-        let ph = NSTextField(labelWithString: "Aktuelle Vorlage")
+        let ph = NSTextField(labelWithString: "Aktuelles Motiv")
         ph.font = .systemFont(ofSize: 16, weight: .bold)
         result.addArrangedSubview(ph)
 
@@ -236,7 +236,7 @@ final class ExperimentLabWindowController: NSWindowController {
         result.addArrangedSubview(playerBox)
         playerBox.widthAnchor.constraint(equalTo: result.widthAnchor).isActive = true
 
-        let transfer = NSButton(title: "An Komposition übernehmen", target: self, action: #selector(transferToComposition))
+        let transfer = NSButton(title: "Als Ausgangsmaterial übernehmen", target: self, action: #selector(transferToComposition))
         transfer.bezelStyle = .rounded
         result.addArrangedSubview(transfer)
 
