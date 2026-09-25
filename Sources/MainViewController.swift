@@ -2419,17 +2419,25 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     private func generateExperiment(_ r:ExperimentRequest, window:ExperimentLabWindowController?) {
-        var apiKey=keyField.stringValue.trimmingCharacters(in:.whitespacesAndNewlines)
-        if apiKey.isEmpty { apiKey=SessionSecrets.shared.key(for:provider); if !apiKey.isEmpty { keyField.stringValue=apiKey } }
-        if !apiKey.isEmpty { SessionSecrets.shared.set(apiKey,for:provider) }
-        guard !apiKey.isEmpty else { window?.setStatus("API-Key für \(provider.displayName) fehlt.",good:false); return }
-        let p=provider,m=model,e=effort
-        let tempo=r.tempo.isEmpty ? "96" : r.tempo
-        let ensemble=r.ensemble.isEmpty ? "frei" : r.ensemble
-        let stylePrefix=r.style.isEmpty ? "" : "Stil / Charakter: \(r.style)\n"
-        let assignment="""
+        var apiKey = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if apiKey.isEmpty {
+            apiKey = SessionSecrets.shared.key(for: provider)
+            if !apiKey.isEmpty { keyField.stringValue = apiKey }
+        }
+        if !apiKey.isEmpty { SessionSecrets.shared.set(apiKey, for: provider) }
+        guard !apiKey.isEmpty else {
+            window?.setStatus("API-Key für \(provider.displayName) fehlt.", good: false)
+            return
+        }
+
+        let p = provider, m = model, e = effort
+        let tempo = r.tempo.isEmpty ? "96" : r.tempo
+        let ensemble = r.ensemble.isEmpty ? "frei" : r.ensemble
+        let stylePrefix = r.style.isEmpty ? "" : "Stil / Charakter: \(r.style)\n"
+        let assignment = """
+        MODUS: MUSIKALISCHES MOTIV / KEIMZELLE
         Besetzung: \(ensemble)
-        Takte: \(r.measures)
+        Exakte Länge: \(r.measures) Takte
         Taktart: 4/4
         Tempo: \(tempo) BPM
         Tonart: frei
@@ -2437,42 +2445,95 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         Auftrag:
         \(stylePrefix)\(r.task)
         """
-        APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,system:ComposerPrompts.system,user:ComposerPrompts.conceptPrompt(assignment),wantJSON:false){ [weak self, weak window] first in
-            switch first {
-            case .failure(let err): DispatchQueue.main.async { window?.setStatus("Fehler: \(err.localizedDescription)",good:false) }
-            case .success(let concept):
-                let prompt="""
-                \(ComposerPrompts.technical)
 
-                AUFTRAG:
-                \(assignment)
+        // Das Experimentallabor besitzt bewusst einen eigenen Ein-Schritt-Pfad.
+        // Es ruft weder conceptPrompt() noch die normale Compose-Pipeline auf.
+        // Ergebnis ist ausschließlich eine kurze, in sich offene Keimzelle.
+        let motifPrompt = """
+        \(ComposerPrompts.technical)
 
-                DEIN KONZEPT:
-                \(concept.text)
+        AUFGABE: ERZEUGE NUR EIN KURZES MUSIKALISCHES MOTIV / EINE KEIMZELLE.
 
-                \(self?.titleAvoidanceInstruction() ?? "Vergib der Komposition einen eigenständigen, prägnanten Titel.")
+        \(assignment)
 
-                Gib jetzt die fertige JSON-Partitur aus.
-                """
-                APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,system:ComposerPrompts.system,user:prompt,wantJSON:true){ second in
-                    switch second {
-                    case .failure(let err): DispatchQueue.main.async { window?.setStatus("Fehler: \(err.localizedDescription)",good:false) }
-                    case .success(let response):
-                        do {
-                            let data=try APIClient.shared.extractJSON(response.text)
-                            let score=try JSONDecoder().decode(Score.self,from:data)
-                            DispatchQueue.main.async {
-                                guard let self=self else { return }
-                                self.lastExperimentConcept = concept.text
-                                self.lastExperimentScore = score
-                                let item = HistoryItem(id: UUID(), time: Date(), title: score.ti, provider: p, model: m, concept: concept.text, score: score, area: .experiment)
-                                self.addHistoryItem(item)
-                                window?.setScore(score)
-                                window?.appendChat(p.displayName, "Vorlage erzeugt: \(score.ti). Du kannst sie hier besprechen und bei Gefallen an die Kompositionsseite übernehmen.")
-                                window?.setStatus("Vorlage erzeugt. Noch nicht in die Komposition übernommen.",good:true)
-                                self.status("Experimentallabor: Vorlage \"\(score.ti)\" erzeugt.",good:true)
-                            }
-                        } catch { DispatchQueue.main.async { window?.setStatus("Fehler: \(error.localizedDescription)",good:false) } }
+        VERBINDLICH:
+        - Erzeuge exakt \(r.measures) Takte musikalisches Ausgangsmaterial, kein vollständiges Stück.
+        - Keine Einleitung, Durchführung, Reprise, Coda oder sonstige Großform ergänzen.
+        - Das Material soll prägnant genug sein, um später wiedererkannt, variiert und entwickelt zu werden.
+        - Der Titel bezeichnet das Motiv/die Keimzelle, nicht ein fertiges Werk.
+        - Die JSON-Partitur endet spätestens am Ende von Takt \(r.measures).
+        - Dies ist Experimentalmaterial. Es darf die aktuelle Hauptkomposition nicht verändern.
+
+        Gib ausschließlich die JSON-Partitur dieser Keimzelle aus.
+        """
+
+        window?.setStatus("KI erzeugt Motiv / Keimzelle …", good: true)
+        APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
+                              system: ComposerPrompts.system, user: motifPrompt, wantJSON: true) { [weak self, weak window] result in
+            switch result {
+            case .failure(let err):
+                DispatchQueue.main.async {
+                    window?.setStatus("Fehler: \(err.localizedDescription)", good: false)
+                }
+            case .success(let response):
+                do {
+                    let data = try APIClient.shared.extractJSON(response.text)
+                    let score = try JSONDecoder().decode(Score.self, from: data)
+
+                    // Harte Sicherheitsgrenze nur für den Labor-Datenweg:
+                    // Ein Modell darf durch einen zu langen Score nicht versehentlich
+                    // wieder ein ganzes Stück in das Experimentallabor einschleusen.
+                    let beatsPerBar = Double(max(1, score.ts.n)) * 4.0 / Double(max(1, score.ts.d))
+                    let maxAllowedBeat = Double(r.measures) * beatsPerBar + 0.0001
+                    let hasOverflow = score.tr.contains { track in
+                        track.nt.contains { note in
+                            guard note.count >= 2 else { return false }
+                            return note[0] + max(0, note[1]) > maxAllowedBeat
+                        }
+                    }
+                    guard !hasOverflow else {
+                        DispatchQueue.main.async {
+                            window?.setStatus("Motiv verworfen: KI lieferte mehr als \(r.measures) Takte. Die Hauptkomposition blieb unverändert.", good: false)
+                        }
+                        return
+                    }
+
+                    let costUSD = APICost.estimate(provider: p, model: m,
+                                                   inputTokens: response.inputTokens,
+                                                   outputTokens: response.outputTokens)
+                    DispatchQueue.main.async {
+                        guard let self = self else { return }
+                        self.lastExperimentConcept = r.task
+                        self.lastExperimentScore = score
+                        self.lastDiagnostic = [
+                            "format": "composition-lab-native-diagnostic",
+                            "operation": "motif-generation",
+                            "pipeline": "experiment-motif-isolated-v1",
+                            "engineBuild": ComposerPrompts.engineBuild,
+                            "interface": "macOS AppKit",
+                            "provider": p.rawValue,
+                            "model": m,
+                            "reasoning": e.rawValue,
+                            "requestedMeasures": r.measures,
+                            "assignment": assignment,
+                            "motifPrompt": motifPrompt,
+                            "scoreResponse": response.text
+                        ]
+                        let item = HistoryItem(id: UUID(), time: Date(), title: score.ti,
+                                               provider: p, model: m, concept: r.task,
+                                               score: score, costUSD: costUSD,
+                                               inputTokens: response.inputTokens,
+                                               outputTokens: response.outputTokens,
+                                               area: .experiment)
+                        self.addHistoryItem(item)
+                        window?.setScore(score)
+                        window?.appendChat(p.displayName, "Motiv / Keimzelle erzeugt: \(score.ti) (\(r.measures) Takte). Die Hauptkomposition wurde nicht verändert.")
+                        window?.setStatus("Motiv erzeugt. Noch nicht als Ausgangsmaterial übernommen. · API-Kosten ca. \(APICost.display(costUSD))", good: true)
+                        self.status("Experimentallabor: Motiv \"\(score.ti)\" erzeugt; Hauptkomposition unverändert.", good: true)
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        window?.setStatus("Fehler: \(error.localizedDescription)", good: false)
                     }
                 }
             }
