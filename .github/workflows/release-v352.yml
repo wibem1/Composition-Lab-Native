@@ -1,7 +1,7 @@
-name: Composition Lab 3.5.2 macOS verification
+name: Composition Lab 3.5.3 macOS verification
 on:
   push:
-    branches: [release/v3.5.2-motif]
+    branches: [release/v3.5.3-motif]
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,8 +13,8 @@ jobs:
       - name: Verify version and isolated motif path
         shell: bash
         run: |
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)" = "3.5.2"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)" = "3502"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)" = "3.5.3"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)" = "3503"
           grep -q 'experiment-motif-isolated-v1' Sources/MainViewController.swift
           grep -q 'MainViewController.generateExperiment.motif' Sources/MainViewController.swift
           ! grep -q 'python3 Apply' 'Build Native App.command'
@@ -26,12 +26,12 @@ jobs:
           test -f 'Composition Lab.app/Contents/MacOS/Composition Lab'
           file 'Composition Lab.app/Contents/MacOS/Composition Lab'
           lipo 'Composition Lab.app/Contents/MacOS/Composition Lab' -verify_arch x86_64 arm64
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' 'Composition Lab.app/Contents/Info.plist')" = "3.5.2"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' 'Composition Lab.app/Contents/Info.plist')" = "3.5.3"
       - name: Package app without replacing installed version
         shell: bash
         run: |
-          ditto -c -k --keepParent 'Composition Lab.app' Composition-Lab-V3.5.2-Build3502.zip
+          ditto -c -k --keepParent 'Composition Lab.app' Composition-Lab-V3.5.3-Build3503.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: Composition-Lab-V3.5.2-Build3502
-          path: Composition-Lab-V3.5.2-Build3502.zip
+          name: Composition-Lab-V3.5.3-Build3503
+          path: Composition-Lab-V3.5.3-Build3503.zip
