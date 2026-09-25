@@ -50,3 +50,9 @@ Composition Lab Native bleibt die Referenz für das gemeinsame `.clab`-Projektdo
 ## Entwicklungsregel
 
 Der Referenzbranch `reference-v5.0.11` bleibt unverändert. Änderungen an MIDI-, MusicXML- oder CLAB-Semantik werden gegen den gemeinsamen Core geprüft. Build-Skripte werden erst entfernt, wenn ihre Transformationen vollständig in einen konsolidierten Quellbaum übernommen wurden.
+
+## Stabilitätsstand 6.1.1 / Engine Build 21
+
+Der Standard-Kompositionspfad ist lokal identisch mit der freigegebenen zentralen Architektur: **Kompositionsauftrag → freie vollständige Komposition → rein technische, werkgetreue JSON-Übertragung**. Es gibt keine vorgeschaltete Klangvorstellungs-/Formplan-Stufe. Der technische Aufruf erhält den fertigen musikalischen Entwurf, nicht erneut den ursprünglichen Auftrag, damit er nicht neu komponiert.
+
+Die Diagnose kennzeichnet diesen Pfad als `composition-engine-2.1-free-composition-then-technical-translation` und speichert den tatsächlich versendeten Kompositionsprompt sowie den musikalischen Entwurf.

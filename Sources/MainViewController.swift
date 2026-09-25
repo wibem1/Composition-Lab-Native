@@ -1368,7 +1368,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         let m = model
         let e = effort
         let prompt = basePrompt()
-        status("KI entwickelt musikalischen Impuls …", good: true)
+        status("KI komponiert frei …", good: true)
 
         APIClient.shared.call(provider: p, model: m, key: key, effort: e,
                               system: ComposerPrompts.system,
@@ -1381,7 +1381,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 DispatchQueue.main.async {
                     self?.lastConcept = concept.text
                     self?.conceptView.string = self?.conceptDisplay(concept.text, provider: p, model: m) ?? concept.text
-                    self?.status("KI komponiert …", good: true)
+                    self?.status("Komposition fertig · technische Übertragung …", good: true)
                 }
 
                 let compPrompt = """
@@ -1389,10 +1389,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
                 \(ComposerPrompts.technical)
 
-                URSPRÜNGLICHER AUFTRAG:
-                \(prompt)
-
-                KLINGENDE VORSTELLUNG:
+                FERTIGER MUSIKALISCHER ENTWURF:
                 \(concept.text)
 
                 \(self?.titleAvoidanceInstruction() ?? "Vergib der Komposition einen eigenständigen, prägnanten Titel.")
@@ -1416,7 +1413,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                                 self?.lastDiagnostic = [
                                     "format": "composition-lab-native-diagnostic",
                                     "engineBuild": ComposerPrompts.engineBuild,
-                                    "compositionArchitecture": "composition-engine-2.0-sound-concept-then-score-realization",
+                                    "compositionArchitecture": "composition-engine-2.1-free-composition-then-technical-translation",
                                     "interface": "macOS AppKit",
                                     "interfaceVersion": "1.0",
                                     "provider": p.rawValue,
@@ -1424,8 +1421,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                                     "reasoning": e.rawValue,
                                     "assignment": prompt,
                                     "systemPrompt": ComposerPrompts.system,
-                                    "conceptPrompt": ComposerPrompts.conceptPrompt(prompt),
-                                    "conceptResponse": concept.text,
+                                    "compositionPrompt": ComposerPrompts.conceptPrompt(prompt),
+                                    "musicalDraft": concept.text,
                                     "compositionPrompt": compPrompt,
                                     "scoreResponse": response.text
                                 ]
@@ -2449,9 +2446,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
                 \(ComposerPrompts.technical)
 
-                URSPRÜNGLICHER AUFTRAG:
-                \(assignment)
-
                 FERTIGER MUSIKALISCHER ENTWURF:
                 \(concept.text)
 
@@ -2696,9 +2690,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 \(ComposerPrompts.translationRule)
 
                 \(ComposerPrompts.technical)
-
-                URSPRÜNGLICHER AUFTRAG:
-                \(assignment)
 
                 FERTIGER MUSIKALISCHER ENTWURF:
                 \(concept.text)

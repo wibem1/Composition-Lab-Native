@@ -23,7 +23,7 @@ python3 ApplyFastScrollFix.py
 
 SRC=(Sources/*.swift)
 
-echo "Baue Composition Lab Native V6.1.0 …"
+echo "Baue Composition Lab Native V6.1.1 …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -120,7 +120,7 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 echo
 echo "FERTIG:"
 echo "  $PWD/$APP"
-echo "  Version: 6.1.0 (Build 93) · Composition Engine 2.0 / Engine Build 20"
+echo "  Version: 6.1.1 (Build 94) · Composition Engine 2.0 / Engine Build 21"
 echo "  Architektur: Composition Lab 2 · Main + Noten"
 echo "  Drag & Drop: MIDI + MusicXML + CLAB hinein und heraus"
 echo
