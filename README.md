@@ -6,18 +6,18 @@ Native macOS-Fassung des gemeinsamen Kompositionssystems.
 
 Dieses Repository ist die aktive Quellbasis für **Composition Lab Native**. Die App ergänzt Music Chat Lab und Minimal Composer um native macOS-Funktionen, Partiturdarstellung, MIDI-Ausgänge, MusicXML und DAW-Anbindungen.
 
-Gemeinsame Grundlagen sind insbesondere Engine Build 14, CLAB, MIDI und MusicXML. `Composer-Lab` ist keine aktive Abhängigkeit mehr.
+Gemeinsame Grundlagen sind insbesondere Engine Build 21, CLAB, MIDI und MusicXML. `Composer-Lab` ist keine aktive Abhängigkeit mehr.
 
 ## Aktiver Stand
 
 `main` baut aktuell:
 
-- Composition Lab Native **V6.0.0**
-- Build **92**
-- Engine Build **14**
+- Composition Lab Native **V6.1.1**
+- Build **94**
+- Engine Build **21**
 - Architektur: **Composition Lab 2 · Main + Noten**
 
-`Info.plist` und `Build Native App.command` stimmen auf V6.0.0 / Build 92 überein.
+`Info.plist` und `Build Native App.command` stimmen auf V6.1.1 / Build 94 überein.
 
 ## Build-Architektur
 
@@ -40,7 +40,7 @@ Der unveränderliche Ausgangsstand liegt im Branch `reference-v5.0.11`.
 - `tests/` — reproduzierbare MusicXML-Testfixtures
 - `docs/` — Core-Vertrag, Audits und dokumentierte Roundtrip-Tests
 - `Apply*.py` — aktive, reproduzierbare V6-Transformationen
-- `Info.plist` — V6.0.0 / Build 92
+- `Info.plist` — V6.1.1 / Build 94
 - `Build Native App.command` — baut die Universal-App für Intel und Apple Silicon
 
 ## CLAB
