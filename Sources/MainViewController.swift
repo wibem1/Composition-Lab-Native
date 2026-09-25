@@ -4037,7 +4037,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
         APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
                               purpose: "MainViewController.createCompareResult", system: ComposerPrompts.system,
-                              user: ComposerPrompts.conceptPrompt(assignment),
+                              user: ComposerPrompts.musicalDraftPrompt(assignment),
                               wantJSON: false) { [weak window] first in
             switch first {
             case .failure(let err): DispatchQueue.main.async { window?.setDialogText("Fehler: \(err.localizedDescription)") }
