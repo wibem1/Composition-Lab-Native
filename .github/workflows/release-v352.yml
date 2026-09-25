@@ -15,7 +15,7 @@ jobs:
         run: |
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)" = "3.5.3"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)" = "3503"
-          grep -q 'experiment-motif-isolated-v1' Sources/MainViewController.swift
+          grep -q 'Motivauftrag und Kompositionsidee vorbereitet' Sources/MainViewController.swift
           grep -q 'MainViewController.generateExperiment.motif' Sources/MainViewController.swift
           ! grep -q 'python3 Apply' 'Build Native App.command'
       - name: Build Intel and Apple Silicon
