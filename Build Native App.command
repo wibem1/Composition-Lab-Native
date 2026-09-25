@@ -6,7 +6,7 @@ APP="Composition Lab.app"
 BUILD=".build-native"
 
 SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native 3.4.0 · Build 3400 · Engine 2.2 …"
+echo "Baue Composition Lab Native 3.5.2 · Build 3502 · Engine 1.3 + isolierte Motivfunktion …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
