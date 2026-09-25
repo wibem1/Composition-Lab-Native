@@ -25,7 +25,7 @@ jobs:
           ./Build\ Native\ App.command
           test -f 'Composition Lab.app/Contents/MacOS/Composition Lab'
           file 'Composition Lab.app/Contents/MacOS/Composition Lab'
-          lipo -verify_arch x86_64 arm64 'Composition Lab.app/Contents/MacOS/Composition Lab'
+          lipo 'Composition Lab.app/Contents/MacOS/Composition Lab' -verify_arch x86_64 arm64
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' 'Composition Lab.app/Contents/Info.plist')" = "3.5.2"
       - name: Package app without replacing installed version
         shell: bash
