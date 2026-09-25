@@ -2504,12 +2504,15 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             window?.setStatus("Bitte zuerst eine Vorlage erzeugen.", good: false)
             return
         }
+        // Eine Laborvorlage ist Ausgangsmaterial, keine neue Hauptkomposition.
+        // Deshalb hier ausdrücklich NICHT install(score:...). Die sichtbare und
+        // abspielbare Hauptkomposition bleibt unverändert, bis der Benutzer einen
+        // eigenen Kompositionsauftrag auslöst.
         importedReferenceScore = score
         importedReferenceName = score.ti
-        install(score: score, concept: lastExperimentConcept, provider: provider, model: model, addHistory: false)
         selectWorkspace(0)
-        window?.setStatus("Vorlage an die Kompositionsseite übernommen.", good: true)
-        status("Vorlage \"\(score.ti)\" als Ausgangsmaterial übernommen.", good: true)
+        window?.setStatus("Vorlage als Ausgangsmaterial an die Komposition übergeben.", good: true)
+        status("Vorlage \"\(score.ti)\" als Ausgangsmaterial übernommen. Die aktuelle Komposition wurde nicht verändert.", good: true)
     }
 
     private func transferCompareResultToComposition(_ item: HistoryItem) {
