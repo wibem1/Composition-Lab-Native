@@ -2373,7 +2373,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                               purpose: "composition",
                               system: ComposerPrompts.system,
                               user: compositionPrompt,
-                              wantJSON: false) { [weak self] draftResult in
+                              wantJSON: false) { [weak self] compositionResult in
             switch compositionResult {
             case .failure(let error):
                 DispatchQueue.main.async {
