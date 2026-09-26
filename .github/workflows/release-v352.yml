@@ -1,7 +1,7 @@
 name: Composition Lab 3.5.3 macOS verification
 on:
   push:
-    branches: [release/v3.5.2-motif]
+    branches: [release/v3.5.3-engine-2.3.1]
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,6 +16,10 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)" = "3.5.3"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)" = "3503"
           grep -q 'Motivauftrag und Kompositionsidee vorbereitet' Sources/MainViewController.swift
+          grep -q 'static let referenceVersion = "2.3.1"' Sources/Models.swift
+          grep -q 'static func compositionPrompt' Sources/Models.swift
+          ! grep -q 'musicalDraftPrompt' Sources/Models.swift
+          ! grep -q 'composition.musical-draft' Sources/MainViewController.swift
           ! grep -q 'python3 Apply' 'Build Native App.command'
       - name: Build Intel and Apple Silicon
         shell: bash
