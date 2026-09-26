@@ -2351,7 +2351,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         }
         pendingCompositionSlot = destinationSlot
 
-        let draftPrompt = ComposerPrompts.musicalDraftPrompt(assignment)
+        let compositionPrompt = ComposerPrompts.compositionPrompt(assignment)
         lastDiagnostic = [
             "format": "composition-lab-native-diagnostic",
             "engineBuild": ComposerPrompts.engineBuild,
@@ -2359,44 +2359,44 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             "interface": "macOS AppKit",
             "interfaceVersion": "3.5.3",
             "entryPoint": "compose-button",
-            "stage": "musical-draft-request",
+            "stage": "composition-request",
             "destinationSlot": destinationSlot + 1,
             "assignment": assignment,
-            "musicalDraftPrompt": draftPrompt,
+            "compositionPrompt": compositionPrompt,
             "provider": p.rawValue,
             "model": m,
             "reasoning": e.rawValue
         ]
 
-        status("KI komponiert den musikalischen Entwurf …", good: true)
+        status("KI komponiert …", good: true)
         APIClient.shared.call(provider: p, model: m, key: key, effort: e,
-                              purpose: "composition.musical-draft",
+                              purpose: "composition",
                               system: ComposerPrompts.system,
-                              user: draftPrompt,
+                              user: compositionPrompt,
                               wantJSON: false) { [weak self] draftResult in
-            switch draftResult {
+            switch compositionResult {
             case .failure(let error):
                 DispatchQueue.main.async {
                     self?.pendingCompositionSlot = nil
                     self?.status("Fehler: \(error.localizedDescription)", good: false)
                 }
-            case .success(let draftResponse):
-                let draft = draftResponse.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !draft.isEmpty else {
+            case .success(let compositionResponse):
+                let composition = compositionResponse.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !composition.isEmpty else {
                     DispatchQueue.main.async {
                         self?.pendingCompositionSlot = nil
-                        self?.status("Fehler: Der musikalische Entwurf ist leer.", good: false)
+                        self?.status("Fehler: Die Komposition ist leer.", good: false)
                     }
                     return
                 }
 
-                let translationPrompt = ComposerPrompts.translationPrompt(draft: draft)
+                let translationPrompt = ComposerPrompts.translationPrompt(composition: composition)
                 DispatchQueue.main.async {
                     if var d = self?.lastDiagnostic {
                         d["stage"] = "technical-translation-request"
-                        d["musicalDraft"] = draft
-                        d["draftInputTokens"] = draftResponse.inputTokens
-                        d["draftOutputTokens"] = draftResponse.outputTokens
+                        d["composition"] = composition
+                        d["compositionInputTokens"] = compositionResponse.inputTokens
+                        d["compositionOutputTokens"] = compositionResponse.outputTokens
                         d["translationPrompt"] = translationPrompt
                         self?.lastDiagnostic = d
                     }
@@ -2418,8 +2418,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                         do {
                             let data = try APIClient.shared.extractJSON(response.text)
                             let score = try JSONDecoder().decode(Score.self, from: data)
-                            let totalInput = draftResponse.inputTokens + response.inputTokens
-                            let totalOutput = draftResponse.outputTokens + response.outputTokens
+                            let totalInput = compositionResponse.inputTokens + response.inputTokens
+                            let totalOutput = compositionResponse.outputTokens + response.outputTokens
                             let costUSD = APICost.estimate(provider: p, model: m,
                                                           inputTokens: totalInput,
                                                           outputTokens: totalOutput)
@@ -2434,11 +2434,10 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                                     d["outputTokens"] = totalOutput
                                     self.lastDiagnostic = d
                                 }
-                                // In Engine 1.3 ist der musikalische Entwurf die Komposition selbst.
-                                // Das Feld wird erst nachher aus dem fertigen Entwurf befüllt und ist kein vorgeschalteter Plan.
-                                self.lastConcept = draft
+                                // In Engine 2.3.1 ist die erste kreative Antwort bereits die fertige Komposition; die zweite Stufe übersetzt nur technisch.
+                                self.lastConcept = composition
                                 self.install(score: score,
-                                             concept: draft,
+                                             concept: composition,
                                              provider: p,
                                              model: m,
                                              costUSD: costUSD,
