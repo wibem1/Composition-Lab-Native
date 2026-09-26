@@ -189,28 +189,28 @@ struct AppSettings: Codable {
 }
 
 enum ComposerPrompts {
-    // Lokale Native-Portierung der zentral freigegebenen Composition Engine 1.3.
+    // Lokale Native-Portierung der zentral freigegebenen Composition Engine 2.3.1.
     // Die musikalische Strategie darf hier nicht app-spezifisch verändert werden.
-    static let engineBuild = 13
-    static let referenceVersion = "1.3.0"
+    static let engineBuild = 231
+    static let referenceVersion = "2.3.1"
 
-    // Engine 1.3 verwendet keinen zusätzlichen kompositorischen System-Prompt.
     static let system = ""
 
-    static func musicalDraftPrompt(_ assignment: String) -> String {
+    static func compositionPrompt(_ assignment: String) -> String {
         """
-        Komponiere das verlangte Stück musikalisch frei und eigenständig. Konzentriere dich ausschließlich auf musikalische Gestalt, Verlauf, Stimmen, Rhythmus, Harmonik, Artikulation und Charakter. Denke noch NICHT an MIDI-Codierung, QN-Werte, CS-Zeilen oder ein technisches Ausgabeformat. Schreibe einen vollständigen, konkret ausnotierbaren musikalischen Entwurf, aus dem anschließend eine andere technische Instanz die MIDI-Daten erzeugen kann. Gib der Komposition einen Namen. Schreibe am Anfang zwingend einen kurzen passenden Werktitel als „Titel: …“ sowie, soweit musikalisch bestimmbar, „Tonart: …“ und „Tempo: …“ als musikalische Tempoangabe (z. B. Andante, Allegro moderato) an; dies soll die musikalische Gestaltung nicht einschränken. Mache keine Erläuterung über deine Arbeitsweise.
+        Komponiere jetzt das verlangte Stück vollständig. Erzeuge die Musik selbst – keinen Entwurf, keinen Formplan, kein Konzept, keine Klangbeschreibung und keine Erläuterung darüber, wie das Stück später komponiert werden könnte. Triff die musikalischen Entscheidungen unmittelbar in der Komposition: konkrete Stimmen, Tonhöhen, Dauern, Rhythmus, Harmonik, Artikulation, Dynamik und Verlauf. Die Komposition muss so vollständig und eindeutig notiert sein, dass eine nachfolgende technische Instanz sie ohne eigene musikalische Entscheidungen lediglich übertragen kann. Gib der fertigen Komposition einen kurzen Werktitel und, soweit musikalisch bestimmbar, Tonart und Tempo an. Denke nicht an MIDI-Codierung, QN-Werte, CS-Zeilen oder das technische Zielformat. Keine Analyse und keine Beschreibung der Arbeitsweise.
 
         AUFTRAG:
         \(assignment)
         """
     }
 
-    static func translationPrompt(draft: String) -> String {
+    static func translationPrompt(composition: String) -> String {
         """
-        Übertrage den fertigen musikalischen Entwurf vollständig und unverändert in das technische Format. Keine Analyse, keine Erklärung, keine Neukomposition.
+        Übertrage die fertige Komposition vollständig und werkgetreu in das technische Format. Triff keine eigenen musikalischen Entscheidungen. Komponiere nicht neu, vereinfache nicht und regularisiere weder Rhythmus noch Stimmführung, Artikulation, Dynamik oder Verlauf. Keine Analyse und keine Erklärung.
 
-        \(draft)
+        FERTIGE KOMPOSITION:
+        \(composition)
 
         \(technical)
         """
@@ -234,7 +234,7 @@ enum ComposerPrompts {
     - ct: [Beat, CC, Wert].
     - me: optionale rohe Nicht-Noten-MIDI-Ereignisse.
     - ev: optionale Notations-/Ausdrucksereignisse.
-    - Kodiere jede klingende Note des fertigen musikalischen Entwurfs genau einmal.
+    - Kodiere jede klingende Note des fertigen fertigen Komposition genau einmal.
     - Pausen entstehen durch Lücken.
     - Die technischen Felder treffen keine musikalischen Entscheidungen.
     Gib ausschließlich das JSON-Objekt aus.
