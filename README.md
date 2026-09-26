@@ -1,8 +1,8 @@
 # Composition Lab Native
 
-> **CURRENT TEST CANDIDATE: V3.5.3 Build 3503** on `release/v3.5.3-engine-2.3.1`.
+> **CURRENT TEST CANDIDATE: V3.5.3 Build 3503** on `main`.
 >
-> Local Composition Engine **2.3.1 Build 231**. This branch is the current development source recorded in `Composition-Engine/PROJECT_INDEX.md`. The repository default branch `main` still contains the obsolete 6.x archive line and must not be used for current development. Practical user acceptance of V3.5.3 is still pending, so this branch is CURRENT TEST CANDIDATE, not SAFE.
+> Local Composition Engine **2.3.1 Build 231**. `main` is now the single current development line recorded in `Composition-Engine/PROJECT_INDEX.md`. The former 6.1.1 / Build 94 line is preserved as historical reference branch `reference-v6.1.1-build94`. Practical user acceptance of V3.5.3 is still pending, so this state is CURRENT TEST CANDIDATE, not SAFE.
 
 Native macOS-Fassung des Music-Lab-Systems.
 
