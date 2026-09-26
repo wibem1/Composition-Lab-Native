@@ -2,7 +2,7 @@
 
 > **VERALTET / ARCHIVSTAND: Versionsreihe 6.x** (Kennzeichnung vom 25.09.2026)
 >
-> Die 6er-Serie ist vom Projektinhaber ausdrücklich als veraltet eingestuft und **nicht zur Neuinstallation oder Weiterentwicklung vorgesehen**. Eine höhere Versionsnummer bedeutet hier nicht einen neueren Projektstand: Nach dem Abbruch der 6er-Serie wurde die Versionszählung neu begonnen; der Nutzer arbeitet derzeit mit **3.3.1**. Der genaue Git-Commit dieser neueren Linie ist noch nicht zugeordnet. Die nachfolgenden Angaben zu 6.1.1 / Build 94 dokumentieren nur den historischen Repository-Stand und sind **keine aktuelle Release-Empfehlung**. Vor weiteren Builds zuerst die aktive 3.x-Quellbasis identifizieren.
+> Die 6er-Serie ist vom Projektinhaber ausdrücklich als veraltet eingestuft und **nicht zur Neuinstallation oder Weiterentwicklung vorgesehen**. Eine höhere Versionsnummer bedeutet hier nicht einen neueren Projektstand: Nach dem Abbruch der 6er-Serie wurde die Versionszählung neu begonnen; der aktuelle Entwicklungsstand ist **3.5.3 Build 3503** auf `release/v3.5.3-engine-2.3.1`; dieser Stand portiert Composition Engine **2.3.1** lokal. Die nachfolgenden Angaben zu 6.1.1 / Build 94 dokumentieren nur den historischen Repository-Stand und sind **keine aktuelle Release-Empfehlung**. Für aktuelle Entwicklung ausschließlich den im zentralen `Composition-Engine/PROJECT_INDEX.md` ausgewiesenen 3.x-CURRENT-Branch verwenden; `main` bleibt Archivstand.
 
 Native macOS-Fassung des gemeinsamen Kompositionssystems.
 
