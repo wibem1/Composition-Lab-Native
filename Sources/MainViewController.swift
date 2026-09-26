@@ -2443,7 +2443,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                                              costUSD: costUSD,
                                              inputTokens: totalInput,
                                              outputTokens: totalOutput)
-                                self.status("Komposition erfolgreich abgeschlossen! · Engine 1.3 Referenz · API-Kosten ca. \(APICost.display(costUSD))", good: true)
+                                self.status("Komposition erfolgreich abgeschlossen! · Engine 2.3.1 · API-Kosten ca. \(APICost.display(costUSD))", good: true)
                             }
                         } catch {
                             DispatchQueue.main.async {
@@ -4040,7 +4040,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
         APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
                               purpose: "MainViewController.createCompareResult", system: ComposerPrompts.system,
-                              user: ComposerPrompts.musicalDraftPrompt(assignment),
+                              user: ComposerPrompts.compositionPrompt(assignment),
                               wantJSON: false) { [weak window] first in
             switch first {
             case .failure(let err): DispatchQueue.main.async { window?.setDialogText("Fehler: \(err.localizedDescription)") }
