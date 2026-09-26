@@ -1,4 +1,8 @@
-# CompositionLab
+# Composition Lab Native
+
+> **CURRENT TEST CANDIDATE: V3.5.3 Build 3503** on `release/v3.5.3-engine-2.3.1`.
+>
+> Local Composition Engine **2.3.1 Build 231**. This branch is the current development source recorded in `Composition-Engine/PROJECT_INDEX.md`. The repository default branch `main` still contains the obsolete 6.x archive line and must not be used for current development. Practical user acceptance of V3.5.3 is still pending, so this branch is CURRENT TEST CANDIDATE, not SAFE.
 
 Native macOS-Fassung des Music-Lab-Systems.
 
@@ -10,19 +14,7 @@ Gemeinsame Grundlagen sind Score-Schema, Engine Build 14, CLAB, MIDI und MusicXM
 
 ## Aktiver Stand
 
-`main` ist der freigegebene aktive Quellstand:
-
-- CompositionLab **V5.0.12**
-- Build **84**
-- Engine Build **14**
-
-V5.0.12 basiert auf dem unverändert gesicherten Referenzstand V5.0.11 / Build 83 und enthält die konsolidierten Core-Korrekturen:
-
-- MIDI-Import: reale importierte Notendauer mit `gate = 1.0`
-- MusicXML-Import für zentrale `ev`-Ereignisse
-- zweistaffige Staff-Zuordnung geprüft
-- MusicXML-Tie-Import und Tie-Export
-- dokumentierte Roundtrip-Tests
+The historical text below documents earlier development states and is not the current runtime specification.
 
 ## Referenzstand
 
