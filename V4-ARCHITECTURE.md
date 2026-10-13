@@ -1,6 +1,6 @@
 # Composition Lab 4.0 – gemeinsame Mac-/Windows-Basis
 
-Stand: 2026-10-13 · 4.0.0-alpha.1 · Build 4001
+Stand: 2026-10-13 · 4.0.0-alpha.2 · Build 4002
 
 ## Schutz der bisherigen Version
 
@@ -40,11 +40,14 @@ weiterhin eine Schätzung, keine providerseitig bestätigte Abrechnung.
 ## Plattformadapter
 
 `Sources/` enthält weiterhin Mac-Fenster, Player, MIDI-Geräte, WebKit/PDF-Ausgabe,
-verschlüsselte Schlüssel/Backups sowie DAW-Pfade. Windows-Adapter und die Windows-
-Oberfläche folgen auf dieser Basis. Noch nicht ausgelagert sind Teile der
+verschlüsselte Schlüssel/Backups sowie DAW-Pfade. Die Windows-Oberfläche unter `Windows/CompositionLab` ruft denselben Kern über
+einen stdin/stdout-Prozesskanal auf. Schlüssel bleiben aus Prozessargumenten und
+Dateiaufträgen heraus. DPAPI schützt gespeicherte Schlüssel; der Player verwendet
+den Windows-MIDI-Sequencer. Noch nicht ausgelagert sind Teile der
 Dialog-/Slot-Steuerung, Revisionen und der experimentelle Motivpfad. Diese verwenden
 bereits gemeinsame Daten/Prompts, aber noch keinen vollständig gemeinsamen Ablauf.
-Dieses erste Inkrement ist deshalb keine fertige Windows-Desktop-App.
+Die erste Windows-Desktop-Alpha ist umgesetzt; die vollständige funktionale
+Gleichstellung mit der Mac-App ist noch offen.
 
 ## Prüfung und Builds
 
@@ -53,10 +56,11 @@ CLAB-Lesbarkeit, Kompositionsstufen, Fehlerdiagnose und Geheimnisfreiheit.
 `swift build -c release` baut Bibliothek und das Prüf-/Konvertierungsprogramm
 `composition-lab-core`. Die GitHub-Matrix führt dies auf Mac, Windows und Linux aus;
 zusätzlich baut sie die isolierte Mac-App für Intel und Apple Silicon.
-Die Windows-Dateien sind zunächst der gemeinsame Kern samt CLI, keine grafische App.
+Der Windows-Build packt jetzt auch die grafische App sowie die benötigten
+Runtime-DLLs ein und führt einen echten GUI-/Datei-/Schlüssel-Starttest aus.
 Ein erfolgreicher Build ersetzt keine praktische Abnahme der Oberfläche/Wiedergabe.
 
 `CoreServices.compose` stellt denselben Ablauf als asynchrones JSON-API für andere
 Clients bereit. Der API-Schlüssel wird getrennt vom Auftragsdokument übergeben.
-Nächster Schritt: gemeinsame Dialog-/Slot-Zustandsverwaltung, danach
-Windows-Oberfläche und Wiedergabeadapter.
+Nächste Schritte: praktische Windows-Abnahme, gemeinsame Dialog-/Slot-
+Zustandsverwaltung, Soundfont-/MIDI-Gerätewahl und zusätzliche DAW-Adapter.

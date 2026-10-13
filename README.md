@@ -1,25 +1,30 @@
 # Composition Lab Native 4.0 – Mac / Windows
 
-**Entwicklungszweig `v4-cross-platform` · 4.0.0-alpha.1 / Build 4001**
+**Entwicklungszweig `v4-cross-platform` · 4.0.0-alpha.2 / Build 4002**
 
 Die bisherige Version 3.5.3 bleibt auf `main` und unter
-`reference-v3.5.3-before-v4` unverändert erhalten. Diese Alpha ersetzt sie nicht.
+`reference-v3.5.3-before-v4` unverändert. Version 4.0 installiert sich getrennt.
 
-Gemeinsamer Swift-Kern für Mac und Windows: MIDI, MusicXML, Datenmodell,
-Projektformate, KI-Kommunikation und zweistufiger Kompositionsablauf.
-Die Mac-Test-App verwendet denselben Kern und hat eine eigene App-Kennung sowie
-getrennte Einstellungen und Schlüsselablage. Die grafische Windows-App ist noch
-nicht umgesetzt; vorerst gibt es den Kern und ein Konvertierungs-/Prüfprogramm.
+Die erste grafische Windows-Alpha ist gebaut und automatisch gestartet/geprüft:
+KI-Chat/Komposition, zehn Slots, CLAB-Dateien, MIDI/MusicXML, Diagnose und
+DPAPI-Schlüsselablage. Der gemeinsame Swift-Kern wird von der Mac-App und der
+Windows-Oberfläche verwendet. Runtime-DLLs und .NET sind im Windows-ZIP enthalten.
 
-- Architektur und Grenzen: [V4-ARCHITECTURE.md](V4-ARCHITECTURE.md)
-- Tests: `swift test`
-- Kern/CLI: `swift build -c release`
+- Windows: [Start und Funktionen](Windows/README-Windows.md)
+- Architektur: [V4-ARCHITECTURE.md](V4-ARCHITECTURE.md)
+- Tests und Downloads: [GitHub Actions](https://github.com/wibem1/Composition-Lab-Native/actions/runs/38370879386)
+- Tests lokal: `swift test`
 - Mac-Test-App: `bash 'Build Native App.command'`
-- Version: `swift run composition-lab-core --version`
-- Plattformprüfung: `.github/workflows/v4-core.yml`
+- Windows-Bundle: `pwsh Windows/Build.ps1` nach `swift build -c release`
+
+Die Kerntests und Release-Builds bestehen auf Windows, Mac und Linux.
+Der Windows-Starttest prüft außerdem Dateien, Schlüsselverschlüsselung und
+Fenstergeometrie ohne installierte Swift-Toolchain im Suchpfad.
+Hörbare Wiedergabe (Testrechner ohne MIDI-Gerät), ein echter KI-Aufruf und die
+WebView2-/Verovio-Notenanzeige sind noch praktisch zu bestätigen.
 
 Die nachfolgende historische Dokumentation beschreibt 3.5.3 und frühere Stände.
-Sie ist keine Spezifikation der Windows-Oberfläche.
+
 
 ---
 
