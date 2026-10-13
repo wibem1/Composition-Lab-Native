@@ -1,6 +1,6 @@
 # Composition Lab Native 4.0 – erste Windows-Testversion
 
-Version 4.0.0-alpha.2 · Build 4002 · Windows 10/11, 64 Bit Intel/AMD
+Version 4.0.0-alpha.3 · Build 4003 · Windows 10/11, 64 Bit Intel/AMD
 
 ## Start
 

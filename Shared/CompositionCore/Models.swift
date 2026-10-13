@@ -233,7 +233,17 @@ enum ComposerPrompts {
       Staff: 0=Standard, 1=oberes System, 2=unteres System. Gate ist optional; Standard 0.95.
     - ct: [Beat, CC, Wert].
     - me: optionale rohe Nicht-Noten-MIDI-Ereignisse.
-    - ev: optionale Notations-/Ausdrucksereignisse.
+    - ev: Liste einzelner Ereignisse; jedes hat b (Startbeat) und t (Typ).
+      Erlaubte Felder: b, t, v (Text/Wert), e (Endbeat), st (System 1/2), p (MIDI-Pitch), n (Tempo in Vierteln pro Minute).
+      Dynamik: {"b":0,"t":"dyn","v":"p","st":1}.
+      Tempo: {"b":0,"t":"tempo","v":"Andante","n":81}.
+      Crescendo: {"b":0,"t":"wedge","v":"crescendo","e":3,"st":1}.
+      Artikulation: {"b":0,"t":"art","v":"accent","st":1}; Fermate: v="fermata".
+      Phrasierungsbogen: {"b":0,"t":"slur","e":2.5,"st":1}; e ist der Einsatz der letzten gebundenen Note.
+      Haltebogen nur zwischen getrennt codierten Noten: {"b":0,"t":"tie","e":1.5,"p":64,"st":1}.
+      Bereits zusammengefasste Tondauern bekommen keinen zusätzlichen tie-Eintrag.
+      Mehrere Bögen als mehrere einzelne Ereignisse schreiben; keine ranges-Listen.
+      Verwende st/v/n, nicht staff/text/qpm. Nur tatsächlich vorhandene Spielanweisungen übertragen.
     - Kodiere jede klingende Note des fertigen fertigen Komposition genau einmal.
     - Pausen entstehen durch Lücken.
     - Die technischen Felder treffen keine musikalischen Entscheidungen.

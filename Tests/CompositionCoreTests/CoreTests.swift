@@ -115,6 +115,47 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(failed)
     }
 
+    func testTranslatorAliasesAndRangeEventsKeepNotesAndExpression() throws {
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(score())) as? [String: Any])
+        var tracks = object["tr"] as! [[String: Any]]
+        tracks[0]["ev"] = [
+            ["t":"slur", "staff":1, "ranges":[[0.0,4.0]]],
+            ["b":0, "t":"tempo", "text":"Für Klavier – mäßig", "qpm":96],
+            ["b":0, "t":"dynamic", "staff":1, "v":"p"],
+            ["b":0, "t":"crescendo", "staff":1, "to":2],
+            ["b":4, "t":"fermata", "staff":1]
+        ] as [[String: Any]]
+        // Explicit staff assignments, as in a two-staff translator response.
+        tracks[0]["nt"] = [[0.0,1,60,80,1,1],[1.0,1,64,75,1,1],[2.0,2,67,90,1,1]]
+        object["tr"] = tracks
+        let recovered = try JSONDecoder().decode(Score.self, from: CoreServices.recoverScore(
+            response: String(data: JSONSerialization.data(withJSONObject: object), encoding: .utf8)!))
+        XCTAssertEqual(recovered.tr[0].nt, tracks[0]["nt"] as? [[Double]])
+        XCTAssertEqual(recovered.tr[0].ev?.first?.e, 2)
+        XCTAssertEqual(recovered.tr[0].ev?.first?.st, 1)
+        XCTAssertEqual(recovered.tr[0].ev?.first(where: { $0.t == "tempo" })?.n, 96)
+        XCTAssertEqual(recovered.tr[0].ev?.first(where: { $0.t == "tempo" })?.v, "Für Klavier – mäßig")
+        XCTAssertEqual(recovered.tr[0].ev?.first(where: { $0.t == "wedge" })?.e, 2)
+        XCTAssertEqual(recovered.tr[0].ev?.first(where: { $0.v == "fermata" })?.b, 2)
+        let xml = String(data: try XCTUnwrap(MusicXMLBuilder.build(recovered)), encoding: .utf8)!
+        XCTAssertTrue(xml.contains("<slur")); XCTAssertTrue(xml.contains("<fermata"))
+        XCTAssertTrue(xml.contains("<p/>"))
+    }
+
+    func testAlreadyMergedTiesDoNotCreateDanglingTies() throws {
+        let input = #"{"ti":"Test","bpm":96,"ts":{"n":4,"d":4},"k":"C","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,2.5,64,80,1,1]],"ev":[{"t":"tie","staff":1,"ranges":[[0,2.5]]}]}]}"#
+        let score = try ScoreDecoder.decode(Data(input.utf8))
+        XCTAssertEqual(score.tr[0].nt[0][1], 2.5)
+        XCTAssertEqual(score.tr[0].ev?.count, 0)
+    }
+
+    func testMissingEventBeatHasConcretePath() {
+        let input = #"{"ti":"Test","bpm":96,"ts":{"n":4,"d":4},"k":"C","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,64,80]],"ev":[{"t":"dyn","v":"p"}]}]}"#
+        XCTAssertThrowsError(try ScoreDecoder.decode(Data(input.utf8))) { error in
+            XCTAssertTrue(error.localizedDescription.contains("tr[0].ev[0]"))
+        }
+    }
+
     private func request() -> CompositionRequest {
         CompositionRequest(assignment: "Ein Klavierstück", provider: .anthropic,
                            model: "test", effort: .high, key: "TEST-KEY-DO-NOT-LOG")

@@ -8,7 +8,7 @@ namespace CompositionLab;
 
 internal sealed class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.2 · Build 4002";
+    const string Version = "4.0.0-alpha.3 · Build 4003";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -43,6 +43,8 @@ internal sealed class MainForm : Form
     readonly WebView2 web = new() { Dock = DockStyle.Fill };
     readonly System.Windows.Forms.Timer playbackTimer = new() { Interval = 300 };
     readonly TabControl tabs = new() { Dock = DockStyle.Fill };
+    readonly List<Button> slotCards = [];
+    readonly ToolTip slotTips = new();
     readonly bool testMode;
     CancellationTokenSource? pending;
     bool loadingSettings;
@@ -119,8 +121,8 @@ internal sealed class MainForm : Form
         AddButton(credentials, "Schlüssel übernehmen", () => { StoreKey(); return Task.CompletedTask; });
         AddButton(credentials, "Gespeicherten Schlüssel löschen", () =>
         { keys.Remove(activeProvider); apiKey.Clear(); remember.Checked = false; secrets.Save(keys); SetStatus("Schlüssel gelöscht."); return Task.CompletedTask; });
-        root.Controls.Add(credentials, 0, 2);
-        var work = new SplitContainer { Size = new Size(1180, 650), Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1, SplitterDistance = 190, Panel1MinSize = 160 };
+        // API keys are on Technik, matching the Mac workspace.
+        var work = new SplitContainer { Size = new Size(1180, 650), Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1, SplitterDistance = 190, Panel1MinSize = 160, Panel1Collapsed = true };
         var left = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
         left.RowStyles.Add(new RowStyle(SizeType.AutoSize)); left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         left.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -137,12 +139,21 @@ internal sealed class MainForm : Form
             return Task.CompletedTask;
         });
         left.Controls.Add(slotButtons, 0, 2); work.Panel1.Controls.Add(left);
-        var workshop = new TabPage("Werkstatt");
-        var workshopSplit = new SplitContainer { Size = new Size(950, 450), Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 230 };
-        workshopSplit.Panel1.Controls.Add(chat); workshopSplit.Panel2.Controls.Add(composition);
+        var workshop = new TabPage("Main");
+        var workshopSplit = new SplitContainer { Size = new Size(950, 450), Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterDistance = 460 };
+        var musicChatBox = new GroupBox { Text = "MusicChat", Dock = DockStyle.Fill, Padding = new Padding(10) };
+        var compositionBox = new GroupBox { Text = "Aktuelle Komposition", Dock = DockStyle.Fill, Padding = new Padding(10) };
+        musicChatBox.Controls.Add(chat); compositionBox.Controls.Add(composition);
+        workshopSplit.Panel1.Controls.Add(musicChatBox); workshopSplit.Panel2.Controls.Add(compositionBox);
         workshop.Controls.Add(workshopSplit); tabs.TabPages.Add(workshop);
         var notation = new TabPage("Noten"); notation.Controls.Add(notationHost); notationHost.Controls.Add(web); tabs.TabPages.Add(notation);
-        var diagnostics = new TabPage("Diagnose"); diagnostics.Controls.Add(diagnostic); tabs.TabPages.Add(diagnostics);
+        var technology = new TabPage("Technik");
+        var technicalLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        technicalLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); technicalLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        technicalLayout.Controls.Add(credentials, 0, 0);
+        var technicalTabs = new TabControl { Dock = DockStyle.Fill };
+        var diagnostics = new TabPage("Diagnose"); diagnostics.Controls.Add(diagnostic); technicalTabs.TabPages.Add(diagnostics);
+        technicalLayout.Controls.Add(technicalTabs, 0, 1); technology.Controls.Add(technicalLayout); tabs.TabPages.Add(technology);
         var info = new TabPage("Info");
         info.Controls.Add(new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, BackColor = Color.White, Text =
             "Composition Lab Native · Windows · " + Version + "\n\n" +
@@ -157,22 +168,27 @@ internal sealed class MainForm : Form
             "Notenanzeige: Verovio; beim ersten Laden ist Internet erforderlich. Zusätzlich wird Microsoft Edge WebView2 Runtime benötigt. " +
             "Ohne Runtime bleiben Komposition, Wiedergabe und Export verwendbar.\n\n" +
             "Diese erste Windows-Alpha ist getrennt von der bisherigen Mac-App. Es gibt keine automatische DAW-Übergabe oder automatische Aktualisierung." });
-        tabs.TabPages.Add(info);
-        var right = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1 };
+        technicalTabs.TabPages.Add(info);
+        var right = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 6, ColumnCount = 1 };
         right.RowStyles.Add(new RowStyle(SizeType.AutoSize)); right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         right.RowStyles.Add(new RowStyle(SizeType.AutoSize)); right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 145));
         right.Controls.Add(pieceTitle, 0, 0); right.Controls.Add(tabs, 0, 1);
+        var deck = Row();
+        for (int i = 0; i < 10; i++) { int index = i; var card = new Button { Width = 90, Height = 48, Text = (i + 1).ToString(), Font = new Font("Segoe UI", 9) };
+            card.Click += (_, _) => { slots.SelectedIndex = index; RefreshCards(); }; slotCards.Add(card); deck.Controls.Add(card); }
+        deck.Controls.Add(slotButtons); right.Controls.Add(deck, 0, 2);
         var play = Row();
         AddButton(play, "▶ Abspielen", async () =>
         { if (currentMidi == null) throw new InvalidOperationException("Kein Stück geladen."); if (!player.Loaded) player.Load(currentMidi); player.Play(); await Task.CompletedTask; });
         AddButton(play, "Pause", () => { player.Pause(); return Task.CompletedTask; });
         AddButton(play, "Stopp", () => { player.Stop(); return Task.CompletedTask; }); play.Controls.Add(playback);
-        right.Controls.Add(play, 0, 2);
+        right.Controls.Add(play, 0, 3);
         var musicalSettings = Row();
         Add(musicalSettings, "Takte", measures); Add(musicalSettings, "BPM", tempo);
         Add(musicalSettings, "Tonart", musicalKey); Add(musicalSettings, "Besetzung", ensemble);
-        right.Controls.Add(musicalSettings, 0, 3);
+        right.Controls.Add(musicalSettings, 0, 4);
         var inputPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
         inputPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); inputPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         inputPanel.Controls.Add(assignment, 0, 0);
@@ -180,10 +196,10 @@ internal sealed class MainForm : Form
         send.Click += async (_, _) => await RequestAIAsync(false);
         compose.Click += async (_, _) => await RequestAIAsync(true);
         cancel.Click += (_, _) => pending?.Cancel();
-        inputPanel.Controls.Add(actions, 0, 1); right.Controls.Add(inputPanel, 0, 4);
+        inputPanel.Controls.Add(actions, 0, 1); right.Controls.Add(inputPanel, 0, 5);
         work.Panel2.Controls.Add(right); root.Controls.Add(work, 0, 3);
         var strip = new StatusStrip(); strip.Items.Add(status); strip.Items.Add(cost); root.Controls.Add(strip, 0, 4);
-        slots.SelectedIndexChanged += async (_, _) => await DisplayCurrentAsync();
+        slots.SelectedIndexChanged += async (_, _) => { RefreshCards(); await DisplayCurrentAsync(); };
         assignment.Text = "Komponiere ein eigenständiges Klavierstück mit einer tragenden musikalischen Idee.";
     }
 
@@ -317,7 +333,14 @@ internal sealed class MainForm : Form
         int selected = slots.SelectedIndex;
         slots.BeginUpdate(); slots.Items.Clear();
         for (int i = 0; i < documents.Length; i++) slots.Items.Add($"{i + 1:00}  " + (documents[i]?["title"]?.GetValue<string>() ?? "— frei —"));
-        slots.SelectedIndex = selected < 0 ? 0 : selected; slots.EndUpdate();
+        slots.SelectedIndex = selected < 0 ? 0 : selected; slots.EndUpdate(); RefreshCards();
+    }
+    void RefreshCards()
+    {
+        for (int i = 0; i < slotCards.Count; i++) { var title = documents[i]?["title"]?.GetValue<string>() ?? "frei";
+            slotCards[i].Text = (i + 1) + "\n" + (title.Length > 12 ? title[..11] + "…" : title);
+            slotCards[i].BackColor = i == slots.SelectedIndex ? Color.LightSteelBlue : SystemColors.Control;
+            slotTips.SetToolTip(slotCards[i], title); }
     }
     void SelectFreeSlot()
     { int free = Array.FindIndex(documents, d => d == null); if (free < 0) SetStatus("Alle Slots belegt.", true); else slots.SelectedIndex = free; }
@@ -325,7 +348,7 @@ internal sealed class MainForm : Form
     async Task OpenAsync()
     {
         if (busy) return;
-        using var dialog = new OpenFileDialog { Filter = "Musikdateien|*.clab;*.mid;*.midi;*.musicxml;*.xml|Alle Dateien|*.*" };
+        using var dialog = new OpenFileDialog { Filter = "Musikdateien und Diagnosen|*.clab;*.mid;*.midi;*.musicxml;*.xml;*.json|Alle Dateien|*.*" };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         await ImportPathAsync(dialog.FileName);
     }
@@ -338,6 +361,20 @@ internal sealed class MainForm : Form
         {
             document = JsonNode.Parse(data)!.AsObject();
             await core.RunAsync(new JsonObject { ["operation"] = "validate-document", ["document"] = document.DeepClone() });
+        }
+        else if (Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            var sourceDiagnostic = JsonNode.Parse(data)!.AsObject();
+            var raw = RepairLegacyText(sourceDiagnostic["scoreResponse"]?.GetValue<string>() ?? throw new InvalidDataException("Diese Diagnose enthält keine technische Partiturantwort."));
+            var response = await core.RunAsync(new JsonObject { ["operation"] = "recover-score", ["response"] = raw });
+            document = CreateDocument(response["score"]!.DeepClone().AsObject(),
+                RepairLegacyText(sourceDiagnostic["composition"]?.GetValue<string>() ?? ""), RepairLegacyText(sourceDiagnostic["assignment"]?.GetValue<string>() ?? ""));
+            foreach (string field in new[] { "provider", "model", "inputTokens", "outputTokens" })
+                if (sourceDiagnostic[field] != null) document[field] = sourceDiagnostic[field]!.DeepClone();
+            document["costUSD"] = sourceDiagnostic["estimatedCostUSD"]?.DeepClone();
+            lastDiagnostic = sourceDiagnostic.DeepClone().AsObject();
+            lastDiagnostic["recoveredScore"] = document["score"]!.DeepClone();
+            lastDiagnostic["recoveryVersion"] = Version; UpdateDiagnostic();
         }
         else
         {
@@ -467,12 +504,25 @@ internal sealed class MainForm : Form
     void SetStatus(string text, bool error = false) { status.Text = text; status.ForeColor = error ? Color.DarkRed : Color.Black; }
     static string FormatTime(int ms) => TimeSpan.FromMilliseconds(ms).ToString(@"mm\:ss");
     static string SafeName(string title) => string.Concat(title.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+    static string RepairLegacyText(string text)
+    {
+        if (!text.Contains("Ã") && !text.Contains("â€") && !text.Contains("Â")) return text;
+        try
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            var legacy = Encoding.GetEncoding(1252, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+            return new UTF8Encoding(false, true).GetString(legacy.GetBytes(text));
+        }
+        catch (ArgumentException) { return text; }
+    }
 
     public async Task<string> RunSelfTestAsync(string output)
     {
         Directory.CreateDirectory(output);
-        var version = await core.RunAsync(new JsonObject { ["operation"] = "version" });
-        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.2") throw new Exception("Falscher Kern.");
+        const string probe = "ÄÖÜ äöü ß – musikalischer Dialog";
+        var version = await core.RunAsync(new JsonObject { ["operation"] = "version", ["title"] = probe });
+        if (version["titleEcho"]?.GetValue<string>() != probe) throw new Exception("UTF-8-Prozesskommunikation beschädigt.");
+        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.3") throw new Exception("Falscher Kern.");
         var fixture = JsonNode.Parse("""{"ti":"Windows Starttest","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,0,1],[1,1,64,80,0,1],[2,2,67,80,0,1]]}]}""")!.AsObject();
         documents[0] = CreateDocument(fixture, "Automatischer Test ohne KI-Kosten."); RefreshSlots();
         await DisplayCurrentAsync();
@@ -482,6 +532,15 @@ internal sealed class MainForm : Form
         await core.RunAsync(new JsonObject { ["operation"] = "validate-document", ["document"] = Current!.DeepClone() });
         string clab = Path.Combine(output, "Windows-Starttest.clab"); AtomicFile.WriteText(clab, Current!.ToJsonString());
         await ImportPathAsync(clab);
+        var recoveryScore = JsonNode.Parse("""{"ti":"Format-Rettung","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,1,1],[1,1,64,80,1,1],[2,2,67,80,1,1]],"ev":[{"t":"slur","staff":1,"ranges":[[0,4]]},{"b":0,"t":"dynamic","staff":1,"v":"p"},{"b":0,"t":"tempo","qpm":96,"text":"Mäßig"}]}]}""")!;
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        const string recoveredText = "Für Klavier – vollständiges Stück";
+        var oldEncodingText = Encoding.GetEncoding(1252).GetString(Encoding.UTF8.GetBytes(recoveredText));
+        string recoveryFile = Path.Combine(output, "Diagnose-Starttest.json");
+        AtomicFile.WriteText(recoveryFile, new JsonObject { ["scoreResponse"] = recoveryScore.ToJsonString(),
+            ["composition"] = oldEncodingText, ["assignment"] = "Test", ["estimatedCostUSD"] = 0.1 }.ToJsonString());
+        await ImportPathAsync(recoveryFile);
+        if (Current?["concept"]?.GetValue<string>() != recoveredText) throw new Exception("Ältere Diagnose nicht korrekt gerettet.");
         keys["anthropic"] = "SELF-TEST-NO-REAL-KEY"; secrets.Save(keys);
         if (secrets.Load()["anthropic"] != "SELF-TEST-NO-REAL-KEY") throw new Exception("DPAPI-Rückprüfung fehlgeschlagen.");
         if (Encoding.UTF8.GetString(File.ReadAllBytes(Path.Combine(dataDirectory, "keys.dpapi"))).Contains("SELF-TEST-NO-REAL-KEY")) throw new Exception("Unverschlüsselter Schlüssel.");
@@ -497,11 +556,11 @@ internal sealed class MainForm : Form
             throw new Exception("Besetzungsfeld liegt außerhalb des sichtbaren Fensters.");
         using var bitmap = new Bitmap(Width, Height); DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size));
         bitmap.Save(Path.Combine(output, "Windows-Starttest.png"));
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "DPAPI", "no secrets in workspace" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "DPAPI", "no secrets in workspace" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { pending?.Cancel(); playbackTimer.Dispose(); player.Dispose(); web.Dispose(); }
+        if (disposing) { pending?.Cancel(); playbackTimer.Dispose(); player.Dispose(); web.Dispose(); slotTips.Dispose(); }
         base.Dispose(disposing);
     }
 }

@@ -23,7 +23,10 @@ enum BridgeService {
         }
         let title = obj["title"] as? String ?? "Import"
         switch operation {
-        case "version": send(["ok": true, "version": CoreServices.version])
+        case "version": send(["ok": true, "version": CoreServices.version, "titleEcho": title])
+        case "recover-score":
+            guard let response = obj["response"] as? String else { throw NSError(domain: "BridgeService", code: 6) }
+            send(["ok": true, "score": try JSONSerialization.jsonObject(with: CoreServices.recoverScore(response: response))])
         case "midi": send(["ok": true, "data": try CoreServices.midi(scoreJSON: data("score")).base64EncodedString()])
         case "musicxml": send(["ok": true, "data": try CoreServices.musicXML(scoreJSON: data("score")).base64EncodedString()])
         case "import-midi": send(["ok": true, "score": try JSONSerialization.jsonObject(with: CoreServices.importMIDI(bytes(), title: title))])

@@ -3,7 +3,7 @@ import Foundation
 /// Small public boundary for desktop clients. JSON preserves the existing score
 /// and CLAB wire format; AppKit and Windows APIs never enter this module.
 public enum CoreServices {
-    public static let version = "4.0.0-alpha.2"
+    public static let version = "4.0.0-alpha.3"
 
     public static func midi(scoreJSON: Data) throws -> Data {
         MIDIBuilder.build(try validatedScore(scoreJSON))
@@ -39,6 +39,10 @@ public enum CoreServices {
 
     public static func translationPrompt(composition: String) -> String {
         ComposerPrompts.translationPrompt(composition: composition)
+    }
+
+    public static func recoverScore(response: String) throws -> Data {
+        try encodeValidated(ScoreDecoder.decode(APIClient.shared.extractJSON(response)))
     }
 
     /// requestJSON: assignment, provider (openai/anthropic/gemini), model, effort
@@ -98,7 +102,7 @@ public enum CoreServices {
     }
 
     private static func validatedScore(_ data: Data) throws -> Score {
-        let score = try JSONDecoder().decode(Score.self, from: data)
+        let score = try ScoreDecoder.decode(data)
         try ScoreValidation.validate(score)
         return score
     }

@@ -100,7 +100,7 @@ final class CompositionWorkflow {
                         final["estimatedCostUSD"] = cost
                         do {
                             let json = try APIClient.shared.extractJSON(technical.text)
-                            let score = try JSONDecoder().decode(Score.self, from: json)
+                            let score = try ScoreDecoder.decode(json)
                             try ScoreValidation.validate(score)
                             final["score"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(score))
                             final["stage"] = CompositionStage.completed.rawValue

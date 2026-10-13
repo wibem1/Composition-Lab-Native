@@ -19,6 +19,9 @@ internal sealed class CoreClient
         {
             UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            StandardInputEncoding = new System.Text.UTF8Encoding(false),
+            StandardOutputEncoding = new System.Text.UTF8Encoding(false),
+            StandardErrorEncoding = new System.Text.UTF8Encoding(false),
             WorkingDirectory = Path.GetDirectoryName(exe)!
         }};
         process.Start();
