@@ -1,6 +1,14 @@
+# Windows Alpha 4 · Build 4004
+
+Die Stück-Karten zeigen Titel und Auswahl. Klick auf einen freien Platz öffnet den Import. Jeder Platz besitzt **Laden** und **×** zum einzelnen Löschen; außerdem gibt es ein Rechtsklick-Menü und Dateidrop. Unterstützt werden einzelne CLAB-Stücke, MIDI, MusicXML und Kompositionsdiagnosen. Ersetzen und Löschen werden bestätigt. Ein ungültiger Import lässt das bisherige Stück erhalten.
+
+**LilyPond …** exportiert den vorhandenen KI-Quelltext unverändert als UTF-8-Datei `.ly`, ohne Markdown-Hülle und ohne neue KI-Anfrage. **Hacklily ↗** kopiert ihn und öffnet den Editor: dort links Strg+A, Strg+V. Der kurze Hinweis erläutert die Übergabe. Stücke aus MIDI/MusicXML enthalten nicht automatisch LilyPond; hier gibt es eine klare Meldung statt einer erfundenen Konvertierung.
+
+Dateiaktionen befinden sich im Menü **Datei**. Die kompaktere Oberfläche lässt mehr Platz für MusicChat und Noten. API-Schlüssel und Diagnosen bleiben unter Technik.
+
 # Composition Lab Native 4.0 – erste Windows-Testversion
 
-Version 4.0.0-alpha.3 · Build 4003 · Windows 10/11, 64 Bit Intel/AMD
+Version 4.0.0-alpha.4 · Build 4004 · Windows 10/11, 64 Bit Intel/AMD
 
 ## Start
 

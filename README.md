@@ -1,6 +1,6 @@
 # Composition Lab Native 4.0 – Mac / Windows
 
-**Entwicklungszweig `v4-cross-platform` · 4.0.0-alpha.3 / Build 4003**
+**Entwicklungszweig `v4-cross-platform` · 4.0.0-alpha.4 / Build 4004**
 
 Die bisherige Version 3.5.3 bleibt auf `main` und unter
 `reference-v3.5.3-before-v4` unverändert. Version 4.0 installiert sich getrennt.
@@ -23,7 +23,7 @@ Fenstergeometrie ohne installierte Swift-Toolchain im Suchpfad.
 Hörbare Wiedergabe (Testrechner ohne MIDI-Gerät), ein echter KI-Aufruf und die
 WebView2-/Verovio-Notenanzeige sind noch praktisch zu bestätigen.
 
-Alpha 3 korrigiert die UTF-8-Kommunikation unter Windows und das Einlesen von
+Alpha 4 korrigiert die UTF-8-Kommunikation unter Windows und das Einlesen von
 Ausdruckszeichen. Das gemeinsame technische Format ist jetzt ausdrücklich
 beschrieben; ein Decoder übernimmt definierte ältere Alias-/Bereichsformen.
 Die Komposition selbst wird bei der Normalisierung nicht verändert.

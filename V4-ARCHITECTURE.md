@@ -1,6 +1,6 @@
 # Composition Lab 4.0 – gemeinsame Mac-/Windows-Basis
 
-Stand: 2026-10-13 · 4.0.0-alpha.3 · Build 4003
+Stand: 2026-10-13 · 4.0.0-alpha.4 · Build 4004
 
 ## Schutz der bisherigen Version
 
