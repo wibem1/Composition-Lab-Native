@@ -618,8 +618,10 @@ internal sealed class MainForm : Form
         if (documents[7] == null || documents[0]!.ToJsonString() != neighbour) throw new Exception("Gezielter Slotimport fehlgeschlagen.");
         string invalid = Path.Combine(output, "invalid.clab"); AtomicFile.WriteText(invalid, "{}");
         var before = documents[7]!.ToJsonString();
-        try { await ImportIntoSlotAsync(invalid, 7); throw new Exception("Ungültiger Import akzeptiert."); }
-        catch (CoreRequestException) { }
+        bool rejected = false;
+        try { await ImportIntoSlotAsync(invalid, 7); }
+        catch (Exception e) when (e is InvalidOperationException or CoreRequestException) { rejected = true; }
+        if (!rejected) throw new Exception("Ungültiger Import akzeptiert.");
         if (documents[7]!.ToJsonString() != before) throw new Exception("Fehlgeschlagener Import überschreibt das Stück.");
         await DeleteSlotAsync(7);
         if (documents[7] != null || documents[0]!.ToJsonString() != neighbour) throw new Exception("Einzellöschung fehlgeschlagen.");
@@ -627,9 +629,11 @@ internal sealed class MainForm : Form
         var extracted = ExtractLilyPond("Einleitung\n```lilypond\n" + lily + "\n```\nNachwort");
         if (extracted != lily + "\n") throw new Exception("LilyPond-Code verändert.");
         string lyPath = Path.Combine(output, "Windows-Starttest.ly"); await File.WriteAllTextAsync(lyPath, extracted, new UTF8Encoding(false));
+        Clipboard.SetText(extracted);
+        if (Clipboard.GetText() != extracted) throw new Exception("Hacklily-Zwischenablage beschädigt.");
         if (await File.ReadAllTextAsync(lyPath) != extracted) throw new Exception("LilyPond-Export beschädigt.");
         try { ExtractLilyPond("Import: test.mid"); throw new Exception("Import fälschlich als LilyPond erkannt."); } catch (InvalidOperationException) { }
-                var recoveryScore = JsonNode.Parse("""{"ti":"Format-Rettung","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,1,1],[1,1,64,80,1,1],[2,2,67,80,1,1]],"ev":[{"t":"slur","staff":1,"ranges":[[0,4]]},{"b":0,"t":"dynamic","staff":1,"v":"p"},{"b":0,"t":"tempo","qpm":96,"text":"Mäßig"}]}]}""")!;
+        var recoveryScore = JsonNode.Parse("""{"ti":"Format-Rettung","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,1,1],[1,1,64,80,1,1],[2,2,67,80,1,1]],"ev":[{"t":"slur","staff":1,"ranges":[[0,4]]},{"b":0,"t":"dynamic","staff":1,"v":"p"},{"b":0,"t":"tempo","qpm":96,"text":"Mäßig"}]}]}""")!;
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         const string recoveredText = "Für Klavier – vollständiges Stück";
         var oldEncodingText = Encoding.GetEncoding(1252).GetString(Encoding.UTF8.GetBytes(recoveredText));
@@ -655,7 +659,7 @@ internal sealed class MainForm : Form
                 throw new Exception("Bedienelement liegt außerhalb des sichtbaren Fensters: " + control.Text + " / " + control.RectangleToScreen(control.ClientRectangle) + " / Fenster " + screenBounds);
         using var bitmap = new Bitmap(Width, Height); DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size));
         bitmap.Save(Path.Combine(output, "Windows-Starttest.png"));
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "DPAPI", "no secrets in workspace" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {
@@ -663,3 +667,4 @@ internal sealed class MainForm : Form
         base.Dispose(disposing);
     }
 }
+
