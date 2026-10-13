@@ -175,10 +175,13 @@ internal sealed class MainForm : Form
         right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 145));
         right.Controls.Add(pieceTitle, 0, 0); right.Controls.Add(tabs, 0, 1);
-        var deck = Row();
-        for (int i = 0; i < 10; i++) { int index = i; var card = new Button { Width = 90, Height = 48, Text = (i + 1).ToString(), Font = new Font("Segoe UI", 9) };
-            card.Click += (_, _) => { slots.SelectedIndex = index; RefreshCards(); }; slotCards.Add(card); deck.Controls.Add(card); }
-        deck.Controls.Add(slotButtons); right.Controls.Add(deck, 0, 2);
+        var deck = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 1, RowCount = 2 };
+        deck.RowStyles.Add(new RowStyle(SizeType.Absolute, 58)); deck.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var cards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 10, RowCount = 1, AutoSize = false };
+        for (int i = 0; i < 10; i++) { int index = i; cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10));
+            var card = new Button { Dock = DockStyle.Fill, Text = (i + 1).ToString(), Font = new Font("Segoe UI", 9) };
+            card.Click += (_, _) => { slots.SelectedIndex = index; RefreshCards(); }; slotCards.Add(card); cards.Controls.Add(card, i, 0); }
+        deck.Controls.Add(cards, 0, 0); deck.Controls.Add(slotButtons, 0, 1); right.Controls.Add(deck, 0, 2);
         var play = Row();
         AddButton(play, "▶ Abspielen", async () =>
         { if (currentMidi == null) throw new InvalidOperationException("Kein Stück geladen."); if (!player.Loaded) player.Load(currentMidi); player.Play(); await Task.CompletedTask; });
@@ -552,8 +555,10 @@ internal sealed class MainForm : Form
         chat.Text = "Automatischer Windows-Test: Kern gestartet, Stück geladen, Exporte und Schlüsselablage geprüft.";
         tabs.SelectedIndex = 0; SetStatus("Automatischer Test bestanden.");
         PerformLayout();
-        if (!RectangleToScreen(ClientRectangle).Contains(ensemble.RectangleToScreen(ensemble.ClientRectangle)))
-            throw new Exception("Besetzungsfeld liegt außerhalb des sichtbaren Fensters.");
+        var screenBounds = RectangleToScreen(ClientRectangle);
+        foreach (var control in slotCards.Cast<Control>().Concat(new Control[] { ensemble, composition, compose }))
+            if (control.Visible && !screenBounds.Contains(control.RectangleToScreen(control.ClientRectangle)))
+                throw new Exception("Bedienelement liegt außerhalb des sichtbaren Fensters: " + control.Text);
         using var bitmap = new Bitmap(Width, Height); DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size));
         bitmap.Save(Path.Combine(output, "Windows-Starttest.png"));
         return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "DPAPI", "no secrets in workspace" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
