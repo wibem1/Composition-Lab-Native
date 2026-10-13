@@ -12,7 +12,7 @@ Windows-Oberfläche verwendet. Runtime-DLLs und .NET sind im Windows-ZIP enthalt
 
 - Windows: [Start und Funktionen](Windows/README-Windows.md)
 - Architektur: [V4-ARCHITECTURE.md](V4-ARCHITECTURE.md)
-- Tests und Downloads: [GitHub Actions](https://github.com/wibem1/Composition-Lab-Native/actions/runs/38376535382)
+- Tests und Downloads: [GitHub Actions](https://github.com/wibem1/Composition-Lab-Native/actions/runs/38407417529)
 - Tests lokal: `swift test`
 - Mac-Test-App: `bash 'Build Native App.command'`
 - Windows-Bundle: `pwsh Windows/Build.ps1` nach `swift build -c release`
@@ -23,7 +23,7 @@ Fenstergeometrie ohne installierte Swift-Toolchain im Suchpfad.
 Hörbare Wiedergabe (Testrechner ohne MIDI-Gerät), ein echter KI-Aufruf und die
 WebView2-/Verovio-Notenanzeige sind noch praktisch zu bestätigen.
 
-Alpha 4 korrigiert die UTF-8-Kommunikation unter Windows und das Einlesen von
+Alpha 3 korrigiert die UTF-8-Kommunikation unter Windows und das Einlesen von
 Ausdruckszeichen. Das gemeinsame technische Format ist jetzt ausdrücklich
 beschrieben; ein Decoder übernimmt definierte ältere Alias-/Bereichsformen.
 Die Komposition selbst wird bei der Normalisierung nicht verändert.
@@ -33,6 +33,11 @@ sowie zehn Stück-Karten. API-Schlüssel und Diagnose stehen unter Technik.
 Über Öffnen / Import kann eine Diagnose mit scoreResponse ohne KI-Neuanfrage
 wiederhergestellt und als CLAB gespeichert werden. Elf Kerntests sowie Windows-
 Starttests für Umlaute, Diagnose-Rettung und sichtbare Fenstergrenzen bestehen.
+
+Alpha 4 ergänzt gezieltes Laden, Dateidrop und einzelnes Löschen je Stück-Karte.
+Ein fehlgeschlagener Import erhält das bisherige Stück. Die kompaktere Oberfläche
+verwendet ein Dateimenü. LilyPond-Quelltext lässt sich als `.ly` exportieren und
+per Zwischenablage an Hacklily übergeben, ohne neue KI-Anfrage.
 
 Die nachfolgende historische Dokumentation beschreibt 3.5.3 und frühere Stände.
 
