@@ -46,6 +46,7 @@ internal sealed class MainForm : Form
     readonly System.Windows.Forms.Timer playbackTimer = new() { Interval = 300 };
     readonly TabControl tabs = new() { Dock = DockStyle.Fill };
     readonly List<Button> slotCards = [];
+    readonly List<Button> slotActions = [];
     readonly ToolTip slotTips = new();
     readonly bool testMode;
     CancellationTokenSource? pending;
@@ -179,14 +180,12 @@ internal sealed class MainForm : Form
         right.Controls.Add(pieceTitle, 0, 0); right.Controls.Add(tabs, 0, 1);
         var deck = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 1, RowCount = 1, Padding = new Padding(6, 4, 6, 4) };
         deck.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        deck.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        deck.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
         var cards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 10, RowCount = 1 };
         for (int i = 0; i < 10; i++)
         {
             int index = i; cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10));
-            var cell = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Margin = new Padding(3) };
-            cell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            cell.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); cell.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+            var cell = new Panel { Dock = DockStyle.Fill, Margin = new Padding(3) };
             var card = new Button { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9), FlatStyle = FlatStyle.Flat, AllowDrop = true, Margin = Padding.Empty };
             card.FlatAppearance.BorderColor = Color.FromArgb(208, 214, 223);
             card.Click += async (_, _) => { if (busy) return; if (documents[index] == null) await GuardAsync(() => OpenAsync(index)); else slots.SelectedIndex = index; };
@@ -196,13 +195,13 @@ internal sealed class MainForm : Form
             menu.Items.Add("Datei in diesen Platz laden …", null, async (_, _) => await GuardAsync(() => OpenAsync(index)));
             menu.Items.Add("Dieses Stück speichern …", null, async (_, _) => { if (busy) return; slots.SelectedIndex = index; await GuardAsync(SaveDocumentAsync); });
             menu.Items.Add("Dieses Stück löschen", null, async (_, _) => await DeleteSlotAsync(index)); card.ContextMenuStrip = menu;
-            var tools = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
-            tools.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65)); tools.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+            var tools = new Panel { Dock = DockStyle.Bottom, Height = 28 };
             var load = new Button { Text = "Laden", Dock = DockStyle.Fill, Margin = Padding.Empty, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 8) };
-            var delete = new Button { Text = "×", Dock = DockStyle.Fill, Margin = Padding.Empty, FlatStyle = FlatStyle.Flat };
+            var delete = new Button { Text = "×", Dock = DockStyle.Right, Width = 28, Margin = Padding.Empty, FlatStyle = FlatStyle.Flat };
             load.Click += async (_, _) => await GuardAsync(() => OpenAsync(index)); delete.Click += async (_, _) => await DeleteSlotAsync(index);
             slotTips.SetToolTip(delete, "Stück " + (index + 1) + " löschen"); slotTips.SetToolTip(load, "Datei in Stück " + (index + 1) + " laden");
-            tools.Controls.Add(load, 0, 0); tools.Controls.Add(delete, 1, 0); cell.Controls.Add(card, 0, 0); cell.Controls.Add(tools, 0, 1);
+            tools.Controls.Add(load); tools.Controls.Add(delete); cell.Controls.Add(card); cell.Controls.Add(tools);
+            slotActions.Add(load); slotActions.Add(delete);
             slotCards.Add(card); cards.Controls.Add(cell, i, 0);
         }
         deck.Controls.Add(cards, 0, 0); right.Controls.Add(deck, 0, 2);
@@ -654,8 +653,9 @@ internal sealed class MainForm : Form
         tabs.SelectedIndex = 0; SetStatus("Automatischer Test bestanden.");
         PerformLayout();
         var screenBounds = RectangleToScreen(ClientRectangle);
-        foreach (var control in slotCards.Cast<Control>().Concat(new Control[] { ensemble, composition, compose }))
-            if (control.Visible && !screenBounds.Contains(control.RectangleToScreen(control.ClientRectangle)))
+        foreach (var control in slotCards.Concat(slotActions).Cast<Control>().Concat(new Control[] { ensemble, composition, compose }))
+            if (control.Visible && (!screenBounds.Contains(control.RectangleToScreen(control.ClientRectangle)) ||
+                (control.Parent != null && !control.Parent.RectangleToScreen(control.Parent.ClientRectangle).Contains(control.RectangleToScreen(control.ClientRectangle)))))
                 throw new Exception("Bedienelement liegt außerhalb des sichtbaren Fensters: " + control.Text + " / " + control.RectangleToScreen(control.ClientRectangle) + " / Fenster " + screenBounds);
         using var bitmap = new Bitmap(Width, Height); DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size));
         bitmap.Save(Path.Combine(output, "Windows-Starttest.png"));
