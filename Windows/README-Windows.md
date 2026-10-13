@@ -4,7 +4,7 @@ Eine neue Windows-Oberfläche mit eigenem Erscheinungsbild: dunkler Kopfbereich,
 
 **Werkstatt / Noten / Technik** wechseln den Arbeitsbereich. Player, aktuelles Stück und Auftrag bleiben erreichbar. Dateiaktionen stehen unter **Datei & Export**. Der Auftrag hat klar beschriftete Parameterfelder und eine hervorgehobene Komponieren-Schaltfläche. Der musikalische Ablauf, Exporte und gespeicherte Arbeitsstände bleiben kompatibel.
 
-Das Fenster passt sich nach dem Start an den verfügbaren Bildschirm an. Windows übernimmt die DPI-Skalierung. Automatische geometrische Prüfungen kontrollieren alle drei Arbeitsbereiche bei 1000×700 und 1400×940 Pixeln; zusätzlich werden echte Fensterbilder erzeugt. Die bisherige Mac-Version wird nicht ersetzt.
+Das Fenster passt sich nach dem Start an den verfügbaren Bildschirm an. Windows übernimmt die DPI-Skalierung. Automatische geometrische Prüfungen kontrollieren alle drei Arbeitsbereiche mit angeforderten Größen 1000×700 und 1400×940 Pixeln (der Testrechner begrenzt das große Fenster auf seine Bildschirmauflösung); zusätzlich werden echte Fensterbilder erzeugt. Die bisherige Mac-Version wird nicht ersetzt.
 
 # Windows Alpha 4 · Build 4005
 

@@ -12,7 +12,7 @@ Windows-Oberfläche verwendet. Runtime-DLLs und .NET sind im Windows-ZIP enthalt
 
 - Windows: [Start und Funktionen](Windows/README-Windows.md)
 - Architektur: [V4-ARCHITECTURE.md](V4-ARCHITECTURE.md)
-- Tests und Downloads: [GitHub Actions](https://github.com/wibem1/Composition-Lab-Native/actions/runs/38407417529)
+- Tests und Downloads: [GitHub Actions](https://github.com/wibem1/Composition-Lab-Native/actions/runs/38412049865)
 - Tests lokal: `swift test`
 - Mac-Test-App: `bash 'Build Native App.command'`
 - Windows-Bundle: `pwsh Windows/Build.ps1` nach `swift build -c release`
@@ -38,6 +38,13 @@ Alpha 4 ergänzt gezieltes Laden, Dateidrop und einzelnes Löschen je Stück-Kar
 Ein fehlgeschlagener Import erhält das bisherige Stück. Die kompaktere Oberfläche
 verwendet ein Dateimenü. LilyPond-Quelltext lässt sich als `.ly` exportieren und
 per Zwischenablage an Hacklily übergeben, ohne neue KI-Anfrage.
+
+Alpha 5 (13.10.2026) ersetzt die provisorische Windows-Oberfläche durch eine
+Werkstatt mit Stück-Bibliothek, gerundeten Flächen, klarer Typografie und Petrol-
+Akzent. `StudioTheme.cs` kapselt die Windows-Darstellung. Der gemeinsame Kern
+und die kompatible Arbeitsablage bleiben erhalten. Alle drei Arbeitsbereiche
+bestehen die Fensterprüfungen bei kleiner und großer angeforderter Fenstergröße;
+der Windows-Testrechner begrenzt die große Größe auf seine Bildschirmauflösung.
 
 Die nachfolgende historische Dokumentation beschreibt 3.5.3 und frühere Stände.
 

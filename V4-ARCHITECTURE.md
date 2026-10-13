@@ -64,3 +64,11 @@ Ein erfolgreicher Build ersetzt keine praktische Abnahme der Oberfläche/Wiederg
 Clients bereit. Der API-Schlüssel wird getrennt vom Auftragsdokument übergeben.
 Nächste Schritte: praktische Windows-Abnahme, gemeinsame Dialog-/Slot-
 Zustandsverwaltung, Soundfont-/MIDI-Gerätewahl und zusätzliche DAW-Adapter.
+
+## Windows-Darstellung Alpha 5
+
+`Windows/CompositionLab/StudioTheme.cs` kapselt Farben, gerundete Flächen,
+Schaltflächen, Stück-Karten und den Wechsel zwischen Arbeitsbereichen.
+`MainForm` setzt die Werkstatt aus diesen Bausteinen zusammen. Diese Windows-
+Adapter führen keine musikalische Änderung oder neue KI-Anfrage aus. Die zehn
+Stück-Plätze und Schlüsselablage verwenden weiterhin die bisherigen Datenpfade.
