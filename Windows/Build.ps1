@@ -18,7 +18,22 @@ foreach ($name in @('vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll','conc
     $file = Join-Path $env:windir "System32/$name"
     if (Test-Path $file) { Copy-Item $file $core }
 }
-Copy-Item 'LICENSE' (Join-Path $destination 'LICENSE-Swift-Core.txt')
+python -m pip install --quiet pefile==2024.8.26
+if ($LASTEXITCODE -ne 0) { throw 'PE dependency inspector installation failed' }
+python 'Windows/trim_runtime.py' $core
+if ($LASTEXITCODE -ne 0) { throw 'Runtime dependency inspection failed' }
+Copy-Item 'LICENSE' (Join-Path $destination 'LICENSE-Composition-Lab.txt')
+Copy-Item 'Windows/Notices' (Join-Path $destination 'Notices') -Recurse
+foreach ($package in @('microsoft.web.webview2','microsoft.netcore.app.runtime.win-x64','microsoft.windowsdesktop.app.runtime.win-x64')) {
+    $directory = Join-Path $env:USERPROFILE ".nuget/packages/$package"
+    if (Test-Path $directory) {
+        $latest = Get-ChildItem $directory -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        foreach ($name in @('LICENSE.txt','LICENSE.TXT','LICENSE','THIRD-PARTY-NOTICES.TXT','NOTICE')) {
+            $notice = Join-Path $latest.FullName $name
+            if (Test-Path $notice) { Copy-Item $notice (Join-Path $destination "Notices/$package-$name") -Force }
+        }
+    }
+}
 Copy-Item 'Windows/README-Windows.md' (Join-Path $destination 'LIESMICH.md')
 # A normal user must not need the Swift compiler/toolchain on PATH.
 $oldPath = $env:Path

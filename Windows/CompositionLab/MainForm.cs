@@ -158,17 +158,21 @@ internal sealed class MainForm : Form
             "Ohne Runtime bleiben Komposition, Wiedergabe und Export verwendbar.\n\n" +
             "Diese erste Windows-Alpha ist getrennt von der bisherigen Mac-App. Es gibt keine automatische DAW-Übergabe oder automatische Aktualisierung." });
         tabs.TabPages.Add(info);
-        var right = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
+        var right = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1 };
         right.RowStyles.Add(new RowStyle(SizeType.AutoSize)); right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        right.RowStyles.Add(new RowStyle(SizeType.AutoSize)); right.RowStyles.Add(new RowStyle(SizeType.Absolute, 145));
+        right.RowStyles.Add(new RowStyle(SizeType.AutoSize)); right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 145));
         right.Controls.Add(pieceTitle, 0, 0); right.Controls.Add(tabs, 0, 1);
         var play = Row();
         AddButton(play, "▶ Abspielen", async () =>
         { if (currentMidi == null) throw new InvalidOperationException("Kein Stück geladen."); if (!player.Loaded) player.Load(currentMidi); player.Play(); await Task.CompletedTask; });
         AddButton(play, "Pause", () => { player.Pause(); return Task.CompletedTask; });
         AddButton(play, "Stopp", () => { player.Stop(); return Task.CompletedTask; }); play.Controls.Add(playback);
-        Add(play, "Takte", measures); Add(play, "BPM", tempo); Add(play, "Tonart", musicalKey); Add(play, "Besetzung", ensemble);
         right.Controls.Add(play, 0, 2);
+        var musicalSettings = Row();
+        Add(musicalSettings, "Takte", measures); Add(musicalSettings, "BPM", tempo);
+        Add(musicalSettings, "Tonart", musicalKey); Add(musicalSettings, "Besetzung", ensemble);
+        right.Controls.Add(musicalSettings, 0, 3);
         var inputPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
         inputPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); inputPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         inputPanel.Controls.Add(assignment, 0, 0);
@@ -176,7 +180,7 @@ internal sealed class MainForm : Form
         send.Click += async (_, _) => await RequestAIAsync(false);
         compose.Click += async (_, _) => await RequestAIAsync(true);
         cancel.Click += (_, _) => pending?.Cancel();
-        inputPanel.Controls.Add(actions, 0, 1); right.Controls.Add(inputPanel, 0, 3);
+        inputPanel.Controls.Add(actions, 0, 1); right.Controls.Add(inputPanel, 0, 4);
         work.Panel2.Controls.Add(right); root.Controls.Add(work, 0, 3);
         var strip = new StatusStrip(); strip.Items.Add(status); strip.Items.Add(cost); root.Controls.Add(strip, 0, 4);
         slots.SelectedIndexChanged += async (_, _) => await DisplayCurrentAsync();
@@ -488,6 +492,9 @@ internal sealed class MainForm : Form
         catch (Exception e) { playbackInfo = "Runner ohne nutzbaren MIDI-Synthesizer: " + e.Message; }
         chat.Text = "Automatischer Windows-Test: Kern gestartet, Stück geladen, Exporte und Schlüsselablage geprüft.";
         tabs.SelectedIndex = 0; SetStatus("Automatischer Test bestanden.");
+        PerformLayout();
+        if (!RectangleToScreen(ClientRectangle).Contains(ensemble.RectangleToScreen(ensemble.ClientRectangle)))
+            throw new Exception("Besetzungsfeld liegt außerhalb des sichtbaren Fensters.");
         using var bitmap = new Bitmap(Width, Height); DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size));
         bitmap.Save(Path.Combine(output, "Windows-Starttest.png"));
         return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "DPAPI", "no secrets in workspace" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
