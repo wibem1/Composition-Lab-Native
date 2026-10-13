@@ -47,3 +47,9 @@ LocalConfig/
 *.mxl
 *.clab
 *.clabproject
+
+# Shared-core builds and fixture exceptions
+.build/
+.build-native-v4/
+Composition Lab 4.0.app/
+!Tests/CompositionCoreTests/Fixtures/*.musicxml

@@ -2,11 +2,11 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP="Composition Lab.app"
-BUILD=".build-native"
+APP="Composition Lab 4.0.app"
+BUILD=".build-native-v4"
 
-SRC=(Sources/*.swift)
-echo "Baue Composition Lab Native 3.5.3 · Build 3503 · Engine 2.3.1 + isolierte Motivfunktion …"
+SRC=(Shared/CompositionCore/*.swift Sources/*.swift)
+echo "Baue Composition Lab Native 4.0.0-alpha.1 · Build 4001 · Engine 2.3.1 + isolierte Motivfunktion …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -16,8 +16,6 @@ if ! xcrun --find swiftc >/dev/null 2>&1; then
   exit 1
 fi
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
-pkill -x "Composition Lab" >/dev/null 2>&1 || true
-sleep 1
 RECOVERED_ICNS=""
 if [ ! -f "AppIcon.png" ]; then
   OLD_PNG="$(find "$HOME/Downloads" -type f -name 'AppIcon.png' -path '*Composition_Lab_Native*' 2>/dev/null | head -n 1 || true)"
@@ -44,20 +42,20 @@ if [ -f "AppIcon.png" ]; then
 elif [ -n "$RECOVERED_ICNS" ]; then cp "$RECOVERED_ICNS" "$APP/Contents/Resources/AppIcon.icns"; fi
 
 build_arch () {
-  local arch="$1"; local out="$BUILD/Composition Lab-$arch"
+  local arch="$1"; local out="$BUILD/Composition Lab 4.0-$arch"
   echo "Kompiliere für $arch …"
   xcrun swiftc "${SRC[@]}" -sdk "$SDK" -target "${arch}-apple-macosx11.0" -O -framework Cocoa -framework Security -framework CryptoKit -framework AVFoundation -framework CoreMIDI -framework AudioToolbox -framework WebKit -framework PDFKit -o "$out"
 }
 build_arch x86_64
 if build_arch arm64; then
   echo "Erzeuge Universal Binary (Intel + Apple Silicon) …"
-  xcrun lipo -create "$BUILD/Composition Lab-x86_64" "$BUILD/Composition Lab-arm64" -output "$APP/Contents/MacOS/Composition Lab"
+  xcrun lipo -create "$BUILD/Composition Lab 4.0-x86_64" "$BUILD/Composition Lab 4.0-arm64" -output "$APP/Contents/MacOS/Composition Lab 4.0"
 else
-  cp "$BUILD/Composition Lab-x86_64" "$APP/Contents/MacOS/Composition Lab"
+  cp "$BUILD/Composition Lab 4.0-x86_64" "$APP/Contents/MacOS/Composition Lab 4.0"
 fi
-chmod +x "$APP/Contents/MacOS/Composition Lab"
+chmod +x "$APP/Contents/MacOS/Composition Lab 4.0"
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 3.5.3 (Build 3503) · Composition Engine 2.3.1 · Engine Build 231 · Clean Source + Motivfunktion"
+echo "Version: 4.0.0-alpha.1 (Build 4001) · Composition Engine 2.3.1 · Engine Build 231 · Clean Source + Motivfunktion"

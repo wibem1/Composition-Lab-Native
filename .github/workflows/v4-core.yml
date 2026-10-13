@@ -1,0 +1,52 @@
+name: Composition Lab 4.0 shared core
+on:
+  push:
+    branches: [v4-cross-platform]
+  pull_request:
+    branches: [v4-cross-platform]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift 6.1.2 on macOS and Linux
+        if: runner.os != 'Windows'
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '6.1.2'
+      - name: Swift 6.1.2 on Windows
+        if: runner.os == 'Windows'
+        uses: compnerd/gha-setup-swift@bbae8ce86bac5a3449f3992b3d88bc4ca25f2057
+        with:
+          swift-version: swift-6.1.2-release
+          swift-build: 6.1.2-RELEASE
+      - run: swift --version
+      - run: swift test
+      - run: swift build -c release
+      - run: swift run -c release composition-lab-core --version
+      - name: Build isolated Mac application
+        if: runner.os == 'macOS'
+        run: |
+          bash 'Build Native App.command'
+          test -x 'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0'
+          lipo 'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0' -verify_arch x86_64 arm64
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' 'Composition Lab 4.0.app/Contents/Info.plist')" = 'de.klangwerke.compositionlab.native.v4'
+          ditto -c -k --keepParent 'Composition Lab 4.0.app' Composition-Lab-4.0-alpha.1-Mac.zip
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: Composition-Lab-4.0-alpha.1-Mac
+          path: Composition-Lab-4.0-alpha.1-Mac.zip
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: Composition-Lab-4.0-alpha.1-Windows-Core
+          path: .build/release/
+          include-hidden-files: true

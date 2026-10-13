@@ -1,0 +1,135 @@
+import Foundation
+import XCTest
+@testable import CompositionCore
+
+final class CoreTests: XCTestCase {
+    private func score() -> Score {
+        Score(ti: "Über die Grenze", bpm: 96, ts: TimeSignature(n: 4, d: 4), k: "C major",
+              sm: "", tr: [Track(nm: "Piano", ch: 0, pg: 0,
+              nt: [[0, 1, 60, 80, 0, 1], [1, 1, 64, 75, 0, 1], [2, 2, 67, 90, 0, 1]],
+              ct: nil, ev: [NotationEvent(b: 0, t: "dyn", v: "p")])])
+    }
+
+    func testMIDIRoundTripPreservesNotesAndTempo() throws {
+        let original = score()
+        let data = try CoreServices.midi(scoreJSON: JSONEncoder().encode(original))
+        XCTAssertEqual(String(data: data.prefix(4), encoding: .ascii), "MThd")
+        let result = try JSONDecoder().decode(Score.self, from: CoreServices.importMIDI(data, title: "fallback"))
+        XCTAssertEqual(result.ti, original.ti)
+        XCTAssertEqual(result.bpm, original.bpm, accuracy: 0.001)
+        XCTAssertEqual(result.tr[0].nt, original.tr[0].nt)
+    }
+
+    func testMusicXMLRenderingDoesNotChangePlayback() throws {
+        let original = score()
+        let before = MIDIBuilder.build(original)
+        let readable = try XCTUnwrap(MusicXMLBuilder.build(original, options: .readablePiano))
+        let exact = try XCTUnwrap(MusicXMLBuilder.build(original, options: .midiNear))
+        XCTAssertFalse(readable.isEmpty)
+        XCTAssertFalse(exact.isEmpty)
+        XCTAssertEqual(MIDIBuilder.build(original), before)
+    }
+
+    func testExistingMusicXMLFixturesImportAndRoundTrip() throws {
+        for name in ["musicxml-ev-roundtrip", "musicxml-musescore-tie-import", "musicxml-piano-two-staff-roundtrip"] {
+            let url = try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: "musicxml", subdirectory: "Fixtures"))
+            let first = try MusicXMLParser.parse(data: Data(contentsOf: url), fallbackTitle: name)
+            let exported = try XCTUnwrap(MusicXMLBuilder.build(first, options: .midiNear))
+            let second = try MusicXMLParser.parse(data: exported, fallbackTitle: name)
+            XCTAssertEqual(second.ti, first.ti)
+            XCTAssertEqual(second.ts.n, first.ts.n)
+            XCTAssertEqual(second.ts.d, first.ts.d)
+            XCTAssertEqual(second.tr.flatMap { $0.nt }.map { $0[2] }.sorted(),
+                           first.tr.flatMap { $0.nt }.map { $0[2] }.sorted(), name)
+            XCTAssertEqual(Set(second.tr.flatMap { $0.ev ?? [] }.map { $0.t }),
+                           Set(first.tr.flatMap { $0.ev ?? [] }.map { $0.t }), name)
+        }
+    }
+
+    func testCLABRemainsReadableWithoutRewritingOriginal() throws {
+        let document = CompositionLabDocument(title: "Altbestand", score: score(), concept: "Gedanke",
+            provider: .anthropic, model: "test", measures: "1", meter: "4/4", tempo: "96",
+            musicalKey: "C major", ensemble: "Piano", assignment: "Musik", sourceName: nil, sourceScore: nil)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(document)) as? [String: Any])
+        json["futureOptionalField"] = ["preserve": true]
+        let data = try JSONSerialization.data(withJSONObject: json, options: [.sortedKeys])
+        try CoreServices.validateDocument(data)
+        let unchanged = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNotNil(unchanged["futureOptionalField"])
+    }
+
+    func testInvalidScoreAndCorruptFilesFailCleanly() throws {
+        var invalid = score()
+        invalid.tr[0].nt[0][2] = 128
+        XCTAssertThrowsError(try CoreServices.midi(scoreJSON: JSONEncoder().encode(invalid)))
+        XCTAssertThrowsError(try CoreServices.importMIDI(Data("bad midi".utf8), title: "invalid"))
+        XCTAssertThrowsError(try CoreServices.importMusicXML(Data("<bad>".utf8), title: "invalid"))
+    }
+
+    func testWorkflowUsesFinishedCompositionThenTranslation() throws {
+        let json = String(data: try JSONEncoder().encode(score()), encoding: .utf8)!
+        let fake = FakeAI([.success(LLMResponse(text: "Fertiges Stück", inputTokens: 100, outputTokens: 200)),
+                           .success(LLMResponse(text: json, inputTokens: 300, outputTokens: 400))])
+        var received: CompositionResult?
+        CompositionWorkflow(client: fake).compose(request()) { result in
+            switch result { case .success(let work): received = work
+            case .failure(let error): XCTFail(error.localizedDescription) }
+        }
+        let work = try XCTUnwrap(received)
+        XCTAssertEqual(fake.calls.map { $0.purpose }, ["composition", "composition.technical-translation"])
+        XCTAssertEqual(fake.calls.map { $0.wantJSON }, [false, true])
+        XCTAssertEqual(fake.calls[0].user, ComposerPrompts.compositionPrompt("Ein Klavierstück"))
+        XCTAssertEqual(fake.calls[1].user, ComposerPrompts.translationPrompt(composition: "Fertiges Stück"))
+        XCTAssertEqual(work.inputTokens, 400)
+        XCTAssertEqual(work.outputTokens, 600)
+        XCTAssertNotNil(work.diagnostic["score"])
+        XCTAssertEqual(work.diagnostic["composition"] as? String, "Fertiges Stück")
+        let diagnostic = String(data: try JSONSerialization.data(withJSONObject: work.diagnostic), encoding: .utf8)!
+        XCTAssertFalse(diagnostic.contains("TEST-KEY-DO-NOT-LOG"))
+    }
+
+    func testWorkflowDoesNotTranslateAfterCreativeFailure() {
+        let fake = FakeAI([.failure(APIError.emptyResponse)])
+        var failed = false
+        CompositionWorkflow(client: fake).compose(request()) { result in
+            if case .failure(let error) = result {
+                failed = true
+                XCTAssertEqual(error.diagnostic["failedStage"] as? String, "composition-request")
+            }
+        }
+        XCTAssertTrue(failed)
+        XCTAssertEqual(fake.calls.count, 1)
+    }
+
+    func testTranslationFailureKeepsCompletedMusicAndRawResponse() {
+        let fake = FakeAI([.success(LLMResponse(text: "Meine Komposition", inputTokens: 1, outputTokens: 2)),
+                           .success(LLMResponse(text: "Kein JSON", inputTokens: 3, outputTokens: 4))])
+        var failed = false
+        CompositionWorkflow(client: fake).compose(request()) { result in
+            if case .failure(let error) = result {
+                failed = true
+                XCTAssertEqual(error.diagnostic["composition"] as? String, "Meine Komposition")
+                XCTAssertEqual(error.diagnostic["scoreResponse"] as? String, "Kein JSON")
+            }
+        }
+        XCTAssertTrue(failed)
+    }
+
+    private func request() -> CompositionRequest {
+        CompositionRequest(assignment: "Ein Klavierstück", provider: .anthropic,
+                           model: "test", effort: .high, key: "TEST-KEY-DO-NOT-LOG")
+    }
+}
+
+private final class FakeAI: AIRequesting {
+    struct Call { let purpose: String; let wantJSON: Bool; let user: String }
+    var calls: [Call] = []
+    private var responses: [Result<LLMResponse, Error>]
+    init(_ responses: [Result<LLMResponse, Error>]) { self.responses = responses }
+    func call(provider: Provider, model: String, key: String, effort: Effort, purpose: String,
+              system: String, user: String, wantJSON: Bool, completion: @escaping APIClient.Completion) {
+        calls.append(Call(purpose: purpose, wantJSON: wantJSON, user: user))
+        guard !responses.isEmpty else { XCTFail("Unexpected API call"); return }
+        completion(responses.removeFirst())
+    }
+}

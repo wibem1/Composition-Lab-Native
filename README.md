@@ -1,3 +1,28 @@
+# Composition Lab Native 4.0 – Mac / Windows
+
+**Entwicklungszweig `v4-cross-platform` · 4.0.0-alpha.1 / Build 4001**
+
+Die bisherige Version 3.5.3 bleibt auf `main` und unter
+`reference-v3.5.3-before-v4` unverändert erhalten. Diese Alpha ersetzt sie nicht.
+
+Gemeinsamer Swift-Kern für Mac und Windows: MIDI, MusicXML, Datenmodell,
+Projektformate, KI-Kommunikation und zweistufiger Kompositionsablauf.
+Die Mac-Test-App verwendet denselben Kern und hat eine eigene App-Kennung sowie
+getrennte Einstellungen und Schlüsselablage. Die grafische Windows-App ist noch
+nicht umgesetzt; vorerst gibt es den Kern und ein Konvertierungs-/Prüfprogramm.
+
+- Architektur und Grenzen: [V4-ARCHITECTURE.md](V4-ARCHITECTURE.md)
+- Tests: `swift test`
+- Kern/CLI: `swift build -c release`
+- Mac-Test-App: `bash 'Build Native App.command'`
+- Version: `swift run composition-lab-core --version`
+- Plattformprüfung: `.github/workflows/v4-core.yml`
+
+Die nachfolgende historische Dokumentation beschreibt 3.5.3 und frühere Stände.
+Sie ist keine Spezifikation der Windows-Oberfläche.
+
+---
+
 # Composition Lab Native
 
 > **CURRENT TEST CANDIDATE: V3.5.3 Build 3503** on `main`.

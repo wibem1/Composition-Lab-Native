@@ -16,7 +16,7 @@ struct CurrentPlayerState: Codable {
 
 final class Storage {
     static let shared = Storage()
-    private let defaults = UserDefaults.standard
+    private let defaults = UserDefaults(suiteName: "de.klangwerke.compositionlab.native.v4")!
 
     func loadSettings() -> AppSettings {
         guard let data = defaults.data(forKey: "settings"),
