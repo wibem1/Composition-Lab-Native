@@ -1,4 +1,12 @@
-# Windows Alpha 4 · Build 4004
+# Neue Werkstatt · Alpha 5 · Build 4005 · 13.10.2026
+
+Eine neue Windows-Oberfläche mit eigenem Erscheinungsbild: dunkler Kopfbereich, helle gerundete Arbeitsflächen, Petrol als Akzent und lesbare Typografie. Links stehen die zehn Stücke dauerhaft in einer Bibliothek. Die nummerierten Karten zeigen vollständige Titel soweit Platz vorhanden ist; **+** lädt eine Datei in diesen Platz, **×** löscht ihn. Rechtsklick und Dateidrop bleiben verfügbar.
+
+**Werkstatt / Noten / Technik** wechseln den Arbeitsbereich. Player, aktuelles Stück und Auftrag bleiben erreichbar. Dateiaktionen stehen unter **Datei & Export**. Der Auftrag hat klar beschriftete Parameterfelder und eine hervorgehobene Komponieren-Schaltfläche. Der musikalische Ablauf, Exporte und gespeicherte Arbeitsstände bleiben kompatibel.
+
+Das Fenster passt sich nach dem Start an den verfügbaren Bildschirm an. Windows übernimmt die DPI-Skalierung. Automatische geometrische Prüfungen kontrollieren alle drei Arbeitsbereiche bei 1000×700 und 1400×940 Pixeln; zusätzlich werden echte Fensterbilder erzeugt. Die bisherige Mac-Version wird nicht ersetzt.
+
+# Windows Alpha 4 · Build 4005
 
 Die Stück-Karten zeigen Titel und Auswahl. Klick auf einen freien Platz öffnet den Import. Jeder Platz besitzt **Laden** und **×** zum einzelnen Löschen; außerdem gibt es ein Rechtsklick-Menü und Dateidrop. Unterstützt werden einzelne CLAB-Stücke, MIDI, MusicXML und Kompositionsdiagnosen. Ersetzen und Löschen werden bestätigt. Ein ungültiger Import lässt das bisherige Stück erhalten.
 
@@ -8,7 +16,7 @@ Dateiaktionen befinden sich im Menü **Datei**. Die kompaktere Oberfläche läss
 
 # Composition Lab Native 4.0 – erste Windows-Testversion
 
-Version 4.0.0-alpha.4 · Build 4004 · Windows 10/11, 64 Bit Intel/AMD
+Version 4.0.0-alpha.5 · Build 4005 · Windows 10/11, 64 Bit Intel/AMD
 
 ## Start
 
