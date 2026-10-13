@@ -97,6 +97,7 @@ internal sealed class MainForm : Form
     void BuildUI()
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -170,6 +171,7 @@ internal sealed class MainForm : Form
             "Diese erste Windows-Alpha ist getrennt von der bisherigen Mac-App. Es gibt keine automatische DAW-Übergabe oder automatische Aktualisierung." });
         technicalTabs.TabPages.Add(info);
         var right = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 6, ColumnCount = 1 };
+        right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         right.RowStyles.Add(new RowStyle(SizeType.AutoSize)); right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         right.RowStyles.Add(new RowStyle(SizeType.AutoSize)); right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -558,7 +560,7 @@ internal sealed class MainForm : Form
         var screenBounds = RectangleToScreen(ClientRectangle);
         foreach (var control in slotCards.Cast<Control>().Concat(new Control[] { ensemble, composition, compose }))
             if (control.Visible && !screenBounds.Contains(control.RectangleToScreen(control.ClientRectangle)))
-                throw new Exception("Bedienelement liegt außerhalb des sichtbaren Fensters: " + control.Text);
+                throw new Exception("Bedienelement liegt außerhalb des sichtbaren Fensters: " + control.Text + " / " + control.RectangleToScreen(control.ClientRectangle) + " / Fenster " + screenBounds);
         using var bitmap = new Bitmap(Width, Height); DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size));
         bitmap.Save(Path.Combine(output, "Windows-Starttest.png"));
         return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "DPAPI", "no secrets in workspace" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
