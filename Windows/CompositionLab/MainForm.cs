@@ -182,6 +182,7 @@ internal sealed class MainForm : Form
         deck.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         deck.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
         var cards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 10, RowCount = 1 };
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         for (int i = 0; i < 10; i++)
         {
             int index = i; cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10));
