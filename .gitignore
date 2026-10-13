@@ -53,3 +53,9 @@ LocalConfig/
 .build-native-v4/
 Composition Lab 4.0.app/
 !Tests/CompositionCoreTests/Fixtures/*.musicxml
+
+Windows/CompositionLab/bin/
+Windows/CompositionLab/obj/
+Windows/Bundle/
+Windows/TestResults/
+Composition-Lab-*.zip

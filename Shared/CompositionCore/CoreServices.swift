@@ -3,7 +3,7 @@ import Foundation
 /// Small public boundary for desktop clients. JSON preserves the existing score
 /// and CLAB wire format; AppKit and Windows APIs never enter this module.
 public enum CoreServices {
-    public static let version = "4.0.0-alpha.1"
+    public static let version = "4.0.0-alpha.2"
 
     public static func midi(scoreJSON: Data) throws -> Data {
         MIDIBuilder.build(try validatedScore(scoreJSON))
@@ -44,6 +44,7 @@ public enum CoreServices {
     /// requestJSON: assignment, provider (openai/anthropic/gemini), model, effort
     /// (low/medium/high). API key is supplied separately and never serialized.
     public static func compose(requestJSON: Data, apiKey: String,
+                               progress: ((String) -> Void)? = nil,
                                completion: @escaping (Result<Data, Error>) -> Void) {
         do {
             let dto = try JSONDecoder().decode(RequestDTO.self, from: requestJSON)
@@ -53,7 +54,9 @@ public enum CoreServices {
             }
             let request = CompositionRequest(assignment: dto.assignment, provider: dto.provider,
                 model: dto.model, effort: dto.effort, key: apiKey)
-            CompositionWorkflow().compose(request) { result in
+            CompositionWorkflow().compose(request, progress: { stage, _ in
+                progress?(stage.rawValue)
+            }) { result in
                 switch result {
                 case .success(let work):
                     completion(Result { try JSONSerialization.data(withJSONObject: work.diagnostic,
@@ -64,6 +67,25 @@ public enum CoreServices {
                     completion(.failure(CoreCompositionError(message: failure.localizedDescription,
                                                              diagnosticJSON: data)))
                 }
+            }
+        } catch { completion(.failure(error)) }
+    }
+
+    public static func chat(requestJSON: Data, apiKey: String,
+                            completion: @escaping (Result<Data, Error>) -> Void) {
+        do {
+            let dto = try JSONDecoder().decode(RequestDTO.self, from: requestJSON)
+            guard !dto.assignment.isEmpty, !apiKey.isEmpty else { throw APIError.emptyResponse }
+            APIClient.shared.call(provider: dto.provider, model: dto.model, key: apiKey,
+                effort: dto.effort, purpose: "music-chat", system: "", user: dto.assignment,
+                wantJSON: false) { result in
+                completion(result.flatMap { response in Result {
+                    let diagnostic: [String: Any] = ["text": response.text,
+                        "inputTokens": response.inputTokens, "outputTokens": response.outputTokens,
+                        "estimatedCostUSD": APICost.estimate(provider: dto.provider, model: dto.model,
+                            inputTokens: response.inputTokens, outputTokens: response.outputTokens)]
+                    return try JSONSerialization.data(withJSONObject: diagnostic)
+                } })
             }
         } catch { completion(.failure(error)) }
     }

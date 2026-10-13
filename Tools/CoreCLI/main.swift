@@ -4,7 +4,9 @@ import CompositionCore
 // File conversion harness, not the Windows graphical application.
 do {
     let args = Array(CommandLine.arguments.dropFirst())
-    if args == ["--version"] {
+    if args == ["service"] {
+        try BridgeService.run()
+    } else if args == ["--version"] {
         print("Composition Lab Core \(CoreServices.version)")
     } else if args.count == 3 {
         let input = URL(fileURLWithPath: args[1])

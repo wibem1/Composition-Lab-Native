@@ -38,15 +38,23 @@ jobs:
           test -x 'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0'
           lipo 'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0' -verify_arch x86_64 arm64
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' 'Composition Lab 4.0.app/Contents/Info.plist')" = 'de.klangwerke.compositionlab.native.v4'
-          ditto -c -k --keepParent 'Composition Lab 4.0.app' Composition-Lab-4.0-alpha.1-Mac.zip
+          ditto -c -k --keepParent 'Composition Lab 4.0.app' Composition-Lab-4.0-alpha.2-Mac.zip
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
         with:
-          name: Composition-Lab-4.0-alpha.1-Mac
-          path: Composition-Lab-4.0-alpha.1-Mac.zip
+          name: Composition-Lab-4.0-alpha.2-Mac
+          path: Composition-Lab-4.0-alpha.2-Mac.zip
+      - name: Build Windows desktop and test bundled runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./Windows/Build.ps1
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
-          name: Composition-Lab-4.0-alpha.1-Windows-Core
-          path: .build/release/
-          include-hidden-files: true
+          name: Composition-Lab-4.0-alpha.2-Windows-x64
+          path: Composition-Lab-4.0-alpha.2-Windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'Windows'
+        with:
+          name: Windows-Starttest
+          path: Windows/TestResults/
