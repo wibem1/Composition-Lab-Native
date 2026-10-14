@@ -50,7 +50,7 @@ internal sealed partial class MainForm
         public readonly TrackBar Volume = new() { Width = 130, Height = 26, Maximum = 100, Value = 90, TickStyle = TickStyle.None, AutoSize = false };
     }
     static Font MacFont(float points, FontStyle style = FontStyle.Regular) => new("Segoe UI", points * .75f, style);
-    static Label MacLabel(string text, float size = 12, bool bold = false) => new() { Text = text, AutoSize = true, Font = MacFont(size, bold ? FontStyle.Bold : FontStyle.Regular), ForeColor = StudioTheme.Ink, Margin = new Padding(0, 5, 7, 0) };
+    static Label MacLabel(string text, float size = 13, bool bold = false) => new() { Text = text, AutoSize = true, Font = MacFont(size, bold ? FontStyle.Bold : FontStyle.Regular), ForeColor = StudioTheme.Ink, Margin = new Padding(0, 5, 7, 0) };
     static StudioSurface MacPanel() => new() { Dock = DockStyle.Fill, Padding = new Padding(14, 12, 14, 12), BackColor = StudioTheme.Canvas, Margin = Padding.Empty };
     static FlowLayoutPanel MacRow(bool wrap = false) => new() { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = wrap, Margin = Padding.Empty, Padding = Padding.Empty };
     void BuildMacUI()
@@ -97,11 +97,13 @@ internal sealed partial class MainForm
         provider.Width = 130; model.Width = 148; effort.Width = 140;
         provider.SelectedIndexChanged += (_, _) => ProviderChanged();
         row.Controls.Add(MacLabel("KI", 12, true)); row.Controls.Add(provider); row.Controls.Add(model); row.Controls.Add(effort);
-        row.Controls.Add(MacLabel("Takte")); measures.Width = 62; measures.Items.AddRange(new object[] { "2", "4", "8", "16", "24", "32", "48", "64" }); measures.HandleCreated += (_, _) => NativeCue.SendMessage(measures.Handle, 0x1703, new IntPtr(1), "24"); row.Controls.Add(measures); row.Controls.Add(meter);
-        row.Controls.Add(MacLabel("Tempo")); tempo.Width = 58; tempo.PlaceholderText = "96"; row.Controls.Add(tempo);
-        row.Controls.Add(MacLabel("Tonart")); musicalKey.Width = 86; musicalKey.PlaceholderText = "C-Dur"; row.Controls.Add(musicalKey);
-        row.Controls.Add(MacLabel("Instrumente")); ensemble.Width = 150; ensemble.PlaceholderText = "Piano"; row.Controls.Add(ensemble);
-        controls.Controls.Add(row); controls.Margin = new Padding(0, 0, 0, 14); main.Controls.Add(controls, 0, 0);
+        var rightParameters = MacRow();
+        rightParameters.Controls.Add(MacLabel("Takte")); measures.Width = 62; measures.Items.AddRange(new object[] { "2", "4", "8", "16", "24", "32", "48", "64" }); measures.HandleCreated += (_, _) => NativeCue.SendMessage(measures.Handle, 0x1703, new IntPtr(1), "24"); rightParameters.Controls.Add(measures); rightParameters.Controls.Add(meter);
+        rightParameters.Controls.Add(MacLabel("Tempo")); tempo.Width = 58; tempo.PlaceholderText = "96"; rightParameters.Controls.Add(tempo);
+        rightParameters.Controls.Add(MacLabel("Tonart")); musicalKey.Width = 86; musicalKey.PlaceholderText = "C-Dur"; rightParameters.Controls.Add(musicalKey);
+        rightParameters.Controls.Add(MacLabel("Instrumente")); ensemble.Width = 150; ensemble.PlaceholderText = "Piano"; rightParameters.Controls.Add(ensemble);
+        var parameterLayout = Grid(3, 1); parameterLayout.ColumnStyles.Clear(); parameterLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); parameterLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); parameterLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); parameterLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); parameterLayout.Controls.Add(row, 0, 0); parameterLayout.Controls.Add(rightParameters, 2, 0);
+        controls.Controls.Add(parameterLayout); controls.Margin = new Padding(0, 0, 0, 14); main.Controls.Add(controls, 0, 0);
         var work = Grid(2, 1); work.ColumnStyles.Clear(); work.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 66)); work.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34)); work.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); work.Margin = new Padding(0, 0, 0, 14);
         var chatPanel = MacPanel(); chatPanel.Margin = new Padding(0, 0, 7, 0); var chatLayout = Grid(1, 3);
         chatLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36)); chatLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); chatLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
@@ -225,7 +227,7 @@ internal sealed partial class MainForm
         var page = Grid(1, 4); page.Padding = new Padding(18, 16, 18, 16); page.RowStyles.Add(new RowStyle(SizeType.Absolute, 32)); page.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); page.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         page.Controls.Add(MacLabel("Technik", 17, true), 0, 0); page.Controls.Add(new Label { Text = "API-Schlüssel, MIDI-Ausgabe, technische Prüfung, JSON, Diagnose und Verlauf. Diese Werkzeuge sind bewusst von der musikalischen Hauptseite getrennt.", Dock = DockStyle.Fill, Font = MacFont(12), ForeColor = StudioTheme.Muted }, 0, 1);
         var actions = MacRow(); AddButton(actions, "API-Schlüssel …", ShowKeys); AddButton(actions, "MIDI-Ausgabe …", ShowMidiOutput); AddButton(actions, "CLAB öffnen …", () => OpenAsync()); AddButton(actions, "CLAB sichern …", SaveDocumentAsync); AddButton(actions, "JSON sichern …", SaveScoreJSON); page.Controls.Add(actions, 0, 2);
-        var pages = new TabControl { Dock = DockStyle.Fill }; foreach (var pair in new[] { ("Technische Prüfung", (Control)validation), ("JSON", (Control)scoreJSON), ("Verlauf", BuildHistory()), ("Diagnose", (Control)diagnostic) }) { var tab = new TabPage(pair.Item1); tab.Controls.Add(pair.Item2); pages.TabPages.Add(tab); } page.Controls.Add(pages, 0, 3);
+        var pages = new TabControl { Dock = DockStyle.Fill }; foreach (var pair in new[] { ("Technische Prüfung", (Control)validation), ("JSON", (Control)scoreJSON), ("Verlauf", BuildHistory()) }) { var tab = new TabPage(pair.Item1); tab.Controls.Add(pair.Item2); pages.TabPages.Add(tab); } page.Controls.Add(pages, 0, 3);
         return ScrollWorkspace(page, 1000, 640);
     }
     Control BuildHistory()
