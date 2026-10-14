@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.10 · Build 4010";
+    const string Version = "4.0.0-alpha.11 · Build 4011";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -604,7 +604,7 @@ internal sealed partial class MainForm : Form
         const string probe = "ÄÖÜ äöü ß – musikalischer Dialog";
         var version = await core.RunAsync(new JsonObject { ["operation"] = "version", ["title"] = probe });
         if (version["titleEcho"]?.GetValue<string>() != probe) throw new Exception("UTF-8-Prozesskommunikation beschädigt.");
-        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.10") throw new Exception("Falscher Kern.");
+        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.11") throw new Exception("Falscher Kern.");
         var fixture = JsonNode.Parse("""{"ti":"Windows Starttest","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,0,1],[1,1,64,80,0,1],[2,2,67,80,0,1]]}]}""")!.AsObject();
         documents[0] = CreateDocument(fixture, "Automatischer Test ohne KI-Kosten."); RefreshSlots();
         await DisplayCurrentAsync();
@@ -729,6 +729,13 @@ internal sealed partial class MainForm : Form
                     var right = mainSplit.Panel2.RectangleToScreen(mainSplit.Panel2.ClientRectangle);
                     var viewport = tabs.RectangleToScreen(tabs.ClientRectangle);
                     if (right.Left < viewport.Left || right.Right > viewport.Right) throw new Exception("Kompositionsidee außerhalb der sichtbaren Fensterbreite.");
+                    var deckBounds = slotCards[0].Parent!.RectangleToScreen(slotCards[0].Parent!.ClientRectangle);
+                    foreach (var card in slotCards)
+                    {
+                        if (!deckBounds.Contains(card.RectangleToScreen(card.ClientRectangle))) throw new Exception("Slot-Button außerhalb der Leiste.");
+                        if (card.Width < 30) throw new Exception("Slot-Button zu schmal.");
+                    }
+                    if (slotCards[0].Parent is ScrollableControl deckScroll && deckScroll.AutoScroll) throw new Exception("Slot-Leiste besitzt Scrollbalken.");
                     int previousDistance = mainSplit.SplitterDistance;
                     mainSplitDragging = true;
                     mainSplit.SplitterDistance = mainSplit.Panel1MinSize;
@@ -775,7 +782,7 @@ internal sealed partial class MainForm : Form
         }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten compact 104x100 cards", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches after low-button focus keep top parameters and all main controls stable", "finished chat music commits into a free active slot with MIDI, original source and no overwrite" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches after low-button focus keep top parameters and all main controls stable", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {

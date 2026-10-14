@@ -1,4 +1,4 @@
-# Alpha 10 · Build 4010 · 14.10.2026 – Korrektur der Windows-Skalierung
+# Alpha 11 · Build 4011 · 14.10.2026 – Korrektur der Windows-Skalierung
 
 Maßgeblich ist die GUI aus `main` (Mac 3.5.3, Commit a2aefd7). Die folgenden älteren Abschnitte beschreiben frühere Windows-Stände.
 
@@ -41,3 +41,9 @@ Fertige LilyPond-Kompositionen aus dem Chat werden einmal technisch in die inter
 Zum Übernehmen einer früheren Chat-Komposition: Komposition → Fertige Komposition übernehmen. Alternativ ihre Diagnose-JSON öffnen/importieren. Diese technische Übertragung benötigt den eingetragenen KI-Schlüssel und verursacht die Kosten einer Übersetzungsanfrage; die ursprüngliche Komposition wird nicht neu erzeugt.
 
 Die Karten sind 104 × 100 statt 116 × 164 logische Pixel groß; die Slot-Leiste ist entsprechend flacher.
+
+## Slot-Leiste und Streicherschlüssel in Alpha 11
+
+Alle zehn Slot-Buttons teilen sich die sichtbare Breite ohne eigene horizontale oder vertikale Scrollfläche. Lange Titel werden gekürzt; der vollständige Titel bleibt als Tooltip verfügbar.
+
+Die Zuordnung der Solo-Streicher im MusicXML-Export ist korrigiert: Violine G2, Viola C3, Cello/Kontrabass F4. Tonhöhen und MIDI bleiben erhalten. Vorhandene Stücke brauchen keine neue KI-Anfrage: neu laden oder unter Noten aktualisieren.

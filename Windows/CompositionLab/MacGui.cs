@@ -178,19 +178,19 @@ internal sealed partial class MainForm
         idea.Controls.Add(MacLabel("Aktuelle Kompositionsidee", 16, true), 0, 0); composition.BorderStyle = BorderStyle.FixedSingle; idea.Controls.Add(composition, 0, 1); ideaPanel.Controls.Add(idea); work.Panel2.Controls.Add(ideaPanel); main.Controls.Add(work, 0, 1);
         var deck = MacPanel(); deck.Padding = new Padding(7, 5, 7, 5); deck.Margin = new Padding(0, 0, 0, 14);
         var dl = Grid(1, 2); dl.RowStyles.Add(new RowStyle(SizeType.AutoSize)); dl.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); dl.Controls.Add(MacLabel("Stücke (1–10)", 14, true), 0, 0);
-        var cardScroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
-        var cards = new FlowLayoutPanel { Location = Point.Empty, Width = 1115, Height = 106, WrapContents = false, Margin = Padding.Empty, Padding = new Padding(1, 2, 1, 1) };
+        // Ten equal columns always fit the viewport; the buttons have no scroll host.
+        var cards = Grid(10, 1); cards.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         for (int i = 0; i < 10; i++)
         {
-            int index = i; var card = new PieceCard { Number = i + 1, Width = 104, Height = 100, AutoSize = false, Margin = new Padding(0, 0, 8, 0), Font = MacFont(12), AllowDrop = true };
+            int index = i; var card = new PieceCard { Number = i + 1, Dock = DockStyle.Fill, MaximumSize = new Size(0, 100), AutoSize = false, Margin = new Padding(3), Font = MacFont(12), AllowDrop = true };
             card.Click += (_, _) => { if (!busy) slots.SelectedIndex = index; };
             card.DragEnter += (_, e) => e.Effect = !busy && e.Data?.GetDataPresent(DataFormats.FileDrop) == true ? DragDropEffects.Copy : DragDropEffects.None;
             card.DragDrop += async (_, e) => { if (!busy && e.Data?.GetData(DataFormats.FileDrop) is string[] paths && paths.Length == 1) await GuardAsync(() => ImportIntoSlotAsync(paths[0], index)); };
             var menu = new ContextMenuStrip(); menu.Items.Add("MIDI-Datei laden …", null, async (_, _) => await GuardAsync(() => OpenAsync(index)));
             menu.Items.Add("CLAB-Datei laden …", null, async (_, _) => await GuardAsync(() => OpenAsync(index))); menu.Items.Add(new ToolStripSeparator()); menu.Items.Add("Stück löschen", null, async (_, _) => await DeleteSlotAsync(index)); card.ContextMenuStrip = menu;
-            slotCards.Add(card); cards.Controls.Add(card);
+            slotCards.Add(card); cards.Controls.Add(card, i, 0);
         }
-        cardScroll.Controls.Add(cards); dl.Controls.Add(cardScroll, 0, 1); deck.Controls.Add(dl); main.Controls.Add(deck, 0, 2);
+        dl.Controls.Add(cards, 0, 1); deck.Controls.Add(dl); main.Controls.Add(deck, 0, 2);
         var bottom = MacPanel(); bottom.Padding = new Padding(8, 5, 8, 5); var bl = Grid(1, 2); bl.RowStyles.Add(new RowStyle(SizeType.Absolute, 34)); bl.RowStyles.Add(new RowStyle(SizeType.Absolute, 34)); var playerRow = BuildTransport(false); bl.Controls.Add(playerRow, 0, 0);
         var actions = MacRow(true); AddButton(actions, "MIDI sichern", () => ExportAsync("mid")); AddButton(actions, "CLAB sichern", SaveDocumentAsync); AddButton(actions, "CLAB laden …", () => OpenAsync());
         actions.Controls.Add(new Panel { Width = 22, Height = 1 }); AddButton(actions, "Import …", () => OpenAsync(slots.SelectedIndex)); AddButton(actions, "Motiv …", PrepareMotif);

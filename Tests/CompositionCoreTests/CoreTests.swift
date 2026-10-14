@@ -30,6 +30,18 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(MIDIBuilder.build(original), before)
     }
 
+    func testSoloStringClefsDoNotChangePitchOrPlayback() throws {
+        for (program, name, sign, line) in [(40, "Violine", "G", 2), (41, "Viola", "C", 3), (42, "Cello", "F", 4), (43, "Kontrabass", "F", 4)] {
+            var piece = score(); piece.tr[0].pg = program; piece.tr[0].nm = name
+            let before = MIDIBuilder.build(piece)
+            let xml = try XCTUnwrap(MusicXMLBuilder.build(piece, options: .midiNear))
+            XCTAssertTrue(xml.contains("<clef><sign>\(sign)</sign><line>\(line)</line></clef>"), name)
+            XCTAssertEqual(MIDIBuilder.build(piece), before)
+            let imported = try MusicXMLParser.parse(data: Data(xml.utf8), fallbackTitle: name)
+            XCTAssertEqual(imported.tr[0].nt.map { $0[2] }, piece.tr[0].nt.map { $0[2] })
+        }
+    }
+
     func testWindowsNotationOptionsUseTheSameMacExporter() throws {
         let data = try JSONEncoder().encode(score())
         let before = try CoreServices.midi(scoreJSON: data)
