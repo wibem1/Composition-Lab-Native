@@ -419,7 +419,7 @@ internal sealed partial class MainForm : Form
         {
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(dataDirectory, "WebView2"));
             await web.EnsureCoreWebView2Async(environment);
-            webReady = true; web.CoreWebView2.Settings.AreDevToolsEnabled = false;
+            webReady = true; web.CoreWebView2.WebMessageReceived += (_, e) => { try { var message = JsonNode.Parse(e.WebMessageAsJson)!; previewPage.Text = "Seite " + message["page"] + " / " + message["count"]; previewZoom.Text = message["zoom"] + " %"; } catch (JsonException) { } }; web.CoreWebView2.Settings.AreDevToolsEnabled = false;
             web.CoreWebView2.Settings.IsStatusBarEnabled = false;
             web.CoreWebView2.NewWindowRequested += (_, e) => e.Handled = true;
             RenderNotation();
@@ -438,11 +438,12 @@ internal sealed partial class MainForm : Form
         var xml = JsonSerializer.Serialize(currentXML ?? "");
         var html = """
             <!doctype html><html><head><meta charset="utf-8"><style>
-            body{font:15px Segoe UI,sans-serif;margin:20px;background:white;color:#222} svg{display:block;max-width:100%;height:auto}button{padding:5px 12px;margin-right:8px}
-            </style></head><body><div><button onclick="zoom(-10)">−</button><button onclick="zoom(10)">+</button><span id="msg">Notensatz wird geladen …</span></div><div id="score"></div>
-            <script>let toolkit,scale=40;const xml=XML_VALUE;
-            function render(){if(!xml){document.getElementById('msg').textContent='Kein Stück geladen.';return}try{toolkit.setOptions({scale:scale,pageWidth:1700,pageHeight:2400,adjustPageHeight:true});toolkit.loadData(xml);let html='';for(let p=1;p<=toolkit.getPageCount();p++)html+=toolkit.renderToSVG(p);document.getElementById('score').innerHTML=html;document.getElementById('msg').textContent=toolkit.getPageCount()+' Seiten'}catch(e){document.getElementById('msg').textContent='Notensatz: '+e.message}}
-            function zoom(delta){scale=Math.max(20,Math.min(100,scale+delta));if(toolkit)render()}
+            body{font:13px Segoe UI,sans-serif;margin:10px;background:white;color:#222} svg{display:block;max-width:100%;height:auto}button{padding:5px 12px;margin-right:8px}
+            </style></head><body><div><span id="msg">Notensatz wird geladen …</span></div><div id="score"></div>
+            <script>let toolkit,scale=40,currentPage=1;const xml=XML_VALUE;
+            function render(){if(!xml){document.getElementById('msg').textContent='Kein Stück geladen.';return}try{toolkit.setOptions({scale:scale,pageWidth:1700,pageHeight:2400,adjustPageHeight:true});toolkit.loadData(xml);currentPage=Math.max(1,Math.min(currentPage,toolkit.getPageCount()));document.getElementById('score').innerHTML=toolkit.renderToSVG(currentPage);document.getElementById('msg').textContent='';window.chrome.webview.postMessage({page:currentPage,count:toolkit.getPageCount(),zoom:Math.round(scale/40*100)})}catch(e){document.getElementById('msg').textContent='Notensatz: '+e.message}}
+            function page(delta){currentPage+=delta;if(toolkit)render()}
+            function zoom(delta){scale=Math.max(20,Math.min(100,scale+delta*0.4));if(toolkit)render()}
             function ready(){toolkit=new verovio.toolkit();render()}
             const script=document.createElement('script');script.src='https://www.verovio.org/javascript/latest/verovio-toolkit-wasm.js';script.onload=()=>{if(verovio.module.calledRun||verovio.module.runtimeInitialized)ready();else verovio.module.onRuntimeInitialized=ready};script.onerror=()=>document.getElementById('msg').textContent='Verovio konnte nicht geladen werden. Internetverbindung prüfen.';document.head.appendChild(script);
             </script></body></html>

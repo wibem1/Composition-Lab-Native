@@ -82,7 +82,7 @@ internal sealed class PieceCard : StudioButton
         e.Graphics.Clear(StudioTheme.Behind(this));
         float scale = DeviceDpi / 96f;
         using var path = StudioTheme.Round(new RectangleF(0.5f, 0.5f, Width - 1, Height - 1), 8 * scale);
-        Color fill = Selected ? StudioTheme.AccentSoft : Color.FromArgb(248, 250, 251);
+        Color fill = Selected ? StudioTheme.AccentSoft : Color.White;
         using var brush = new SolidBrush(fill); e.Graphics.FillPath(brush, path);
         using var border = new Pen(Selected || Focused ? StudioTheme.Accent : StudioTheme.Line, Selected ? 2 : 1); e.Graphics.DrawPath(border, path);
         var textBounds = Rectangle.Inflate(ClientRectangle, -8, -10);

@@ -27,6 +27,8 @@ internal sealed partial class MainForm
     readonly List<Transport> transports = [];
     readonly ComboBox[] notationSettings = Enumerable.Range(0, 9).Select(_ => new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList }).ToArray();
     readonly CheckBox splitBeats = new() { Text = "Zusammengesetzte Notenwerte an Zählzeiten teilen und binden", Checked = true, AutoSize = false, Width = 264, Height = 50, MaximumSize = new Size(264, 50) };
+    readonly Label previewPage = new() { AutoSize = true, Text = "Seite – / –", Padding = new Padding(0, 5, 0, 0) };
+    readonly Label previewZoom = new() { AutoSize = true, Text = "100 %", Padding = new Padding(0, 5, 0, 0) };
     readonly Label notationCurrent = new() { AutoEllipsis = true };
     readonly Label notationSummary = new() { Dock = DockStyle.Fill, AutoSize = true };
     JsonObject? notationOptions;
@@ -48,7 +50,7 @@ internal sealed partial class MainForm
     }
     static Font MacFont(float points, FontStyle style = FontStyle.Regular) => new("Segoe UI", points * .75f, style);
     static Label MacLabel(string text, float size = 12, bool bold = false) => new() { Text = text, AutoSize = true, Font = MacFont(size, bold ? FontStyle.Bold : FontStyle.Regular), ForeColor = StudioTheme.Ink, Margin = new Padding(0, 5, 7, 0) };
-    static StudioSurface MacPanel() => new() { Dock = DockStyle.Fill, Padding = new Padding(14, 12, 14, 12), Margin = Padding.Empty };
+    static StudioSurface MacPanel() => new() { Dock = DockStyle.Fill, Padding = new Padding(14, 12, 14, 12), BackColor = StudioTheme.Canvas, Margin = Padding.Empty };
     static FlowLayoutPanel MacRow(bool wrap = false) => new() { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = wrap, Margin = Padding.Empty, Padding = Padding.Empty };
     void BuildMacUI()
     {
@@ -86,7 +88,7 @@ internal sealed partial class MainForm
     }
     Control BuildMacMain()
     {
-        var main = Grid(1, 4); main.Padding = new Padding(24, 18, 24, 18);
+        var main = Grid(1, 4); main.Padding = new Padding(0, 18, 0, 18);
         main.RowStyles.Add(new RowStyle(SizeType.Absolute, 72)); main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         main.RowStyles.Add(new RowStyle(SizeType.Absolute, 240)); main.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
         var controls = MacPanel(); var row = MacRow(); row.WrapContents = false;
@@ -180,10 +182,14 @@ internal sealed partial class MainForm
         for (int i = 0; i < 10; i++) { int index = i; var button = new StudioButton { Text = (i + 1).ToString(), Dock = DockStyle.Fill, AutoSize = false, Padding = Padding.Empty }; button.Click += (_, _) => { if (!busy) slots.SelectedIndex = index; }; notationCards.Add(button); numbers.Controls.Add(button, i, 0); } deck.Controls.Add(numbers, 0, 1); right.Controls.Add(deck, 0, 0);
         var transport = MacPanel(); transport.Padding = new Padding(10, 6, 10, 6); transport.Controls.Add(BuildTransport(true)); right.Controls.Add(transport, 0, 1);
         var previewHeader = Grid(1, 2); previewHeader.RowStyles.Add(new RowStyle(SizeType.Absolute, 30)); previewHeader.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); var titleRow = new Panel { Dock = DockStyle.Fill }; var title = MacLabel("Notenbildvorschau", 17, true); title.Dock = DockStyle.Left; notationCurrent.Dock = DockStyle.Right; notationCurrent.Width = 300; notationCurrent.TextAlign = ContentAlignment.MiddleRight; titleRow.Controls.Add(title); titleRow.Controls.Add(notationCurrent); previewHeader.Controls.Add(titleRow, 0, 0); previewHeader.Controls.Add(new Label { Text = "Schnelle Kontrolle der aktuellen MusicXML-Darstellung. Änderungen links werden automatisch in der Vorschau sichtbar; MIDI und interner Score bleiben unverändert.", Dock = DockStyle.Fill, ForeColor = StudioTheme.Muted, Font = MacFont(11.5f) }, 0, 1); right.Controls.Add(previewHeader, 0, 2);
-        notationHost.Controls.Add(web); right.Controls.Add(notationHost, 0, 3); notationSummary.Text = "Darstellungsregeln · Klavier – lesbar"; right.Controls.Add(notationSummary, 0, 4);
+        var preview = Grid(1, 2); preview.RowStyles.Add(new RowStyle(SizeType.Absolute, 36)); preview.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var previewTools = MacRow();
+        AddButton(previewTools, "◀", () => PreviewCommand("page(-1)")); previewTools.Controls.Add(previewPage); AddButton(previewTools, "▶", () => PreviewCommand("page(1)")); AddButton(previewTools, "−", () => PreviewCommand("zoom(-10)")); previewTools.Controls.Add(previewZoom); AddButton(previewTools, "+", () => PreviewCommand("zoom(10)")); AddButton(previewTools, "Aktualisieren", RefreshNotationAsync); AddButton(previewTools, "Drucken …", () => { if (webReady) web.CoreWebView2.ShowPrintUI(Microsoft.Web.WebView2.Core.CoreWebView2PrintDialogKind.Browser); return Task.CompletedTask; });
+        preview.Controls.Add(previewTools, 0, 0); notationHost.Controls.Add(web); preview.Controls.Add(notationHost, 0, 1); right.Controls.Add(preview, 0, 3); notationSummary.Text = "Darstellungsregeln · Klavier – lesbar"; right.Controls.Add(notationSummary, 0, 4);
         var exports = MacRow(); exports.Controls.Add(MacLabel("Export", 12, true)); var export = new StudioButton { Text = "MusicXML sichern / ziehen …", AutoSize = true }; export.Click += async (_, _) => await GuardAsync(() => ExportAsync("musicxml")); Point dragStart = Point.Empty; export.MouseDown += (_, e) => dragStart = e.Location; export.MouseMove += async (_, e) => { if (e.Button != MouseButtons.Left || Math.Abs(e.X - dragStart.X) + Math.Abs(e.Y - dragStart.Y) < 10 || Score == null) return; dragStart = e.Location; await GuardAsync(async () => { var result = await core.RunAsync(new JsonObject { ["operation"] = "musicxml", ["score"] = Score.DeepClone(), ["options"] = notationOptions?.DeepClone() }); string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".musicxml"); await File.WriteAllBytesAsync(path, Convert.FromBase64String(result["data"]!.GetValue<string>())); export.DoDragDrop(new DataObject(DataFormats.FileDrop, new[] { path }), DragDropEffects.Copy); }); }; exports.Controls.Add(export); right.Controls.Add(exports, 0, 5); page.Controls.Add(right, 1, 0);
         return ScrollWorkspace(page, 1160, 720);
     }
+    async Task PreviewCommand(string javascript) { if (webReady) await web.ExecuteScriptAsync(javascript); }
     async Task NotationChangedAsync(int changed)
     {
         if (updatingNotation || loadingSettings) return;
