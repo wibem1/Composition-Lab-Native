@@ -298,6 +298,7 @@ internal sealed partial class MainForm
                 right.RowStyles[1].Height = compact || shortWindow ? 0 : notationPlayer.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal - transport.Padding.Horizontal), 0)).Height + transport.Padding.Vertical;
                 right.RowStyles[2].Height = compact ? 0 : LayoutPixels(30);
                 right.RowStyles[5].Height = compact ? 0 : exports.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
+                preview.RowStyles[0].Height = previewTools.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
                 int settingWidth = Math.Max(1, sidebar - settings.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth - 8);
                 foreach (Control control in settings.Controls)
                 {
@@ -306,24 +307,22 @@ internal sealed partial class MainForm
                 }
                 splitBeats.Height = Math.Max(LayoutPixels(50), TextRenderer.MeasureText(splitBeats.Text, splitBeats.Font, new Size(settingWidth - 24, 0), TextFormatFlags.WordBreak).Height + 12);
             }
-            finally { preview.ResumeLayout(true); right.ResumeLayout(true); page.ResumeLayout(true); arranging = false; previewTools.PerformLayout(); FitFlowRow(previewTools, preview.RowStyles[0]); if (!compact) { FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical); FitFlowRow(exports, right.RowStyles[5]); } }
+            finally { preview.ResumeLayout(true); right.ResumeLayout(true); page.ResumeLayout(true); arranging = false; FitFlowRow(previewTools, preview.RowStyles[0]); if (!compact) { FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical); FitFlowRow(exports, right.RowStyles[5]); } }
         }
         void FitFlowRow(Control flow, RowStyle style, int padding = 0)
         {
-            if (flow.ClientSize.Width <= 0) return;
-            int needed = flow.Controls.Cast<Control>().Select(c => c.Bottom + c.Margin.Bottom).DefaultIfEmpty(0).Max() + padding;
+            if (flow.ClientSize.Width <= 0 || !flow.Visible) return;
+            int needed = flow.Controls.Cast<Control>().Where(c => c.Visible).Select(c => c.Bottom + c.Margin.Bottom).DefaultIfEmpty(0).Max() + padding;
             if (Math.Abs(style.Height - needed) > .5f) style.Height = needed;
         }
         previewTools.Layout += (_, _) => FitFlowRow(previewTools, preview.RowStyles[0]);
-        notationPlayer.Layout += (_, _) => { if (transport.Visible) FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical); };
-        exports.Layout += (_, _) => { if (exports.Visible) FitFlowRow(exports, right.RowStyles[5]); };
+        notationPlayer.Layout += (_, _) => { if (!largePreview) FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical); };
+        exports.Layout += (_, _) => { if (!largePreview) FitFlowRow(exports, right.RowStyles[5]); };
         toggleLargePreview = () => { largePreview = !largePreview; enlarge.Text = largePreview ? "Normale Ansicht" : "Große Ansicht"; ArrangeNotation(); };
         page.SizeChanged += (_, _) => ArrangeNotation();
         right.SizeChanged += (_, _) => ArrangeNotation();
         var viewport = new WorkspacePanel { Dock = DockStyle.Fill, AutoScroll = false, BackColor = StudioTheme.Canvas };
-        viewport.Controls.Add(page);
-        viewport.VisibleChanged += (_, _) => { if (viewport.Visible) { ArrangeNotation(); previewTools.PerformLayout(); FitFlowRow(previewTools, preview.RowStyles[0]); } };
-        return viewport;
+        viewport.Controls.Add(page); return viewport;
     }
     async Task PreviewCommand(string javascript) { if (webReady) await web.ExecuteScriptAsync(javascript); }
     async Task NotationChangedAsync(int changed)
@@ -424,3 +423,4 @@ internal sealed partial class MainForm
         Array.Copy(imported, documents, 10); projectName = project["name"]?.GetValue<string>() ?? "Unbenannt"; chat.Text = project["chat"]?.GetValue<string>() ?? ""; composition.Text = project["concept"]?.GetValue<string>() ?? settings["prompt"]?.GetValue<string>() ?? ""; RefreshSlots(); slots.SelectedIndex = Math.Clamp(project["activeSlot"]?.GetValue<int>() ?? 0, 0, 9); await DisplayCurrentAsync(); SaveLocalState();
     }
 }
+

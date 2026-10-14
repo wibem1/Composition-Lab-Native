@@ -12,7 +12,7 @@ Windows-Oberfläche verwendet. Runtime-DLLs und .NET sind im Windows-ZIP enthalt
 
 - Windows: [Start und Funktionen](Windows/README-Windows.md)
 - Architektur: [V4-ARCHITECTURE.md](V4-ARCHITECTURE.md)
-- Tests und Downloads: [GitHub Actions](https://github.com/wibem1/Composition-Lab-Native/actions/runs/38586771760)
+- Tests und Downloads: [GitHub Actions](https://github.com/wibem1/Composition-Lab-Native/actions/runs/38592958286)
 - Tests lokal: `swift test`
 - Mac-Test-App: `bash 'Build Native App.command'`
 - Windows-Bundle: `pwsh Windows/Build.ps1` nach `swift build -c release`
@@ -21,7 +21,7 @@ Die Kerntests und Release-Builds bestehen auf Windows, Mac und Linux.
 Der Windows-Starttest prüft außerdem Dateien, Schlüsselverschlüsselung und
 Fenstergeometrie ohne installierte Swift-Toolchain im Suchpfad.
 Hörbare Wiedergabe (Testrechner ohne MIDI-Gerät), ein echter KI-Aufruf und die
-WebView2-/Verovio-Notenanzeige sind noch praktisch zu bestätigen.
+Verovio-Notensatz mit realen Stücken sind noch praktisch zu bestätigen. Die native WebView2-Vorschau wird seit Alpha 12 auch mit einer offline geladenen Testseite auf Scroll- und Tab-Stabilität geprüft.
 
 Alpha 3 korrigiert die UTF-8-Kommunikation unter Windows und das Einlesen von
 Ausdruckszeichen. Das gemeinsame technische Format ist jetzt ausdrücklich
@@ -59,6 +59,8 @@ Alpha 9 stabilisiert Tabwechsel und Fokuswiederherstellung, fasst Layoutänderun
 Alpha 10 übernimmt fertige LilyPond-Kompositionen aus dem Windows-Chat über eine einzelne technische Übersetzung in einen freien aktiven Slot mit MIDI. Frühere Chat-Antworten lassen sich aus der Diagnose oder über das Kompositionsmenü übernehmen. Der ursprüngliche Quelltext und die bisherigen Kosten bleiben erhalten. Karten und Slot-Leiste sind kleiner. Fünfzehn Kerntests und die Windows-Integration bestehen.
 
 Alpha 11 verteilt die zehn Windows-Slots auf die sichtbare Breite ohne eigene Scrollbalken und korrigiert die MusicXML-Schlüssel der Solo-Streicher. Vorhandene Tonhöhen und MIDI-Daten bleiben erhalten. Sechzehn Kerntests und die Windows-Prüfung der vollständigen Slot-Leiste bei allen getesteten Skalierungen und Fenstergrößen bestehen.
+
+Alpha 12 vergrößert das mehrzeilige Auftragsfeld mit automatischem Zeilenumbruch. Enter fügt eine neue Zeile ein, Strg+Enter sendet. Die Notenvorschau passt direkt in die Fensterfläche ohne zusätzlichen äußeren Scrollbereich; Große Ansicht blendet Zusatzbereiche aus, ohne den Browser umzuhängen. Kurze Fenster sparen Platz bei der doppelten Slot-/Player-Leiste, die Notenoptionen bleiben erreichbar. Native Unterfenster werden nach Scrollen und Tabwechsel neu gezeichnet. Die Windows-Prüfung umfasst außerdem 36 Tabwechsel mit einer echten WebView2-Testseite und 144 Wechsel bei vier simulierten DPI-Skalierungen.
 
 Die nachfolgende historische Dokumentation beschreibt 3.5.3 und frühere Stände.
 
