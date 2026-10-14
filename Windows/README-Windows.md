@@ -1,4 +1,4 @@
-# Alpha 11 · Build 4011 · 14.10.2026 – Korrektur der Windows-Skalierung
+# Alpha 11 · Build 4012 · 14.10.2026 – Korrektur der Windows-Skalierung
 
 Maßgeblich ist die GUI aus `main` (Mac 3.5.3, Commit a2aefd7). Die folgenden älteren Abschnitte beschreiben frühere Windows-Stände.
 
@@ -47,3 +47,5 @@ Die Karten sind 104 × 100 statt 116 × 164 logische Pixel groß; die Slot-Leist
 Alle zehn Slot-Buttons teilen sich die sichtbare Breite ohne eigene horizontale oder vertikale Scrollfläche. Lange Titel werden gekürzt; der vollständige Titel bleibt als Tooltip verfügbar.
 
 Die Zuordnung der Solo-Streicher im MusicXML-Export ist korrigiert: Violine G2, Viola C3, Cello/Kontrabass F4. Tonhöhen und MIDI bleiben erhalten. Vorhandene Stücke brauchen keine neue KI-Anfrage: neu laden oder unter Noten aktualisieren.
+
+Alpha 12: Mehrzeiliges Auftragsfeld mit Zeilenumbruch (Enter: neue Zeile, Strg+Enter: senden). Noten passen ins Fenster; Große Ansicht blendet Zusatzbereiche aus. Native Neuzeichnung nach Scrollen und Tabwechsel.

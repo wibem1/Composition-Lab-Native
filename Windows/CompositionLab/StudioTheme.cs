@@ -105,7 +105,20 @@ internal sealed class BufferedGrid : TableLayoutPanel
 
 internal sealed class WorkspacePanel : Panel
 {
-    bool activating;
+    bool activating, repaintPending;
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    static extern bool RedrawWindow(IntPtr hwnd, IntPtr update, IntPtr region, uint flags);
+    public void RefreshNativeChildren()
+    {
+        if (repaintPending || !IsHandleCreated || IsDisposed) return;
+        repaintPending = true;
+        BeginInvoke((Action)(() =>
+        {
+            repaintPending = false;
+            if (!IsDisposed && Visible) RedrawWindow(Handle, IntPtr.Zero, IntPtr.Zero, 0x0001 | 0x0004 | 0x0080 | 0x0100);
+        }));
+    }
+    protected override void OnScroll(ScrollEventArgs e) { base.OnScroll(e); RefreshNativeChildren(); }
     public WorkspacePanel() { DoubleBuffered = true; ResizeRedraw = true; }
     protected override Point ScrollToControl(Control activeControl) => activating ? DisplayRectangle.Location : base.ScrollToControl(activeControl);
     public void ActivateAtTop()
@@ -115,7 +128,7 @@ internal sealed class WorkspacePanel : Panel
         BeginInvoke((Action)(() =>
         {
             if (!IsDisposed && Visible) AutoScrollPosition = Point.Empty;
-            activating = false;
+            activating = false; RefreshNativeChildren();
         }));
     }
 }
@@ -143,6 +156,7 @@ internal sealed class WorkspaceHost : Panel
             }
             finally { ResumeLayout(true); }
             pages[selected].Invalidate(true);
+            if (pages[selected] is WorkspacePanel visibleWorkspace) visibleWorkspace.RefreshNativeChildren();
         }
     }
     public void AddPage(Control page)

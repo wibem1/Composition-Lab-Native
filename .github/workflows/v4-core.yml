@@ -40,12 +40,12 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' 'Composition Lab 4.0.app/Contents/Info.plist')" = 'de.klangwerke.compositionlab.native.v4'
           'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0' --capture-gui-reference "$PWD/Mac-GUI-Reference"
           test -s Mac-GUI-Reference/Mac-Main.png
-          ditto -c -k --keepParent 'Composition Lab 4.0.app' Composition-Lab-4.0-alpha.11-Mac.zip
+          ditto -c -k --keepParent 'Composition Lab 4.0.app' Composition-Lab-4.0-alpha.12-Mac.zip
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
         with:
-          name: Composition-Lab-4.0-alpha.11-Mac
-          path: Composition-Lab-4.0-alpha.11-Mac.zip
+          name: Composition-Lab-4.0-alpha.12-Mac
+          path: Composition-Lab-4.0-alpha.12-Mac.zip
       - name: Build Windows desktop and test bundled runtime
         if: runner.os == 'Windows'
         shell: pwsh
@@ -53,8 +53,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
-          name: Composition-Lab-4.0-alpha.11-Windows-x64
-          path: Composition-Lab-4.0-alpha.11-Windows-x64.zip
+          name: Composition-Lab-4.0-alpha.12-Windows-x64
+          path: Composition-Lab-4.0-alpha.12-Windows-x64.zip
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'Windows'
         with:

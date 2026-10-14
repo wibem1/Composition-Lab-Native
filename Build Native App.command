@@ -6,7 +6,7 @@ APP="Composition Lab 4.0.app"
 BUILD=".build-native-v4"
 
 SRC=(Shared/CompositionCore/*.swift Sources/*.swift)
-echo "Baue Composition Lab Native 4.0.0-alpha.11 · Build 4011 · Engine 2.3.1 + isolierte Motivfunktion …"
+echo "Baue Composition Lab Native 4.0.0-alpha.12 · Build 4012 · Engine 2.3.1 + isolierte Motivfunktion …"
 echo
 
 if ! xcrun --find swiftc >/dev/null 2>&1; then
@@ -58,4 +58,4 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo
 echo "FERTIG: $PWD/$APP"
-echo "Version: 4.0.0-alpha.11 (Build 4011) · Composition Engine 2.3.1 · Engine Build 231 · Clean Source + Motivfunktion"
+echo "Version: 4.0.0-alpha.12 (Build 4012) · Composition Engine 2.3.1 · Engine Build 231 · Clean Source + Motivfunktion"

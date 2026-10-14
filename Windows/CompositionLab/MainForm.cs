@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.11 · Build 4011";
+    const string Version = "4.0.0-alpha.12 · Build 4012";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -604,7 +604,7 @@ internal sealed partial class MainForm : Form
         const string probe = "ÄÖÜ äöü ß – musikalischer Dialog";
         var version = await core.RunAsync(new JsonObject { ["operation"] = "version", ["title"] = probe });
         if (version["titleEcho"]?.GetValue<string>() != probe) throw new Exception("UTF-8-Prozesskommunikation beschädigt.");
-        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.11") throw new Exception("Falscher Kern.");
+        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.12") throw new Exception("Falscher Kern.");
         var fixture = JsonNode.Parse("""{"ti":"Windows Starttest","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,0,1],[1,1,64,80,0,1],[2,2,67,80,0,1]]}]}""")!.AsObject();
         documents[0] = CreateDocument(fixture, "Automatischer Test ohne KI-Kosten."); RefreshSlots();
         await DisplayCurrentAsync();
@@ -679,6 +679,30 @@ internal sealed partial class MainForm : Form
         {
             foreach (Control child in root.Controls) { yield return child; foreach (var nested in Descendants(child)) yield return nested; }
         }
+        chatInput.Text = "Erste Zeile\r\nZweite Zeile mit einem längeren musikalischen Auftrag.";
+        if (!chatInput.Multiline || !chatInput.WordWrap || !chatInput.AcceptsReturn || chatInput.Lines.Length != 2 || chatInput.Height < 80) throw new Exception("Auftragsfeld ist nicht ausreichend mehrzeilig.");
+        tabs.SelectedIndex = 1; await InitializeNotationAsync();
+        if (!webReady) throw new Exception("Native WebView2-Testumgebung fehlt.");
+        var navigationReady = new TaskCompletionSource<bool>();
+        web.CoreWebView2.NavigationCompleted += (_, e) => navigationReady.TrySetResult(e.IsSuccess);
+        web.NavigateToString("<!doctype html><html><body style='margin:0'><div style='height:2400px;background:linear-gradient(white,#8ac)'>Native Notenvorschau · Scrolltest</div></body></html>");
+        if (!await navigationReady.Task.WaitAsync(TimeSpan.FromSeconds(20))) throw new Exception("Native Vorschau lädt nicht.");
+        int normalPreviewHeight = web.Height;
+        toggleLargePreview?.Invoke(); await Task.Delay(100);
+        if (web.Height <= normalPreviewHeight || web.Width <= 0) throw new Exception("Große Notenansicht vergrößert Vorschau nicht.");
+        toggleLargePreview?.Invoke(); await Task.Delay(100);
+        var nativeBounds = web.Bounds;
+        for (int cycle = 0; cycle < 12; cycle++)
+        {
+            await web.ExecuteScriptAsync("window.scrollTo(0,600)");
+            tabs.SelectedIndex = 0; await Task.Delay(15); tabs.SelectedIndex = 2; await Task.Delay(15); tabs.SelectedIndex = 1; await Task.Delay(30);
+            if (!web.Visible || web.Bounds != nativeBounds) throw new Exception("Native Vorschau nach Tabwechsel instabil.");
+            string browserState = await web.ExecuteScriptAsync("JSON.stringify({width:innerWidth,height:innerHeight,y:scrollY})");
+            var state = JsonNode.Parse(JsonSerializer.Deserialize<string>(browserState)!)!;
+            if (state["width"]!.GetValue<int>() < 100 || state["height"]!.GetValue<int>() < 100 || state["y"]!.GetValue<int>() != 600) throw new Exception("Native Vorschau verliert ihren sichtbaren Ausschnitt.");
+        }
+        using (var capture = File.Create(Path.Combine(output, "Native-WebView2-Scroll.png"))) await web.CoreWebView2.CapturePreviewAsync(Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, capture);
+        // Synthetic browser geometry is checked independently of online Verovio engraving.
         var tabSwitchMeasurements = new List<object>();
         float previousScale = 1;
         foreach (float scale in new[] { 1f, 1.25f, 1.5f, 2f })
@@ -782,7 +806,7 @@ internal sealed partial class MainForm : Form
         }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches after low-button focus keep top parameters and all main controls stable", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches after low-button focus keep top parameters and all main controls stable", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {
