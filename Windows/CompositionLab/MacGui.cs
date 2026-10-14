@@ -423,4 +423,3 @@ internal sealed partial class MainForm
         Array.Copy(imported, documents, 10); projectName = project["name"]?.GetValue<string>() ?? "Unbenannt"; chat.Text = project["chat"]?.GetValue<string>() ?? ""; composition.Text = project["concept"]?.GetValue<string>() ?? settings["prompt"]?.GetValue<string>() ?? ""; RefreshSlots(); slots.SelectedIndex = Math.Clamp(project["activeSlot"]?.GetValue<int>() ?? 0, 0, 9); await DisplayCurrentAsync(); SaveLocalState();
     }
 }
-
