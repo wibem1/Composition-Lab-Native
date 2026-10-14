@@ -113,7 +113,7 @@ final class CoreTests: XCTestCase {
         let fake = FakeAI([.success(LLMResponse(text: json, inputTokens: 30, outputTokens: 40))])
         var received: CompositionResult?
         CompositionWorkflow(client: fake).translateExisting(request(), composition: music,
-            priorInputTokens: 110, priorOutputTokens: 3810, priorCostUSD: .07664) { result in
+            priorInputTokens: 110, priorOutputTokens: 3810, priorCostUSD: 0.07664) { result in
             if case .success(let work) = result { received = work } else { XCTFail("Translation failed") }
         }
         let work = try XCTUnwrap(received)
@@ -122,7 +122,7 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(fake.calls[0].user, ComposerPrompts.translationPrompt(composition: music))
         XCTAssertEqual(work.composition, music)
         XCTAssertEqual(work.inputTokens, 140); XCTAssertEqual(work.outputTokens, 3850)
-        XCTAssertGreaterThanOrEqual(work.estimatedCostUSD, .07664)
+        XCTAssertGreaterThanOrEqual(work.estimatedCostUSD, 0.07664)
         XCTAssertEqual(try CoreServices.midi(scoreJSON: JSONEncoder().encode(work.score)).prefix(4), Data("MThd".utf8))
     }
 
