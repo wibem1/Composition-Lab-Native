@@ -285,16 +285,17 @@ internal sealed partial class MainForm
         void ArrangeNotation()
         {
             if (arranging || right.ClientSize.Width <= 0) return;
-            bool compact = largePreview || page.ClientSize.Height < LayoutPixels(550);
+            bool compact = largePreview;
+            bool shortWindow = page.ClientSize.Height < LayoutPixels(550);
             arranging = true; page.SuspendLayout(); right.SuspendLayout(); preview.SuspendLayout();
             try
             {
                 int sidebar = compact ? 0 : Math.Min(LayoutPixels(280), Math.Max(0, page.ClientSize.Width / 4));
                 page.ColumnStyles[0].Width = sidebar;
                 settings.Visible = !compact;
-                foreach (var pair in new (Control, int)[] { (deck, 0), (transport, 1), (previewHeader, 2), (exports, 5) }) pair.Item1.Visible = !compact;
-                right.RowStyles[0].Height = compact ? 0 : LayoutPixels(62);
-                right.RowStyles[1].Height = compact ? 0 : notationPlayer.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal - transport.Padding.Horizontal), 0)).Height + transport.Padding.Vertical;
+                foreach (var pair in new (Control, int)[] { (deck, 0), (transport, 1), (previewHeader, 2), (exports, 5) }) pair.Item1.Visible = !compact && (pair.Item2 != 0 && pair.Item2 != 1 || !shortWindow);
+                right.RowStyles[0].Height = compact || shortWindow ? 0 : LayoutPixels(62);
+                right.RowStyles[1].Height = compact || shortWindow ? 0 : notationPlayer.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal - transport.Padding.Horizontal), 0)).Height + transport.Padding.Vertical;
                 right.RowStyles[2].Height = compact ? 0 : LayoutPixels(30);
                 right.RowStyles[5].Height = compact ? 0 : exports.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
                 preview.RowStyles[0].Height = previewTools.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
