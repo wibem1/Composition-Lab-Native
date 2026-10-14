@@ -12,7 +12,7 @@ Windows-Oberfläche verwendet. Runtime-DLLs und .NET sind im Windows-ZIP enthalt
 
 - Windows: [Start und Funktionen](Windows/README-Windows.md)
 - Architektur: [V4-ARCHITECTURE.md](V4-ARCHITECTURE.md)
-- Tests und Downloads: [GitHub Actions](https://github.com/wibem1/Composition-Lab-Native/actions/runs/38583058844)
+- Tests und Downloads: [GitHub Actions](https://github.com/wibem1/Composition-Lab-Native/actions/runs/38586771760)
 - Tests lokal: `swift test`
 - Mac-Test-App: `bash 'Build Native App.command'`
 - Windows-Bundle: `pwsh Windows/Build.ps1` nach `swift build -c release`
@@ -57,6 +57,8 @@ Alpha 7 korrigiert die Windows-DPI-Initialisierung, skaliert Scrollflächen mit 
 Alpha 9 stabilisiert Tabwechsel und Fokuswiederherstellung, fasst Layoutänderungen zusammen und speichert die Aufteilung nur nach einer tatsächlichen Bewegung der Trennlinie. Die Windows-Prüfung besteht 144 wiederholte Tabwechsel bei vier simulierten Skalierungen und zwei Fenstergrößen ohne verschwundene Hauptbedienelemente oder verschobene Parameterpositionen.
 
 Alpha 10 übernimmt fertige LilyPond-Kompositionen aus dem Windows-Chat über eine einzelne technische Übersetzung in einen freien aktiven Slot mit MIDI. Frühere Chat-Antworten lassen sich aus der Diagnose oder über das Kompositionsmenü übernehmen. Der ursprüngliche Quelltext und die bisherigen Kosten bleiben erhalten. Karten und Slot-Leiste sind kleiner. Fünfzehn Kerntests und die Windows-Integration bestehen.
+
+Alpha 11 verteilt die zehn Windows-Slots auf die sichtbare Breite ohne eigene Scrollbalken und korrigiert die MusicXML-Schlüssel der Solo-Streicher. Vorhandene Tonhöhen und MIDI-Daten bleiben erhalten. Sechzehn Kerntests und die Windows-Prüfung der vollständigen Slot-Leiste bei allen getesteten Skalierungen und Fenstergrößen bestehen.
 
 Die nachfolgende historische Dokumentation beschreibt 3.5.3 und frühere Stände.
 
