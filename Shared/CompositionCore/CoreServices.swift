@@ -3,7 +3,7 @@ import Foundation
 /// Small public boundary for desktop clients. JSON preserves the existing score
 /// and CLAB wire format; AppKit and Windows APIs never enter this module.
 public enum CoreServices {
-    public static let version = "4.0.0-alpha.8"
+    public static let version = "4.0.0-alpha.9"
 
     public static func midi(scoreJSON: Data) throws -> Data {
         MIDIBuilder.build(try validatedScore(scoreJSON))

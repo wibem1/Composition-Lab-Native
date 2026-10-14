@@ -1,4 +1,4 @@
-# Alpha 8 · Build 4008 · 14.10.2026 – Korrektur der Windows-Skalierung
+# Alpha 9 · Build 4009 · 14.10.2026 – Korrektur der Windows-Skalierung
 
 Maßgeblich ist die GUI aus `main` (Mac 3.5.3, Commit a2aefd7). Die folgenden älteren Abschnitte beschreiben frühere Windows-Stände.
 
@@ -29,3 +29,7 @@ DPI-Skalierung wird erst nach dem vollständigen Aufbau angewendet. Scrollfläch
 ## Anpassbare Hauptansicht in Alpha 8
 
 MusicChat und Kompositionsidee teilen sich beim ersten Start die sichtbare Fensterbreite gleichmäßig. Die graue Trennlinie lässt sich mit der Maus verschieben; ihre Position bleibt beim nächsten Start erhalten. Die Parameter- und Aktionsleisten brechen bei Bedarf um. Beide Textbereiche bleiben innerhalb der sichtbaren Fensterbreite; die zehn Karten bleiben separat horizontal scrollbar.
+
+## Stabile Tabwechsel in Alpha 9
+
+Beim Aktivieren eines Arbeitsbereichs wird seine Scrollposition auf den Anfang gesetzt. Die native Fokuswiederherstellung darf dabei die oberen Elemente nicht wegscrollen; der Fokus bleibt auf dem gewählten Tab. Größenänderungen und Zeilenhöhen werden zusammen angewendet, unveränderte Größen bleiben unangetastet. Die Aufteilung wird nur nach einer tatsächlichen Bewegung der Trennlinie gespeichert. Gepufferte Container reduzieren Zwischenbilder. Die Windows-Prüfung wechselt die Tabs wiederholt nach Fokus auf einem unteren Button bei allen vier simulierten Skalierungen und zwei Fenstergrößen.

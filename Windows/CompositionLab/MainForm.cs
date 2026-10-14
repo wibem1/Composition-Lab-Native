@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.8 · Build 4008";
+    const string Version = "4.0.0-alpha.9 · Build 4009";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -117,7 +117,7 @@ internal sealed partial class MainForm : Form
 
     static TableLayoutPanel Grid(int columns, int rows)
     {
-        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = columns, RowCount = rows, Margin = Padding.Empty, BackColor = Color.Transparent };
+        var grid = new BufferedGrid { Dock = DockStyle.Fill, ColumnCount = columns, RowCount = rows, Margin = Padding.Empty, BackColor = Color.Transparent };
         for (int i = 0; i < columns; i++) grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / columns));
         return grid;
     }
@@ -532,7 +532,7 @@ internal sealed partial class MainForm : Form
         const string probe = "ÄÖÜ äöü ß – musikalischer Dialog";
         var version = await core.RunAsync(new JsonObject { ["operation"] = "version", ["title"] = probe });
         if (version["titleEcho"]?.GetValue<string>() != probe) throw new Exception("UTF-8-Prozesskommunikation beschädigt.");
-        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.8") throw new Exception("Falscher Kern.");
+        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.9") throw new Exception("Falscher Kern.");
         var fixture = JsonNode.Parse("""{"ti":"Windows Starttest","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,0,1],[1,1,64,80,0,1],[2,2,67,80,0,1]]}]}""")!.AsObject();
         documents[0] = CreateDocument(fixture, "Automatischer Test ohne KI-Kosten."); RefreshSlots();
         await DisplayCurrentAsync();
@@ -598,6 +598,7 @@ internal sealed partial class MainForm : Form
         {
             foreach (Control child in root.Controls) { yield return child; foreach (var nested in Descendants(child)) yield return nested; }
         }
+        var tabSwitchMeasurements = new List<object>();
         float previousScale = 1;
         foreach (float scale in new[] { 1f, 1.25f, 1.5f, 2f })
         {
@@ -613,6 +614,30 @@ internal sealed partial class MainForm : Form
         foreach (var size in new[] { new Size(1500, 1100), new Size(1000, 700) })
         {
             Size = size;
+            tabs.SelectedIndex = 0;
+            var workspace = mainSplit!.Parent!.Parent as WorkspacePanel ?? throw new Exception("Hauptansicht ohne stabilen Scroll-Container.");
+            workspace.AutoScrollPosition = Point.Empty;
+            await Task.Delay(20);
+            var initialPosition = provider.RectangleToScreen(provider.ClientRectangle).Location;
+            int layoutCount = 0; LayoutEventHandler countLayout = (_, _) => layoutCount++;
+            mainSplit.Parent.Layout += countLayout;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            for (int cycle = 0; cycle < 6; cycle++)
+            {
+                // The user previously focused a low button, then switched pages.
+                // WinForms must not restore that focus by scrolling the page off the top.
+                compose.Focus(); await Task.Delay(5);
+                tabs.SelectedIndex = 1; await Task.Delay(5);
+                tabs.SelectedIndex = 2; await Task.Delay(5);
+                tabs.SelectedIndex = 0; await Task.Delay(10);
+                if (workspace.AutoScrollPosition != Point.Empty) throw new Exception($"Tabwechsel scrollt die Hauptansicht weg bei {scale * 100}%: {workspace.AutoScrollPosition}");
+                if (!provider.Visible || !chat.Visible || !composition.Visible || !compose.Visible || slotCards.Any(c => !c.Visible)) throw new Exception("Element nach Tabwechsel verschwunden.");
+                if (provider.RectangleToScreen(provider.ClientRectangle).Location != initialPosition) throw new Exception("Instabile Parameterposition nach Tabwechsel.");
+            }
+            watch.Stop(); mainSplit.Parent.Layout -= countLayout;
+            await Task.Delay(40);
+            if (layoutCount > 1000) throw new Exception($"Zu viele Layoutdurchläufe beim Tabwechsel: {layoutCount}");
+            tabSwitchMeasurements.Add(new { scale, requestedWidth = size.Width, switches = 18, layoutCount, milliseconds = watch.ElapsedMilliseconds });
             for (int page = 0; page < 3; page++)
             {
                 tabs.SelectedIndex = page; PerformLayout();
@@ -624,6 +649,7 @@ internal sealed partial class MainForm : Form
                     var viewport = tabs.RectangleToScreen(tabs.ClientRectangle);
                     if (right.Left < viewport.Left || right.Right > viewport.Right) throw new Exception("Kompositionsidee außerhalb der sichtbaren Fensterbreite.");
                     int previousDistance = mainSplit.SplitterDistance;
+                    mainSplitDragging = true;
                     mainSplit.SplitterDistance = mainSplit.Panel1MinSize;
                     if (mainSplit.SplitterDistance >= previousDistance || mainSplit.Panel2.Width <= 0) throw new Exception("Trennlinie nicht verstellbar.");
                     double savedRatio = mainSplitRatio; SaveLocalState();
@@ -668,7 +694,7 @@ internal sealed partial class MainForm : Form
         }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten 116x164 cards", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten 116x164 cards", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches after low-button focus keep top parameters and all main controls stable" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {

@@ -9,7 +9,7 @@
     <AssemblyName>Composition Lab 4.0</AssemblyName>
     <Version>4.0.0</Version>
     <AssemblyVersion>4.0.0.0</AssemblyVersion>
-    <FileVersion>4.0.0.4008</FileVersion>
+    <FileVersion>4.0.0.4009</FileVersion>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
   <ItemGroup>

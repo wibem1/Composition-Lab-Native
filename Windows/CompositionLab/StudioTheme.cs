@@ -97,8 +97,32 @@ internal sealed class PieceCard : StudioButton
     }
 }
 
+// Avoid painting the intermediate states of nested layout changes.
+internal sealed class BufferedGrid : TableLayoutPanel
+{
+    public BufferedGrid() { DoubleBuffered = true; ResizeRedraw = true; }
+}
+
+internal sealed class WorkspacePanel : Panel
+{
+    bool activating;
+    public WorkspacePanel() { DoubleBuffered = true; ResizeRedraw = true; }
+    protected override Point ScrollToControl(Control activeControl) => activating ? DisplayRectangle.Location : base.ScrollToControl(activeControl);
+    public void ActivateAtTop()
+    {
+        activating = true; AutoScrollPosition = Point.Empty;
+        if (!IsHandleCreated) { activating = false; return; }
+        BeginInvoke((Action)(() =>
+        {
+            if (!IsDisposed && Visible) AutoScrollPosition = Point.Empty;
+            activating = false;
+        }));
+    }
+}
+
 internal sealed class WorkspaceHost : Panel
 {
+    public WorkspaceHost() { DoubleBuffered = true; ResizeRedraw = true; }
     readonly List<Control> pages = [];
     int selected;
     public event EventHandler? SelectedIndexChanged;
@@ -108,9 +132,17 @@ internal sealed class WorkspaceHost : Panel
         set
         {
             if (value < 0 || value >= pages.Count || value == selected) return;
-            selected = value;
-            for (int i = 0; i < pages.Count; i++) pages[i].Visible = i == selected;
-            pages[selected].BringToFront(); SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
+            SuspendLayout();
+            try
+            {
+                selected = value;
+                if (pages[selected] is WorkspacePanel workspace) workspace.ActivateAtTop();
+                for (int i = 0; i < pages.Count; i++) pages[i].Visible = i == selected;
+                pages[selected].BringToFront();
+                SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
+            }
+            finally { ResumeLayout(true); }
+            pages[selected].Invalidate(true);
         }
     }
     public void AddPage(Control page)

@@ -1,6 +1,6 @@
 # Composition Lab Native 4.0 – Mac / Windows
 
-**Entwicklungszweig `v4-cross-platform` · 4.0.0-alpha.8 / Build 4008**
+**Entwicklungszweig `v4-cross-platform` · 4.0.0-alpha.9 / Build 4009**
 
 Die bisherige Version 3.5.3 bleibt auf `main` und unter
 `reference-v3.5.3-before-v4` unverändert. Version 4.0 installiert sich getrennt.

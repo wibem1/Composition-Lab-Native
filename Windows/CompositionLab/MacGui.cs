@@ -54,6 +54,7 @@ internal sealed partial class MainForm
     double mainSplitRatio = .5;
     bool arrangingSplit;
     bool mainSplitReady;
+    bool mainSplitDragging;
     void ArrangeMainSplit()
     {
         if (arrangingSplit || mainSplit == null || mainSplit.Width <= mainSplit.SplitterWidth + 4) return;
@@ -62,9 +63,13 @@ internal sealed partial class MainForm
         {
             int available = mainSplit.Width - mainSplit.SplitterWidth;
             int minimum = Math.Min(LayoutPixels(220), available / 3);
-            mainSplit.Panel1MinSize = 0; mainSplit.Panel2MinSize = 0;
-            mainSplit.Panel1MinSize = minimum; mainSplit.Panel2MinSize = minimum;
-            mainSplit.SplitterDistance = Math.Clamp((int)Math.Round(available * mainSplitRatio), minimum, available - minimum);
+            if (mainSplit.Panel1MinSize != minimum || mainSplit.Panel2MinSize != minimum)
+            {
+                mainSplit.Panel1MinSize = 0; mainSplit.Panel2MinSize = 0;
+                mainSplit.Panel1MinSize = minimum; mainSplit.Panel2MinSize = minimum;
+            }
+            int distance = Math.Clamp((int)Math.Round(available * mainSplitRatio), minimum, available - minimum);
+            if (mainSplit.SplitterDistance != distance) mainSplit.SplitterDistance = distance;
         }
         finally { arrangingSplit = false; }
     }
@@ -96,7 +101,7 @@ internal sealed partial class MainForm
         header.Layout += (_, _) => ArrangeHeader();
         // Mac centers the segmented control; a narrow Windows viewport may need horizontal scrolling.
         header.AutoScroll = true;
-        tabs.SelectedIndexChanged += (_, _) => { for (int i = 0; i < 3; i++) { navButtons[i].Selected = tabs.SelectedIndex == i; navButtons[i].Invalidate(); } };
+        tabs.SelectedIndexChanged += (_, _) => { for (int i = 0; i < 3; i++) { navButtons[i].Selected = tabs.SelectedIndex == i; navButtons[i].Invalidate(); } if (IsHandleCreated) navButtons[tabs.SelectedIndex].Focus(); };
         root.Controls.Add(header, 0, 1);
         tabs.AddPage(BuildMacMain()); tabs.AddPage(BuildMacNotation()); tabs.AddPage(BuildMacTechnology()); root.Controls.Add(tabs, 0, 2);
         var strip = new StatusStrip { Dock = DockStyle.Fill, BackColor = Color.FromArgb(233, 233, 233), SizingGrip = true }; strip.Items.Add(status); strip.Items.Add(cost); root.Controls.Add(strip, 0, 3);
@@ -112,9 +117,22 @@ internal sealed partial class MainForm
     }
     Control ScrollWorkspace(Control content, int width, int height, bool fitWidth = false)
     {
-        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = StudioTheme.Canvas };
+        var scroll = new WorkspacePanel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = StudioTheme.Canvas };
         content.Location = Point.Empty; content.Dock = DockStyle.None; scroll.Controls.Add(content);
-        void SizeContent() { content.Size = new Size(fitWidth ? Math.Max(1, scroll.ClientSize.Width - (scroll.VerticalScroll.Visible ? SystemInformation.VerticalScrollBarWidth : 0)) : Math.Max(LayoutPixels(width), scroll.ClientSize.Width - (scroll.VerticalScroll.Visible ? SystemInformation.VerticalScrollBarWidth : 0)), Math.Max(LayoutPixels(height), scroll.ClientSize.Height - (scroll.HorizontalScroll.Visible ? SystemInformation.HorizontalScrollBarHeight : 0))); }
+        bool sizing = false;
+        void SizeContent()
+        {
+            if (sizing || scroll.ClientSize.Width <= 0 || scroll.ClientSize.Height <= 0) return;
+            sizing = true;
+            try
+            {
+                // ClientSize already excludes visible scrollbars; subtracting them again
+                // introduces an extra size change when a workspace becomes visible.
+                var size = new Size(fitWidth ? scroll.ClientSize.Width : Math.Max(LayoutPixels(width), scroll.ClientSize.Width), Math.Max(LayoutPixels(height), scroll.ClientSize.Height));
+                if (content.Size != size) content.Size = size;
+            }
+            finally { sizing = false; }
+        }
         scroll.Resize += (_, _) => SizeContent(); scroll.DpiChangedAfterParent += (_, _) => SizeContent(); SizeContent(); return scroll;
     }
     Control BuildMacMain()
@@ -140,8 +158,11 @@ internal sealed partial class MainForm
             SplitterWidth = 10, BackColor = StudioTheme.Line, Margin = new Padding(0, 0, 0, 14) };
         mainSplit = work; work.Panel1.BackColor = work.Panel2.BackColor = StudioTheme.Canvas;
         work.Resize += (_, _) => ArrangeMainSplit();
+        work.SplitterMoving += (_, _) => mainSplitDragging = true;
         work.SplitterMoved += (_, _) =>
         {
+            if (!mainSplitDragging) return;
+            mainSplitDragging = false;
             if (!mainSplitReady || arrangingSplit || loadingSettings || !work.IsHandleCreated) return;
             int available = work.Width - work.SplitterWidth;
             if (available > 0) { mainSplitRatio = (double)work.SplitterDistance / available; SaveLocalState(); }
@@ -174,25 +195,28 @@ internal sealed partial class MainForm
         var actions = MacRow(true); AddButton(actions, "MIDI sichern", () => ExportAsync("mid")); AddButton(actions, "CLAB sichern", SaveDocumentAsync); AddButton(actions, "CLAB laden …", () => OpenAsync());
         actions.Controls.Add(new Panel { Width = 22, Height = 1 }); AddButton(actions, "Import …", () => OpenAsync(slots.SelectedIndex)); AddButton(actions, "Motiv …", PrepareMotif);
         actions.Controls.Add(compose); bl.Controls.Add(actions, 0, 1); bottom.Controls.Add(bl); main.Controls.Add(bottom, 0, 3);
+        static void SetRow(RowStyle row, int height)
+        {
+            if (row.SizeType != SizeType.Absolute) row.SizeType = SizeType.Absolute;
+            if (Math.Abs(row.Height - height) > .5f) row.Height = height;
+        }
         bool sizingRows = false;
         main.Layout += (_, _) =>
         {
             if (sizingRows || main.Width <= 0) return;
-            sizingRows = true;
+            sizingRows = true; main.SuspendLayout(); bl.SuspendLayout();
             try
             {
                 int parameterWidth = Math.Max(1, main.ClientSize.Width - main.Padding.Horizontal - controls.Padding.Horizontal);
                 int parameterHeight = parameterLayout.GetPreferredSize(new Size(parameterWidth, 0)).Height;
-                main.RowStyles[0].SizeType = SizeType.Absolute;
-                main.RowStyles[0].Height = parameterHeight + controls.Padding.Vertical + controls.Margin.Vertical;
+                SetRow(main.RowStyles[0], parameterHeight + controls.Padding.Vertical + controls.Margin.Vertical);
                 int actionWidth = Math.Max(1, main.ClientSize.Width - main.Padding.Horizontal - bottom.Padding.Horizontal);
                 int playerHeight = playerRow.GetPreferredSize(new Size(actionWidth, 0)).Height;
                 int actionHeight = actions.GetPreferredSize(new Size(actionWidth, 0)).Height;
-                bl.RowStyles[0].Height = playerHeight; bl.RowStyles[1].Height = actionHeight;
-                main.RowStyles[3].SizeType = SizeType.Absolute;
-                main.RowStyles[3].Height = playerHeight + actionHeight + bottom.Padding.Vertical + bottom.Margin.Vertical;
+                SetRow(bl.RowStyles[0], playerHeight); SetRow(bl.RowStyles[1], actionHeight);
+                SetRow(main.RowStyles[3], playerHeight + actionHeight + bottom.Padding.Vertical + bottom.Margin.Vertical);
             }
-            finally { sizingRows = false; }
+            finally { bl.ResumeLayout(true); main.ResumeLayout(true); sizingRows = false; }
         };
         return ScrollWorkspace(main, 0, 850, fitWidth: true);
     }
@@ -217,7 +241,7 @@ internal sealed partial class MainForm
     void UpdateTransport()
     {
         if (!player.Loaded) return; seekUpdating = true;
-        try { int position = player.Position, length = player.Length; foreach (var transport in transports) { transport.Time.Text = FormatTime(position) + " / " + FormatTime(length); transport.Position.Value = length == 0 ? 0 : Math.Clamp((int)(1000d * position / length), 0, 1000); } if (loopPlaying && length > 0 && position >= length && player.Mode == "stopped") { player.Seek(0); player.Play(); } }
+        try { int position = player.Position, length = player.Length; foreach (var transport in transports) { string time = FormatTime(position) + " / " + FormatTime(length); if (transport.Time.Text != time) transport.Time.Text = time; int value = length == 0 ? 0 : Math.Clamp((int)(1000d * position / length), 0, 1000); if (transport.Position.Value != value) transport.Position.Value = value; } if (loopPlaying && length > 0 && position >= length && player.Mode == "stopped") { player.Seek(0); player.Play(); } }
         finally { seekUpdating = false; }
     }
     Task PrepareMotif()
