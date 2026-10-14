@@ -285,17 +285,18 @@ internal sealed partial class MainForm
         void ArrangeNotation()
         {
             if (arranging || right.ClientSize.Width <= 0) return;
+            bool compact = largePreview || page.ClientSize.Height < LayoutPixels(550);
             arranging = true; page.SuspendLayout(); right.SuspendLayout(); preview.SuspendLayout();
             try
             {
-                int sidebar = largePreview ? 0 : Math.Min(LayoutPixels(280), Math.Max(0, page.ClientSize.Width / 4));
+                int sidebar = compact ? 0 : Math.Min(LayoutPixels(280), Math.Max(0, page.ClientSize.Width / 4));
                 page.ColumnStyles[0].Width = sidebar;
-                settings.Visible = !largePreview;
-                foreach (var pair in new (Control, int)[] { (deck, 0), (transport, 1), (previewHeader, 2), (exports, 5) }) pair.Item1.Visible = !largePreview;
-                right.RowStyles[0].Height = largePreview ? 0 : LayoutPixels(62);
-                right.RowStyles[1].Height = largePreview ? 0 : notationPlayer.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal - transport.Padding.Horizontal), 0)).Height + transport.Padding.Vertical;
-                right.RowStyles[2].Height = largePreview ? 0 : LayoutPixels(30);
-                right.RowStyles[5].Height = largePreview ? 0 : exports.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
+                settings.Visible = !compact;
+                foreach (var pair in new (Control, int)[] { (deck, 0), (transport, 1), (previewHeader, 2), (exports, 5) }) pair.Item1.Visible = !compact;
+                right.RowStyles[0].Height = compact ? 0 : LayoutPixels(62);
+                right.RowStyles[1].Height = compact ? 0 : notationPlayer.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal - transport.Padding.Horizontal), 0)).Height + transport.Padding.Vertical;
+                right.RowStyles[2].Height = compact ? 0 : LayoutPixels(30);
+                right.RowStyles[5].Height = compact ? 0 : exports.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
                 preview.RowStyles[0].Height = previewTools.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
                 int settingWidth = Math.Max(1, sidebar - settings.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth - 8);
                 foreach (Control control in settings.Controls)
@@ -305,7 +306,7 @@ internal sealed partial class MainForm
                 }
                 splitBeats.Height = Math.Max(LayoutPixels(50), TextRenderer.MeasureText(splitBeats.Text, splitBeats.Font, new Size(settingWidth - 24, 0), TextFormatFlags.WordBreak).Height + 12);
             }
-            finally { preview.ResumeLayout(true); right.ResumeLayout(true); page.ResumeLayout(true); arranging = false; FitFlowRow(previewTools, preview.RowStyles[0]); if (!largePreview) { FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical); FitFlowRow(exports, right.RowStyles[5]); } }
+            finally { preview.ResumeLayout(true); right.ResumeLayout(true); page.ResumeLayout(true); arranging = false; FitFlowRow(previewTools, preview.RowStyles[0]); if (!compact) { FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical); FitFlowRow(exports, right.RowStyles[5]); } }
         }
         void FitFlowRow(Control flow, RowStyle style, int padding = 0)
         {
