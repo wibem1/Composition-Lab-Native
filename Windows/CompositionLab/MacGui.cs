@@ -26,7 +26,8 @@ internal sealed partial class MainForm
     readonly List<JsonObject> pieceHistory = [];
     readonly List<Transport> transports = [];
     readonly ComboBox[] notationSettings = Enumerable.Range(0, 9).Select(_ => new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList }).ToArray();
-    readonly CheckBox splitBeats = new() { Text = "Zusammengesetzte Notenwerte an Zählzeiten teilen und binden", Checked = true, AutoSize = true, MaximumSize = new Size(264, 0) };
+    readonly CheckBox splitBeats = new() { Text = "Zusammengesetzte Notenwerte an Zählzeiten teilen und binden", Checked = true, AutoSize = false, Width = 264, Height = 50, MaximumSize = new Size(264, 50) };
+    readonly Label notationCurrent = new() { AutoEllipsis = true };
     readonly Label notationSummary = new() { Dock = DockStyle.Fill, AutoSize = true };
     JsonObject? notationOptions;
     bool updatingNotation;
@@ -41,7 +42,7 @@ internal sealed partial class MainForm
     {
         public readonly Label Time = new() { AutoSize = true, Text = "0:00 / 0:00", Padding = new Padding(0, 6, 0, 0) };
         public readonly TrackBar Position = new() { Width = 260, Height = 26, Maximum = 1000, TickStyle = TickStyle.None, AutoSize = false };
-        public readonly CheckBox Loop = new() { Text = "Loop", Appearance = Appearance.Button, AutoSize = true };
+        public readonly CheckBox Loop = new() { Text = "↻ Loop", Appearance = Appearance.Button, AutoSize = true };
         public readonly TextBox Tempo = new() { Width = 50 };
         public readonly TrackBar Volume = new() { Width = 130, Height = 26, Maximum = 100, Value = 90, TickStyle = TickStyle.None, AutoSize = false };
     }
@@ -86,11 +87,11 @@ internal sealed partial class MainForm
     Control BuildMacMain()
     {
         var main = Grid(1, 4); main.Padding = new Padding(24, 18, 24, 18);
-        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 58)); main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 226)); main.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 72)); main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 240)); main.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
         var controls = MacPanel(); var row = MacRow(); row.WrapContents = false;
         provider.Items.AddRange(["Google / Gemini", "Anthropic / Claude", "OpenAI"]); effort.Items.AddRange(["Sparsam – Low", "Standard – Medium", "Maximum – High"]); effort.SelectedIndex = 1;
-        provider.Width = 130; model.Width = 148; effort.Width = 94;
+        provider.Width = 130; model.Width = 148; effort.Width = 140;
         provider.SelectedIndexChanged += (_, _) => ProviderChanged();
         row.Controls.Add(MacLabel("KI", 12, true)); row.Controls.Add(provider); row.Controls.Add(model); row.Controls.Add(effort);
         row.Controls.Add(MacLabel("Takte")); measures.Width = 62; measures.PlaceholderText = "24"; row.Controls.Add(measures); row.Controls.Add(meter);
@@ -110,7 +111,7 @@ internal sealed partial class MainForm
         var deck = MacPanel(); deck.Padding = new Padding(7, 5, 7, 5); deck.Margin = new Padding(0, 0, 0, 14);
         var dl = Grid(1, 2); dl.RowStyles.Add(new RowStyle(SizeType.Absolute, 25)); dl.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); dl.Controls.Add(MacLabel("Stücke (1–10)", 14, true), 0, 0);
         var cardScroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
-        var cards = new FlowLayoutPanel { Location = Point.Empty, Width = 1235, Height = 174, WrapContents = false, Margin = Padding.Empty, Padding = new Padding(1, 2, 1, 1) };
+        var cards = new FlowLayoutPanel { Location = Point.Empty, Width = 1235, Height = 168, WrapContents = false, Margin = Padding.Empty, Padding = new Padding(1, 2, 1, 1) };
         for (int i = 0; i < 10; i++)
         {
             int index = i; var card = new PieceCard { Number = i + 1, Width = 116, Height = 164, AutoSize = false, Margin = new Padding(0, 0, 8, 0), Font = MacFont(12), AllowDrop = true };
@@ -177,7 +178,7 @@ internal sealed partial class MainForm
         var numbers = Grid(10, 1); numbers.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         for (int i = 0; i < 10; i++) { int index = i; var button = new StudioButton { Text = (i + 1).ToString(), Dock = DockStyle.Fill, AutoSize = false, Padding = Padding.Empty }; button.Click += (_, _) => { if (!busy) slots.SelectedIndex = index; }; notationCards.Add(button); numbers.Controls.Add(button, i, 0); } deck.Controls.Add(numbers, 0, 1); right.Controls.Add(deck, 0, 0);
         var transport = MacPanel(); transport.Padding = new Padding(10, 6, 10, 6); transport.Controls.Add(BuildTransport(true)); right.Controls.Add(transport, 0, 1);
-        var previewHeader = Grid(1, 2); previewHeader.RowStyles.Add(new RowStyle(SizeType.Absolute, 30)); previewHeader.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); previewHeader.Controls.Add(MacLabel("Notenbildvorschau", 17, true), 0, 0); previewHeader.Controls.Add(new Label { Text = "Schnelle Kontrolle der aktuellen MusicXML-Darstellung. Änderungen links werden automatisch in der Vorschau sichtbar; MIDI und interner Score bleiben unverändert.", Dock = DockStyle.Fill, ForeColor = StudioTheme.Muted, Font = MacFont(11.5f) }, 0, 1); right.Controls.Add(previewHeader, 0, 2);
+        var previewHeader = Grid(1, 2); previewHeader.RowStyles.Add(new RowStyle(SizeType.Absolute, 30)); previewHeader.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); var titleRow = new Panel { Dock = DockStyle.Fill }; var title = MacLabel("Notenbildvorschau", 17, true); title.Dock = DockStyle.Left; notationCurrent.Dock = DockStyle.Right; notationCurrent.Width = 300; notationCurrent.TextAlign = ContentAlignment.MiddleRight; titleRow.Controls.Add(title); titleRow.Controls.Add(notationCurrent); previewHeader.Controls.Add(titleRow, 0, 0); previewHeader.Controls.Add(new Label { Text = "Schnelle Kontrolle der aktuellen MusicXML-Darstellung. Änderungen links werden automatisch in der Vorschau sichtbar; MIDI und interner Score bleiben unverändert.", Dock = DockStyle.Fill, ForeColor = StudioTheme.Muted, Font = MacFont(11.5f) }, 0, 1); right.Controls.Add(previewHeader, 0, 2);
         notationHost.Controls.Add(web); right.Controls.Add(notationHost, 0, 3); notationSummary.Text = "Darstellungsregeln · Klavier – lesbar"; right.Controls.Add(notationSummary, 0, 4);
         var exports = MacRow(); exports.Controls.Add(MacLabel("Export", 12, true)); var export = new StudioButton { Text = "MusicXML sichern / ziehen …", AutoSize = true }; export.Click += async (_, _) => await GuardAsync(() => ExportAsync("musicxml")); Point dragStart = Point.Empty; export.MouseDown += (_, e) => dragStart = e.Location; export.MouseMove += async (_, e) => { if (e.Button != MouseButtons.Left || Math.Abs(e.X - dragStart.X) + Math.Abs(e.Y - dragStart.Y) < 10 || Score == null) return; dragStart = e.Location; await GuardAsync(async () => { var result = await core.RunAsync(new JsonObject { ["operation"] = "musicxml", ["score"] = Score.DeepClone(), ["options"] = notationOptions?.DeepClone() }); string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".musicxml"); await File.WriteAllBytesAsync(path, Convert.FromBase64String(result["data"]!.GetValue<string>())); export.DoDragDrop(new DataObject(DataFormats.FileDrop, new[] { path }), DragDropEffects.Copy); }); }; exports.Controls.Add(export); right.Controls.Add(exports, 0, 5); page.Controls.Add(right, 1, 0);
         return ScrollWorkspace(page, 1160, 720);
@@ -242,7 +243,7 @@ internal sealed partial class MainForm
         Action(file, "MIDI als Vorlage laden …", () => { useSource.Checked = true; return OpenAsync(); }); Action(file, "MIDI-Vorlage löschen", () => { useSource.Checked = false; return Task.CompletedTask; });
         file.DropDownItems.Add(new ToolStripSeparator()); Action(file, "MIDI sichern …", () => ExportAsync("mid")); Action(file, "JSON sichern …", SaveScoreJSON); Action(file, "LilyPond sichern …", ExportLilyPondAsync); Action(file, "An Hacklily übergeben", () => { OpenHacklily(); return Task.CompletedTask; });
         var edit = new ToolStripMenuItem("Bearbeiten"); menu.Items.Add(edit);
-        Action(edit, "Rückgängig", () => { if (ActiveControl is TextBoxBase text) text.Undo(); return Task.CompletedTask; }); Action(edit, "Ausschneiden", () => { if (ActiveControl is TextBoxBase text) text.Cut(); return Task.CompletedTask; }); Action(edit, "Kopieren", () => { if (ActiveControl is TextBoxBase text) text.Copy(); return Task.CompletedTask; }); Action(edit, "Einsetzen", () => { if (ActiveControl is TextBoxBase text) text.Paste(); return Task.CompletedTask; }); Action(edit, "Alles auswählen", () => { if (ActiveControl is TextBoxBase text) text.SelectAll(); return Task.CompletedTask; });
+        Action(edit, "Rückgängig", () => { if (ActiveControl is TextBoxBase text) text.Undo(); return Task.CompletedTask; }); Action(edit, "Wiederholen", () => { if (ActiveControl is RichTextBox text && text.CanRedo) text.Redo(); return Task.CompletedTask; }); Action(edit, "Ausschneiden", () => { if (ActiveControl is TextBoxBase text) text.Cut(); return Task.CompletedTask; }); Action(edit, "Kopieren", () => { if (ActiveControl is TextBoxBase text) text.Copy(); return Task.CompletedTask; }); Action(edit, "Einsetzen", () => { if (ActiveControl is TextBoxBase text) text.Paste(); return Task.CompletedTask; }); Action(edit, "Alles auswählen", () => { if (ActiveControl is TextBoxBase text) text.SelectAll(); return Task.CompletedTask; });
         var compositionMenu = new ToolStripMenuItem("Komposition"); menu.Items.Add(compositionMenu); Action(compositionMenu, "Mit gewählter KI komponieren", () => RequestAIAsync(true)); Action(compositionMenu, "Anfrage abbrechen", () => { pending?.Cancel(); return Task.CompletedTask; });
         var technical = new ToolStripMenuItem("Technisches"); menu.Items.Add(technical); Action(technical, "API-Schlüssel …", ShowKeys); Action(technical, "MIDI-Ausgabe …", ShowMidiOutput); Action(technical, "Backup laden …", () => { MessageBox.Show(this, "Das verschlüsselte Mac-Backup wird unter Windows noch nicht gelesen. Für den Austausch Projekt laden verwenden."); return Task.CompletedTask; }); Action(technical, "Backup sichern …", () => { MessageBox.Show(this, "Das verschlüsselte Mac-Backup ist noch nicht portiert. Projekt speichern sichert alle Stück-Plätze ohne API-Schlüssel."); return Task.CompletedTask; }); Action(technical, "Diagnosedatei sichern …", () => { SaveDiagnostic(); return Task.CompletedTask; });
         var diagnosis = new ToolStripMenuItem("Diagnose"); menu.Items.Add(diagnosis); Action(diagnosis, "Diagnosedatei sichern …", () => { SaveDiagnostic(); return Task.CompletedTask; });
@@ -272,6 +273,8 @@ internal sealed partial class MainForm
         var settings = project["settings"]!.AsObject();
         if (settings["models"] is JsonObject savedModels) foreach (var pair in savedModels) if (models.ContainsKey(pair.Key)) models[pair.Key] = pair.Value!.GetValue<string>();
         measures.Text = settings["measures"]?.GetValue<string>() ?? ""; meter.Text = settings["meter"]?.GetValue<string>() ?? ""; tempo.Text = settings["tempo"]?.GetValue<string>() ?? ""; musicalKey.Text = settings["key"]?.GetValue<string>() ?? ""; ensemble.Text = settings["ensemble"]?.GetValue<string>() ?? ""; assignment.Text = settings["prompt"]?.GetValue<string>() ?? "";
+        loadingSettings = true; activeProvider = settings["provider"]?.GetValue<string>() ?? activeProvider; if (!models.ContainsKey(activeProvider)) activeProvider = "anthropic"; provider.SelectedIndex = activeProvider switch { "openai" => 2, "gemini" => 0, _ => 1 }; SelectModel(); apiKey.Text = keys.GetValueOrDefault(activeProvider, ""); remember.Checked = keys.ContainsKey(activeProvider); loadingSettings = false;
+        pieceHistory.Clear(); if (project["history"] is JsonArray history) foreach (var item in history.OfType<JsonObject>()) { var doc = CreateDocument(item["score"]!.DeepClone().AsObject(), item["concept"]?.GetValue<string>() ?? ""); foreach (var field in new[] { "title", "provider", "model", "costUSD", "inputTokens", "outputTokens" }) if (item[field] != null) doc[field] = item[field]!.DeepClone(); pieceHistory.Add(doc); } RefreshHistory();
         Array.Copy(imported, documents, 10); projectName = project["name"]?.GetValue<string>() ?? "Unbenannt"; chat.Text = project["chat"]?.GetValue<string>() ?? ""; composition.Text = project["concept"]?.GetValue<string>() ?? settings["prompt"]?.GetValue<string>() ?? ""; RefreshSlots(); slots.SelectedIndex = Math.Clamp(project["activeSlot"]?.GetValue<int>() ?? 0, 0, 9); await DisplayCurrentAsync(); SaveLocalState();
     }
 }

@@ -16,7 +16,12 @@ struct CurrentPlayerState: Codable {
 
 final class Storage {
     static let shared = Storage()
-    private let defaults = UserDefaults(suiteName: "de.klangwerke.compositionlab.native.v4")!
+    private let defaults: UserDefaults = {
+        let identifier = "de.klangwerke.compositionlab.native.v4"
+        // A bundle must use its standard domain, not open itself as a suite.
+        if Bundle.main.bundleIdentifier == identifier { return .standard }
+        return UserDefaults(suiteName: identifier) ?? .standard
+    }()
 
     func loadSettings() -> AppSettings {
         guard let data = defaults.data(forKey: "settings"),

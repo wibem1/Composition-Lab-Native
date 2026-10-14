@@ -143,7 +143,7 @@ internal sealed partial class MainForm : Form
     {
         var button = new StudioButton { Text = title, AutoSize = true };
         button.Click += async (_, _) => { try { await action(); } catch (Exception e) { SetStatus(e.Message, true); } };
-        row.Controls.Add(button);
+        row.Controls.Add(button); guiChecks.Add(button);
     }
 
     void ProviderChanged()
@@ -248,8 +248,8 @@ internal sealed partial class MainForm : Form
         player.Close(); currentMidi = null; currentXML = null; currentPath = null;
         var document = Current;
         playback.Text = "00:00 / 00:00";
-        if (document == null) { cost.Text = "Kosten: –"; pieceInfo.Text = "Wähle links ein Stück oder komponiere etwas Neues."; pieceTitle.Text = "Raum für deine nächste Idee"; scoreJSON.Clear(); validation.Clear(); if (webReady) web.NavigateToString("<html><body>Kein Stück geladen.</body></html>"); return; }
-        pieceTitle.Text = document["title"]?.GetValue<string>() ?? "Komposition";
+        if (document == null) { cost.Text = "Kosten: –"; pieceInfo.Text = "Wähle links ein Stück oder komponiere etwas Neues."; pieceTitle.Text = "Raum für deine nächste Idee"; scoreJSON.Clear(); validation.Clear(); notationCurrent.Text = "Aktuelles Stück: –"; if (webReady) web.NavigateToString("<html><body>Kein Stück geladen.</body></html>"); return; }
+        pieceTitle.Text = document["title"]?.GetValue<string>() ?? "Komposition"; notationCurrent.Text = "Aktuelles Stück: " + pieceTitle.Text;
         var scoreInfo = document["score"];
         pieceInfo.Text = string.Join("  ·  ", new[] { document["ensemble"]?.GetValue<string>(), scoreInfo?["k"]?.GetValue<string>(), scoreInfo?["bpm"]?.ToString() is string bpm ? bpm + " BPM" : null }.Where(v => !string.IsNullOrWhiteSpace(v)));
         scoreJSON.Text = document["score"]?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
@@ -596,6 +596,12 @@ internal sealed partial class MainForm : Form
                 {
                     if (!control.Visible) continue;
                     if (control.Width < 10 || control.Height < 10) throw new Exception("Bedienelement unbedienbar: " + control.Text);
+                    for (Control? ancestor = control.Parent; ancestor != null; ancestor = ancestor.Parent)
+                    {
+                        if (ancestor is ScrollableControl viewport && viewport.AutoScroll) break;
+                        if (!ancestor.RectangleToScreen(ancestor.ClientRectangle).Contains(control.RectangleToScreen(control.ClientRectangle)))
+                            throw new Exception("Bedienelement außerhalb seines Panels: " + control.Text + " / " + ancestor.GetType().Name);
+                    }
                     // Native Mac has a horizontal card deck; Windows also allows the full
                     // fixed layout to scroll when smaller than the original minimum content.
                     for (Control? parent = control.Parent; parent != null; parent = parent.Parent)
