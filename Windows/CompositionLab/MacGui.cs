@@ -87,22 +87,21 @@ internal sealed partial class MainForm
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28)); Controls.Add(root);
         root.Controls.Add(BuildMacMenus(), 0, 0);
         var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(233, 233, 233), Margin = Padding.Empty };
-        var project = MacLabel("Composition Lab · Composition Engine 2.3.1 · Build 231", 15, true); project.MaximumSize = Size.Empty; header.Controls.Add(project);
+        var project = MacLabel("Composition Lab · Composition Engine 2.3.1 · Build 231", 15, true); project.AutoSize = false; project.AutoEllipsis = true; header.Controls.Add(project);
         var navigation = MacRow(); navigation.Dock = DockStyle.None; navigation.Size = new Size(408, 34); navigation.WrapContents = false;
         foreach (string label in new[] { "Main", "Noten", "Technik" })
         { int index = navButtons.Count; var button = new StudioButton { Text = label, Width = 126, Height = 28, AutoSize = false, Selected = index == 0 }; button.Click += (_, _) => tabs.SelectedIndex = index; navButtons.Add(button); navigation.Controls.Add(button); }
         header.Controls.Add(navigation);
         void ArrangeHeader()
         {
-            int offset = header.AutoScrollPosition.X;
-            project.Location = new Point(LayoutPixels(16) + offset, Math.Max(0, (header.ClientSize.Height - project.PreferredHeight) / 2));
-            int left = Math.Max((header.ClientSize.Width - navigation.Width) / 2, project.Right - offset + LayoutPixels(24));
-            navigation.Location = new Point(left + offset, Math.Max(0, (header.ClientSize.Height - navigation.Height) / 2));
-            header.AutoScrollMinSize = new Size(left + navigation.Width + LayoutPixels(16), 0);
+            int left = Math.Max(LayoutPixels(16), header.ClientSize.Width - navigation.Width - LayoutPixels(16));
+            navigation.Location = new Point(left, Math.Max(0, (header.ClientSize.Height - navigation.Height) / 2));
+            project.Bounds = new Rectangle(LayoutPixels(16), 0, Math.Max(0, left - LayoutPixels(32)), header.ClientSize.Height);
+            project.TextAlign = ContentAlignment.MiddleLeft;
         }
         header.Layout += (_, _) => ArrangeHeader();
-        // Mac centers the segmented control; a narrow Windows viewport may need horizontal scrolling.
-        header.AutoScroll = true;
+        // Keep navigation fixed; long application titles ellipsize without scrolling the header.
+        header.AutoScroll = false;
         tabs.SelectedIndexChanged += (_, _) => { for (int i = 0; i < 3; i++) { navButtons[i].Selected = tabs.SelectedIndex == i; navButtons[i].Invalidate(); } if (IsHandleCreated) navButtons[tabs.SelectedIndex].Focus(); };
         root.Controls.Add(header, 0, 1);
         tabs.AddPage(BuildMacMain()); tabs.AddPage(BuildMacNotation()); tabs.AddPage(BuildMacTechnology()); root.Controls.Add(tabs, 0, 2);
