@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.7 · Build 4007";
+    const string Version = "4.0.0-alpha.8 · Build 4008";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -474,6 +474,7 @@ internal sealed partial class MainForm : Form
                 activeProvider = state["provider"]?.GetValue<string>() ?? "anthropic";
                 if (!models.ContainsKey(activeProvider)) activeProvider = "anthropic";
                 editableIdea = state["editableIdea"]?.GetValue<string>() ?? ""; loadingIdea = true; composition.Text = editableIdea; loadingIdea = false;
+                mainSplitRatio = Math.Clamp(state["mainSplitRatio"]?.GetValue<double>() ?? .5, .15, .85); ArrangeMainSplit();
                 meter.Text = state["meter"]?.GetValue<string>() ?? "";
                 if (state["history"] is JsonArray savedHistory) foreach (var item in savedHistory.OfType<JsonObject>()) pieceHistory.Add(item.DeepClone().AsObject()); RefreshHistory();
                 projectName = state["projectName"]?.GetValue<string>() ?? "Unbenannt";
@@ -503,7 +504,7 @@ internal sealed partial class MainForm : Form
                 ["slots"] = new JsonArray(documents.Select(d => d?.DeepClone()).ToArray()), ["chat"] = chat.Text,
                 ["diagnostic"] = lastDiagnostic?.DeepClone(), ["provider"] = activeProvider,
                 ["models"] = JsonSerializer.SerializeToNode(models), ["assignment"] = assignment.Text,
-                ["editableIdea"] = editableIdea, ["meter"] = meter.Text, ["projectName"] = projectName, ["history"] = new JsonArray(pieceHistory.Select(d => d.DeepClone()).ToArray()), ["notation"] = new JsonArray(notationSettings.Select(c => (JsonNode?)JsonValue.Create(c.SelectedIndex)).ToArray()), ["splitBeats"] = splitBeats.Checked,
+                ["mainSplitRatio"] = mainSplitRatio, ["editableIdea"] = editableIdea, ["meter"] = meter.Text, ["projectName"] = projectName, ["history"] = new JsonArray(pieceHistory.Select(d => d.DeepClone()).ToArray()), ["notation"] = new JsonArray(notationSettings.Select(c => (JsonNode?)JsonValue.Create(c.SelectedIndex)).ToArray()), ["splitBeats"] = splitBeats.Checked,
                 ["measures"] = measures.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text, ["ensemble"] = ensemble.Text };
             AtomicFile.WriteText(Path.Combine(dataDirectory, "workspace.json"), state.ToJsonString());
         }
@@ -530,7 +531,7 @@ internal sealed partial class MainForm : Form
         const string probe = "ÄÖÜ äöü ß – musikalischer Dialog";
         var version = await core.RunAsync(new JsonObject { ["operation"] = "version", ["title"] = probe });
         if (version["titleEcho"]?.GetValue<string>() != probe) throw new Exception("UTF-8-Prozesskommunikation beschädigt.");
-        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.7") throw new Exception("Falscher Kern.");
+        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.8") throw new Exception("Falscher Kern.");
         var fixture = JsonNode.Parse("""{"ti":"Windows Starttest","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,0,1],[1,1,64,80,0,1],[2,2,67,80,0,1]]}]}""")!.AsObject();
         documents[0] = CreateDocument(fixture, "Automatischer Test ohne KI-Kosten."); RefreshSlots();
         await DisplayCurrentAsync();
@@ -607,12 +608,28 @@ internal sealed partial class MainForm : Form
             Scale(new SizeF(ratio, ratio));
             foreach (var entry in fonts) entry.Key.Font = new Font(entry.Value.FontFamily, entry.Value.Size * ratio, entry.Value.Style);
             ResumeLayout(true); previousScale = scale;
+        MinimumSize = new Size(640, 480);
         foreach (var size in new[] { new Size(1500, 1100), new Size(1000, 700) })
         {
             Size = size;
             for (int page = 0; page < 3; page++)
             {
                 tabs.SelectedIndex = page; PerformLayout();
+                if (page == 0)
+                {
+                    ArrangeMainSplit();
+                    if (mainSplit == null || mainSplit.Panel2.Width < Math.Min(LayoutPixels(220), mainSplit.Width / 3)) throw new Exception("Kompositionsidee zu schmal.");
+                    var right = mainSplit.Panel2.RectangleToScreen(mainSplit.Panel2.ClientRectangle);
+                    var viewport = tabs.RectangleToScreen(tabs.ClientRectangle);
+                    if (right.Left < viewport.Left || right.Right > viewport.Right) throw new Exception("Kompositionsidee außerhalb der sichtbaren Fensterbreite.");
+                    int previousDistance = mainSplit.SplitterDistance;
+                    mainSplit.SplitterDistance = mainSplit.Panel1MinSize;
+                    if (mainSplit.SplitterDistance >= previousDistance || mainSplit.Panel2.Width <= 0) throw new Exception("Trennlinie nicht verstellbar.");
+                    double savedRatio = mainSplitRatio; SaveLocalState();
+                    var saved = JsonNode.Parse(File.ReadAllText(Path.Combine(dataDirectory, "workspace.json")))!;
+                    if (Math.Abs(saved["mainSplitRatio"]!.GetValue<double>() - savedRatio) > .001) throw new Exception("Trennlinie nicht gespeichert.");
+                    mainSplitRatio = .5; ArrangeMainSplit();
+                }
                 foreach (var label in Descendants(this).OfType<Label>())
                 {
                     if (!label.Visible || !label.AutoSize || label.AutoEllipsis) continue;
@@ -648,7 +665,7 @@ internal sealed partial class MainForm : Form
         }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten 116x164 cards", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten 116x164 cards", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {

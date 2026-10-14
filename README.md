@@ -1,6 +1,6 @@
 # Composition Lab Native 4.0 – Mac / Windows
 
-**Entwicklungszweig `v4-cross-platform` · 4.0.0-alpha.7 / Build 4007**
+**Entwicklungszweig `v4-cross-platform` · 4.0.0-alpha.8 / Build 4008**
 
 Die bisherige Version 3.5.3 bleibt auf `main` und unter
 `reference-v3.5.3-before-v4` unverändert. Version 4.0 installiert sich getrennt.
@@ -52,7 +52,7 @@ Reale Mac-Bilder und Windows-Starttests gehören zum Abgleich. Dreizehn Kerntest
 prüfen unter anderem die gemeinsamen Notationsoptionen und das Mac-Projektformat.
 Die plattformspezifischen Funktionsgrenzen stehen in der Windows-Anleitung.
 
-Alpha 7 korrigiert die Windows-DPI-Initialisierung, skaliert Scrollflächen mit dem Monitor und verhindert überdeckte Titel sowie zu flache Textzeilen. Die Windows-Prüfung kontrolliert Schriftmetriken und Geometrie bei simulierten 100, 125, 150 und 200 Prozent.
+Alpha 8 korrigiert die Windows-DPI-Initialisierung, skaliert Scrollflächen mit dem Monitor und verhindert überdeckte Titel sowie zu flache Textzeilen. Die Windows-Prüfung kontrolliert Schriftmetriken und Geometrie bei simulierten 100, 125, 150 und 200 Prozent.
 
 Die nachfolgende historische Dokumentation beschreibt 3.5.3 und frühere Stände.
 

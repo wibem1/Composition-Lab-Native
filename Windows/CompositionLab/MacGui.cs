@@ -50,6 +50,23 @@ internal sealed partial class MainForm
         public readonly TextBox Tempo = new() { Width = 50 };
         public readonly TrackBar Volume = new() { Width = 130, Height = 26, Maximum = 100, Value = 90, TickStyle = TickStyle.None, AutoSize = false };
     }
+    SplitContainer? mainSplit;
+    double mainSplitRatio = .5;
+    bool arrangingSplit;
+    void ArrangeMainSplit()
+    {
+        if (arrangingSplit || mainSplit == null || mainSplit.Width <= mainSplit.SplitterWidth + 4) return;
+        arrangingSplit = true;
+        try
+        {
+            int available = mainSplit.Width - mainSplit.SplitterWidth;
+            int minimum = Math.Min(LayoutPixels(220), available / 3);
+            mainSplit.Panel1MinSize = 0; mainSplit.Panel2MinSize = 0;
+            mainSplit.Panel1MinSize = minimum; mainSplit.Panel2MinSize = minimum;
+            mainSplit.SplitterDistance = Math.Clamp((int)Math.Round(available * mainSplitRatio), minimum, available - minimum);
+        }
+        finally { arrangingSplit = false; }
+    }
     float testLayoutScale = 1;
     int LayoutPixels(int logical) => (int)Math.Ceiling(logical * DeviceDpi / 96f * testLayoutScale);
     static Font MacFont(float points, FontStyle style = FontStyle.Regular) => new("Segoe UI", points * .75f, style);
@@ -92,40 +109,55 @@ internal sealed partial class MainForm
         guiChecks.AddRange([chatInput, compose, provider, model, effort, measures, meter, tempo, musicalKey, ensemble]);
         assignment.Text = "Komponiere ein eigenständiges Klavierstück mit einer tragenden musikalischen Idee.";
     }
-    Control ScrollWorkspace(Control content, int width, int height)
+    Control ScrollWorkspace(Control content, int width, int height, bool fitWidth = false)
     {
         var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = StudioTheme.Canvas };
         content.Location = Point.Empty; content.Dock = DockStyle.None; scroll.Controls.Add(content);
-        void SizeContent() { content.Size = new Size(Math.Max(LayoutPixels(width), scroll.ClientSize.Width - (scroll.VerticalScroll.Visible ? SystemInformation.VerticalScrollBarWidth : 0)), Math.Max(LayoutPixels(height), scroll.ClientSize.Height - (scroll.HorizontalScroll.Visible ? SystemInformation.HorizontalScrollBarHeight : 0))); }
+        void SizeContent() { content.Size = new Size(fitWidth ? Math.Max(1, scroll.ClientSize.Width - (scroll.VerticalScroll.Visible ? SystemInformation.VerticalScrollBarWidth : 0)) : Math.Max(LayoutPixels(width), scroll.ClientSize.Width - (scroll.VerticalScroll.Visible ? SystemInformation.VerticalScrollBarWidth : 0)), Math.Max(LayoutPixels(height), scroll.ClientSize.Height - (scroll.HorizontalScroll.Visible ? SystemInformation.HorizontalScrollBarHeight : 0))); }
         scroll.Resize += (_, _) => SizeContent(); scroll.DpiChangedAfterParent += (_, _) => SizeContent(); SizeContent(); return scroll;
     }
     Control BuildMacMain()
     {
         var main = Grid(1, 4); main.Padding = new Padding(0, 18, 0, 18);
         main.RowStyles.Add(new RowStyle(SizeType.AutoSize)); main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 240)); main.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
-        var controls = MacPanel(); var row = MacRow(); row.WrapContents = false;
+        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 240)); main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var controls = MacPanel(); var row = MacRow(true); row.Dock = DockStyle.None;
         provider.Items.AddRange(["Google / Gemini", "Anthropic / Claude", "OpenAI"]); effort.Items.AddRange(["Sparsam – Low", "Standard – Medium", "Maximum – High"]); effort.SelectedIndex = 1;
         provider.Width = 130; model.Width = 148; effort.Width = 140;
         provider.SelectedIndexChanged += (_, _) => ProviderChanged();
         row.Controls.Add(MacLabel("KI", 12, true)); row.Controls.Add(provider); row.Controls.Add(model); row.Controls.Add(effort);
-        var rightParameters = MacRow();
+        var rightParameters = MacRow(true); rightParameters.Dock = DockStyle.None;
         rightParameters.Controls.Add(MacLabel("Takte")); measures.Width = 62; measures.Items.AddRange(new object[] { "2", "4", "8", "16", "24", "32", "48", "64" }); measures.HandleCreated += (_, _) => NativeCue.SendMessage(measures.Handle, 0x1703, new IntPtr(1), "24"); rightParameters.Controls.Add(measures); rightParameters.Controls.Add(meter);
         rightParameters.Controls.Add(MacLabel("Tempo")); tempo.Width = 58; tempo.PlaceholderText = "96"; rightParameters.Controls.Add(tempo);
         rightParameters.Controls.Add(MacLabel("Tonart")); musicalKey.Width = 86; musicalKey.PlaceholderText = "C-Dur"; rightParameters.Controls.Add(musicalKey);
         rightParameters.Controls.Add(MacLabel("Instrumente")); ensemble.Width = 150; ensemble.PlaceholderText = "Piano"; rightParameters.Controls.Add(ensemble);
-        var parameterLayout = Grid(3, 1); parameterLayout.ColumnStyles.Clear(); parameterLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); parameterLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); parameterLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); parameterLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); parameterLayout.Controls.Add(row, 0, 0); parameterLayout.Controls.Add(rightParameters, 2, 0);
-        parameterLayout.AutoSize = true; controls.AutoSize = true; controls.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        var parameterLayout = MacRow(true); parameterLayout.Controls.Add(row); parameterLayout.Controls.Add(rightParameters);
+        controls.AutoSize = true; controls.AutoSizeMode = AutoSizeMode.GrowAndShrink;
         controls.Controls.Add(parameterLayout); controls.Margin = new Padding(0, 0, 0, 14); main.Controls.Add(controls, 0, 0);
-        var work = Grid(2, 1); work.ColumnStyles.Clear(); work.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 66)); work.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34)); work.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); work.Margin = new Padding(0, 0, 0, 14);
+        controls.Resize += (_, _) =>
+        {
+            int available = Math.Max(1, controls.ClientSize.Width - controls.Padding.Horizontal);
+            row.MaximumSize = new Size(available, 0); rightParameters.MaximumSize = new Size(available, 0);
+        };
+        var work = new SplitContainer { Dock = DockStyle.Fill, Size = new Size(1000, 400), Orientation = Orientation.Vertical,
+            SplitterWidth = 10, BackColor = StudioTheme.Line, Margin = new Padding(0, 0, 0, 14) };
+        mainSplit = work; work.Panel1.BackColor = work.Panel2.BackColor = StudioTheme.Canvas;
+        work.Resize += (_, _) => ArrangeMainSplit();
+        work.SplitterMoved += (_, _) =>
+        {
+            if (arrangingSplit || loadingSettings || !work.IsHandleCreated) return;
+            int available = work.Width - work.SplitterWidth;
+            if (available > 0) { mainSplitRatio = (double)work.SplitterDistance / available; SaveLocalState(); }
+        };
+        slotTips.SetToolTip(work, "Trennlinie ziehen: MusicChat und Kompositionsidee in der Breite anpassen.");
         var chatPanel = MacPanel(); chatPanel.Margin = new Padding(0, 0, 7, 0); var chatLayout = Grid(1, 3);
         chatLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); chatLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); chatLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         chatLayout.Controls.Add(MacLabel("MusicChat", 20, true), 0, 0); chat.BorderStyle = BorderStyle.FixedSingle; chat.Font = MacFont(13); chatLayout.Controls.Add(chat, 0, 1);
         var input = Grid(2, 1); input.ColumnStyles.Clear(); input.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); input.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100)); input.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); input.Padding = new Padding(0, 10, 0, 0);
         chatInput.Dock = DockStyle.Fill; chatInput.Font = MacFont(13); chatInput.Multiline = true; input.Controls.Add(chatInput, 0, 0); send.Dock = DockStyle.Fill; send.AutoSize = false; input.Controls.Add(send, 1, 0);
-        chatLayout.Controls.Add(input, 0, 2); chatPanel.Controls.Add(chatLayout); work.Controls.Add(chatPanel, 0, 0);
+        chatLayout.Controls.Add(input, 0, 2); chatPanel.Controls.Add(chatLayout); work.Panel1.Controls.Add(chatPanel);
         var ideaPanel = MacPanel(); ideaPanel.Margin = new Padding(7, 0, 0, 0); var idea = Grid(1, 2); idea.RowStyles.Add(new RowStyle(SizeType.AutoSize)); idea.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        idea.Controls.Add(MacLabel("Aktuelle Kompositionsidee", 16, true), 0, 0); composition.BorderStyle = BorderStyle.FixedSingle; idea.Controls.Add(composition, 0, 1); ideaPanel.Controls.Add(idea); work.Controls.Add(ideaPanel, 1, 0); main.Controls.Add(work, 0, 1);
+        idea.Controls.Add(MacLabel("Aktuelle Kompositionsidee", 16, true), 0, 0); composition.BorderStyle = BorderStyle.FixedSingle; idea.Controls.Add(composition, 0, 1); ideaPanel.Controls.Add(idea); work.Panel2.Controls.Add(ideaPanel); main.Controls.Add(work, 0, 1);
         var deck = MacPanel(); deck.Padding = new Padding(7, 5, 7, 5); deck.Margin = new Padding(0, 0, 0, 14);
         var dl = Grid(1, 2); dl.RowStyles.Add(new RowStyle(SizeType.AutoSize)); dl.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); dl.Controls.Add(MacLabel("Stücke (1–10)", 14, true), 0, 0);
         var cardScroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
@@ -141,15 +173,15 @@ internal sealed partial class MainForm
             slotCards.Add(card); cards.Controls.Add(card);
         }
         cardScroll.Controls.Add(cards); dl.Controls.Add(cardScroll, 0, 1); deck.Controls.Add(dl); main.Controls.Add(deck, 0, 2);
-        var bottom = MacPanel(); bottom.Padding = new Padding(8, 5, 8, 5); var bl = Grid(1, 2); bl.RowStyles.Add(new RowStyle(SizeType.Absolute, 34)); bl.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); bl.Controls.Add(BuildTransport(false), 0, 0);
-        var actions = MacRow(); AddButton(actions, "MIDI sichern", () => ExportAsync("mid")); AddButton(actions, "CLAB sichern", SaveDocumentAsync); AddButton(actions, "CLAB laden …", () => OpenAsync());
+        var bottom = MacPanel(); bottom.AutoSize = true; bottom.AutoSizeMode = AutoSizeMode.GrowAndShrink; bottom.Padding = new Padding(8, 5, 8, 5); var bl = Grid(1, 2); bl.AutoSize = true; bl.RowStyles.Add(new RowStyle(SizeType.AutoSize)); bl.RowStyles.Add(new RowStyle(SizeType.AutoSize)); bl.Controls.Add(BuildTransport(false), 0, 0);
+        var actions = MacRow(true); AddButton(actions, "MIDI sichern", () => ExportAsync("mid")); AddButton(actions, "CLAB sichern", SaveDocumentAsync); AddButton(actions, "CLAB laden …", () => OpenAsync());
         actions.Controls.Add(new Panel { Width = 22, Height = 1 }); AddButton(actions, "Import …", () => OpenAsync(slots.SelectedIndex)); AddButton(actions, "Motiv …", PrepareMotif);
         actions.Controls.Add(compose); bl.Controls.Add(actions, 0, 1); bottom.Controls.Add(bl); main.Controls.Add(bottom, 0, 3);
-        return ScrollWorkspace(main, 1260, 850);
+        return ScrollWorkspace(main, 0, 850, fitWidth: true);
     }
     Control BuildTransport(bool notation)
     {
-        var transport = new Transport(); transports.Add(transport); var row = MacRow();
+        var transport = new Transport(); transports.Add(transport); var row = MacRow(!notation);
         var play = AddButton(row, "▶", PlayAsync); play.AutoSize = false; play.Size = new Size(36, 26);
         var stop = AddButton(row, "■", () => { player.Stop(); return Task.CompletedTask; }); stop.AutoSize = false; stop.Size = new Size(36, 26); row.Controls.Add(transport.Loop); row.Controls.Add(transport.Time); row.Controls.Add(transport.Position);
         row.Controls.Add(MacLabel("Tempo")); row.Controls.Add(transport.Tempo); row.Controls.Add(MacLabel("Lautstärke")); row.Controls.Add(transport.Volume);

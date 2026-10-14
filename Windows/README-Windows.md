@@ -1,4 +1,4 @@
-# Alpha 7 · Build 4007 · 14.10.2026 – Korrektur der Windows-Skalierung
+# Alpha 8 · Build 4008 · 14.10.2026 – Korrektur der Windows-Skalierung
 
 Maßgeblich ist die GUI aus `main` (Mac 3.5.3, Commit a2aefd7). Die folgenden älteren Abschnitte beschreiben frühere Windows-Stände.
 
@@ -22,6 +22,10 @@ Windows 10/11, Intel/AMD 64 Bit. Das gesamte ZIP entpacken, dann `Composition La
 
 Einstellungen und Stücke liegen unter `%LOCALAPPDATA%/Klangwerke/Composition Lab 4.0`. API-Schlüssel stehen getrennt, mit Windows-DPAPI verschlüsselt, in `keys.dpapi`. Sie lassen sich nur im selben Windows-Benutzerkonto öffnen und stehen nicht in Exporten oder Diagnosen.
 
-## Korrekturen in Alpha 7
+## Korrekturen in Alpha 8
 
 DPI-Skalierung wird erst nach dem vollständigen Aufbau angewendet. Scrollflächen berücksichtigen die Skalierung. Titel und Navigation überdecken sich nicht mehr; Überschriften, Erklärungstexte und Parameterzeile erhalten die tatsächlich benötigte Texthöhe. Die Windows-Prüfung prüft Layout und Schriftmetriken bei simulierten 100, 125, 150 und 200 Prozent, jeweils mit kleiner und großer Fenstergröße. Die Simulation ersetzt keinen praktischen Test auf jedem Bildschirm.
+
+## Anpassbare Hauptansicht in Alpha 8
+
+MusicChat und Kompositionsidee teilen sich beim ersten Start die sichtbare Fensterbreite gleichmäßig. Die graue Trennlinie lässt sich mit der Maus verschieben; ihre Position bleibt beim nächsten Start erhalten. Die Parameter- und Aktionsleisten brechen bei Bedarf um. Die Hauptseite benötigt keinen horizontalen Gesamtbildlauf mehr; die zehn Karten bleiben separat horizontal scrollbar.
