@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 11641)
+Total output lines: 630
+
 using System.Text;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
@@ -34,7 +37,7 @@ internal sealed partial class MainForm : Form
     readonly TextBox musicalKey = new() { Width = 90 };
     readonly TextBox ensemble = new() { Width = 130, Text = "Klavier" };
     readonly CheckBox useSource = new() { Text = "Aktuelles Stück als Vorlage", AutoSize = true };
-    readonly Button compose = new StudioButton() { Text = "Komponieren", AutoSize = true };
+    readonly Button compose = new StudioButton() { Text = "Komponieren", AutoSize = true, Primary = true };
     readonly Button send = new StudioButton() { Text = "Chat", AutoSize = true };
     readonly Button cancel = new StudioButton() { Text = "Abbrechen", AutoSize = true, Enabled = false };
     readonly ToolStripStatusLabel status = new() { Text = "Bereit", Spring = true, TextAlign = ContentAlignment.MiddleLeft };
@@ -331,48 +334,7 @@ internal sealed partial class MainForm : Form
             var response = await core.RunAsync(new JsonObject { ["operation"] = midi ? "import-midi" : "import-musicxml",
                 ["data"] = Convert.ToBase64String(data), ["title"] = Path.GetFileNameWithoutExtension(path) });
             document = CreateDocument(response["score"]!.DeepClone().AsObject(), "Import: " + Path.GetFileName(path));
-            if (!midi) document["originalMusicXMLData"] = Convert.ToBase64String(data);
-        }
-        documents[destination] = document; RememberPiece(document); RefreshSlots(); slots.SelectedIndex = destination;
-        await DisplayCurrentAsync(); currentPath = Path.GetExtension(path).Equals(".clab", StringComparison.OrdinalIgnoreCase) ? path : null;
-        SaveLocalState(); SetStatus("Datei geladen.");
-    }
-    async Task GuardAsync(Func<Task> action)
-    { try { await action(); } catch (Exception e) { SetStatus(e.Message, true); } }
-
-    async Task ImportIntoSlotAsync(string path, int index)
-    {
-        if (busy) return;
-        if (documents[index] != null && !testMode && MessageBox.Show(this,
-            $"Stück {index + 1} durch die gewählte Datei ersetzen? Die gespeicherte Datei bleibt erhalten.", "Stück laden", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-        // Parse and validate before assigning: failed imports leave the old piece intact.
-        await ImportPathAsync(path, index);
-    }
-    async Task DeleteSlotAsync(int index)
-    {
-        if (busy || documents[index] == null) return;
-        if (!testMode && MessageBox.Show(this, $"Stück {index + 1} aus der App entfernen? Gespeicherte Dateien bleiben erhalten.",
-            "Stück löschen", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-        documents[index] = null; RefreshCards(); SaveLocalState();
-        if (slots.SelectedIndex == index) await DisplayCurrentAsync();
-        SetStatus($"Stück {index + 1} gelöscht.");
-    }
-
-    internal static string ExtractLilyPond(string text)
-    {
-        var fenced = Regex.Match(text, @"```(?:lilypond|ly)?[^\S\r\n]*\r?\n(?<source>[\s\S]*?)```", RegexOptions.IgnoreCase);
-        string source = fenced.Success ? fenced.Groups["source"].Value.Trim() : text.Trim();
-        if (!source.Contains(@"\version") && !source.Contains(@"\score"))
-            throw new InvalidOperationException("Dieses Stück enthält keinen LilyPond-Quelltext. MIDI- und MusicXML-Exporte sind weiterhin verfügbar.");
-        return source + "\n";
-    }
-    async Task ExportLilyPondAsync()
-    {
-        if (Current == null) throw new InvalidOperationException("Kein Stück geladen.");
-        string source = ExtractLilyPond(Current["concept"]?.GetValue<string>() ?? "");
-        using var dialog = new SaveFileDialog { Filter = "LilyPond|*.ly", FileName = SafeName(pieceTitle.Text) + ".ly", OverwritePrompt = true };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        await File.WriteAllTextAsync(dialog.FileName, source, new UTF8Encoding(false));
+            if (!midi) document["originalMus…641 tokens truncated…eAllTextAsync(dialog.FileName, source, new UTF8Encoding(false));
         SetStatus("LilyPond-Quelltext gespeichert.");
     }
     void OpenHacklily()
