@@ -53,6 +53,7 @@ internal sealed partial class MainForm
     SplitContainer? mainSplit;
     double mainSplitRatio = .5;
     bool arrangingSplit;
+    bool mainSplitReady;
     void ArrangeMainSplit()
     {
         if (arrangingSplit || mainSplit == null || mainSplit.Width <= mainSplit.SplitterWidth + 4) return;
@@ -131,21 +132,17 @@ internal sealed partial class MainForm
         rightParameters.Controls.Add(MacLabel("Tempo")); tempo.Width = 58; tempo.PlaceholderText = "96"; rightParameters.Controls.Add(tempo);
         rightParameters.Controls.Add(MacLabel("Tonart")); musicalKey.Width = 86; musicalKey.PlaceholderText = "C-Dur"; rightParameters.Controls.Add(musicalKey);
         rightParameters.Controls.Add(MacLabel("Instrumente")); ensemble.Width = 150; ensemble.PlaceholderText = "Piano"; rightParameters.Controls.Add(ensemble);
-        var parameterLayout = MacRow(true); parameterLayout.Controls.Add(row); parameterLayout.Controls.Add(rightParameters);
-        controls.AutoSize = true; controls.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        var parameterLayout = MacRow(true);
+        foreach (var child in row.Controls.Cast<Control>().ToArray()) parameterLayout.Controls.Add(child);
+        foreach (var child in rightParameters.Controls.Cast<Control>().ToArray()) parameterLayout.Controls.Add(child);
         controls.Controls.Add(parameterLayout); controls.Margin = new Padding(0, 0, 0, 14); main.Controls.Add(controls, 0, 0);
-        controls.Resize += (_, _) =>
-        {
-            int available = Math.Max(1, controls.ClientSize.Width - controls.Padding.Horizontal);
-            row.MaximumSize = new Size(available, 0); rightParameters.MaximumSize = new Size(available, 0);
-        };
         var work = new SplitContainer { Dock = DockStyle.Fill, Size = new Size(1000, 400), Orientation = Orientation.Vertical,
             SplitterWidth = 10, BackColor = StudioTheme.Line, Margin = new Padding(0, 0, 0, 14) };
         mainSplit = work; work.Panel1.BackColor = work.Panel2.BackColor = StudioTheme.Canvas;
         work.Resize += (_, _) => ArrangeMainSplit();
         work.SplitterMoved += (_, _) =>
         {
-            if (arrangingSplit || loadingSettings || !work.IsHandleCreated) return;
+            if (!mainSplitReady || arrangingSplit || loadingSettings || !work.IsHandleCreated) return;
             int available = work.Width - work.SplitterWidth;
             if (available > 0) { mainSplitRatio = (double)work.SplitterDistance / available; SaveLocalState(); }
         };
@@ -173,10 +170,30 @@ internal sealed partial class MainForm
             slotCards.Add(card); cards.Controls.Add(card);
         }
         cardScroll.Controls.Add(cards); dl.Controls.Add(cardScroll, 0, 1); deck.Controls.Add(dl); main.Controls.Add(deck, 0, 2);
-        var bottom = MacPanel(); bottom.AutoSize = true; bottom.AutoSizeMode = AutoSizeMode.GrowAndShrink; bottom.Padding = new Padding(8, 5, 8, 5); var bl = Grid(1, 2); bl.AutoSize = true; bl.RowStyles.Add(new RowStyle(SizeType.AutoSize)); bl.RowStyles.Add(new RowStyle(SizeType.AutoSize)); bl.Controls.Add(BuildTransport(false), 0, 0);
+        var bottom = MacPanel(); bottom.Padding = new Padding(8, 5, 8, 5); var bl = Grid(1, 2); bl.RowStyles.Add(new RowStyle(SizeType.Absolute, 34)); bl.RowStyles.Add(new RowStyle(SizeType.Absolute, 34)); var playerRow = BuildTransport(false); bl.Controls.Add(playerRow, 0, 0);
         var actions = MacRow(true); AddButton(actions, "MIDI sichern", () => ExportAsync("mid")); AddButton(actions, "CLAB sichern", SaveDocumentAsync); AddButton(actions, "CLAB laden …", () => OpenAsync());
         actions.Controls.Add(new Panel { Width = 22, Height = 1 }); AddButton(actions, "Import …", () => OpenAsync(slots.SelectedIndex)); AddButton(actions, "Motiv …", PrepareMotif);
         actions.Controls.Add(compose); bl.Controls.Add(actions, 0, 1); bottom.Controls.Add(bl); main.Controls.Add(bottom, 0, 3);
+        bool sizingRows = false;
+        main.Layout += (_, _) =>
+        {
+            if (sizingRows || main.Width <= 0) return;
+            sizingRows = true;
+            try
+            {
+                int parameterWidth = Math.Max(1, main.ClientSize.Width - main.Padding.Horizontal - controls.Padding.Horizontal);
+                int parameterHeight = parameterLayout.GetPreferredSize(new Size(parameterWidth, 0)).Height;
+                main.RowStyles[0].SizeType = SizeType.Absolute;
+                main.RowStyles[0].Height = parameterHeight + controls.Padding.Vertical + controls.Margin.Vertical;
+                int actionWidth = Math.Max(1, main.ClientSize.Width - main.Padding.Horizontal - bottom.Padding.Horizontal);
+                int playerHeight = playerRow.GetPreferredSize(new Size(actionWidth, 0)).Height;
+                int actionHeight = actions.GetPreferredSize(new Size(actionWidth, 0)).Height;
+                bl.RowStyles[0].Height = playerHeight; bl.RowStyles[1].Height = actionHeight;
+                main.RowStyles[3].SizeType = SizeType.Absolute;
+                main.RowStyles[3].Height = playerHeight + actionHeight + bottom.Padding.Vertical + bottom.Margin.Vertical;
+            }
+            finally { sizingRows = false; }
+        };
         return ScrollWorkspace(main, 0, 850, fitWidth: true);
     }
     Control BuildTransport(bool notation)

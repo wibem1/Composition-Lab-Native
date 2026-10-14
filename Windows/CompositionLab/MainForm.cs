@@ -82,6 +82,7 @@ internal sealed partial class MainForm : Form
         BuildUI();
         ResumeLayout(true);
         LoadLocalState();
+        mainSplitReady = true;
         RefreshSlots();
         slots.SelectedIndex = 0;
         Shown += async (_, _) =>
