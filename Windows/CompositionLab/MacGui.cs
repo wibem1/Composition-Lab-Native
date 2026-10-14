@@ -305,10 +305,20 @@ internal sealed partial class MainForm
                 }
                 splitBeats.Height = Math.Max(LayoutPixels(50), TextRenderer.MeasureText(splitBeats.Text, splitBeats.Font, new Size(settingWidth - 24, 0), TextFormatFlags.WordBreak).Height + 12);
             }
-            finally { preview.ResumeLayout(true); right.ResumeLayout(true); page.ResumeLayout(true); arranging = false; }
+            finally { preview.ResumeLayout(true); right.ResumeLayout(true); page.ResumeLayout(true); arranging = false; FitFlowRow(previewTools, preview.RowStyles[0]); if (!largePreview) { FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical); FitFlowRow(exports, right.RowStyles[5]); } }
         }
+        void FitFlowRow(FlowLayoutPanel flow, RowStyle style, int padding = 0)
+        {
+            if (flow.ClientSize.Width <= 0 || !flow.Visible) return;
+            int needed = flow.Controls.Cast<Control>().Where(c => c.Visible).Select(c => c.Bottom + c.Margin.Bottom).DefaultIfEmpty(0).Max() + padding;
+            if (Math.Abs(style.Height - needed) > .5f) style.Height = needed;
+        }
+        previewTools.Layout += (_, _) => FitFlowRow(previewTools, preview.RowStyles[0]);
+        notationPlayer.Layout += (_, _) => { if (!largePreview) FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical); };
+        exports.Layout += (_, _) => { if (!largePreview) FitFlowRow(exports, right.RowStyles[5]); };
         toggleLargePreview = () => { largePreview = !largePreview; enlarge.Text = largePreview ? "Normale Ansicht" : "Große Ansicht"; ArrangeNotation(); };
-        page.Layout += (_, _) => ArrangeNotation();
+        page.SizeChanged += (_, _) => ArrangeNotation();
+        right.SizeChanged += (_, _) => ArrangeNotation();
         var viewport = new WorkspacePanel { Dock = DockStyle.Fill, AutoScroll = false, BackColor = StudioTheme.Canvas };
         viewport.Controls.Add(page); return viewport;
     }
