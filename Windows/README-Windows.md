@@ -1,4 +1,4 @@
-# Alpha 6 · Build 4006 · 14.10.2026 – Port der Mac-GUI
+# Alpha 7 · Build 4007 · 14.10.2026 – Korrektur der Windows-Skalierung
 
 Maßgeblich ist die GUI aus `main` (Mac 3.5.3, Commit a2aefd7). Die folgenden älteren Abschnitte beschreiben frühere Windows-Stände.
 
@@ -87,3 +87,7 @@ Einstellungen und Projekte liegen unter `%LOCALAPPDATA%/Klangwerke/Composition L
 API-Schlüssel stehen getrennt und mit DPAPI verschlüsselt in `keys.dpapi`; der
 Schlüssel lässt sich nur im selben Windows-Benutzerkonto wieder öffnen.
 Keine Schlüssel in Exporten oder Diagnosedateien.
+
+## Korrekturen in Alpha 7
+
+DPI-Skalierung wird erst nach dem vollständigen Aufbau angewendet. Scrollflächen berücksichtigen die Skalierung. Titel und Navigation überdecken sich nicht mehr; Überschriften und Parameterzeile erhalten die tatsächlich benötigte Texthöhe. Die Windows-Prüfung prüft zusätzlich Layout und Schriftmetriken bei simulierten 100, 125, 150 und 200 Prozent.

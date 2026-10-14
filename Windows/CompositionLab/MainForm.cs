@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.6 · Build 4006";
+    const string Version = "4.0.0-alpha.7 · Build 4007";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -67,6 +67,7 @@ internal sealed partial class MainForm : Form
 
     public MainForm(bool testMode)
     {
+        SuspendLayout();
         this.testMode = testMode;
         dataDirectory = testMode ? Path.Combine(Path.GetTempPath(), "clab-v4-test-" + Guid.NewGuid().ToString("N"))
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Klangwerke", "Composition Lab 4.0");
@@ -76,8 +77,10 @@ internal sealed partial class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         Font = MacFont(13); ForeColor = StudioTheme.Ink;
         BackColor = StudioTheme.Canvas;
-        AutoScaleDimensions = new SizeF(96, 96); AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleDimensions = new SizeF(96, 96);
         BuildUI();
+        ResumeLayout(true);
         LoadLocalState();
         RefreshSlots();
         slots.SelectedIndex = 0;
@@ -527,7 +530,7 @@ internal sealed partial class MainForm : Form
         const string probe = "ÄÖÜ äöü ß – musikalischer Dialog";
         var version = await core.RunAsync(new JsonObject { ["operation"] = "version", ["title"] = probe });
         if (version["titleEcho"]?.GetValue<string>() != probe) throw new Exception("UTF-8-Prozesskommunikation beschädigt.");
-        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.6") throw new Exception("Falscher Kern.");
+        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.7") throw new Exception("Falscher Kern.");
         var fixture = JsonNode.Parse("""{"ti":"Windows Starttest","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,0,1],[1,1,64,80,0,1],[2,2,67,80,0,1]]}]}""")!.AsObject();
         documents[0] = CreateDocument(fixture, "Automatischer Test ohne KI-Kosten."); RefreshSlots();
         await DisplayCurrentAsync();
@@ -589,12 +592,37 @@ internal sealed partial class MainForm : Form
         slots.SelectedIndex = 0; await DisplayCurrentAsync();
         var midiBefore = currentMidi!.ToArray(); notationSettings[0].SelectedIndex = 1; await NotationChangedAsync(0);
         if (!midiBefore.SequenceEqual(currentMidi!)) throw new Exception("Notationsprofil verändert MIDI.");
+        static IEnumerable<Control> Descendants(Control root)
+        {
+            foreach (Control child in root.Controls) { yield return child; foreach (var nested in Descendants(child)) yield return nested; }
+        }
+        float previousScale = 1;
+        foreach (float scale in new[] { 1f, 1.25f, 1.5f, 2f })
+        {
+            // Exercise real WinForms layout with scaled geometry AND font metrics.
+            // CI has one 96-DPI monitor, so this explicitly simulates the other monitor scales.
+            float ratio = scale / previousScale;
+            var fonts = Descendants(this).Prepend(this).ToDictionary(c => c, c => (c.Font.FontFamily, c.Font.Size, c.Font.Style));
+            SuspendLayout(); testLayoutScale = scale;
+            Scale(new SizeF(ratio, ratio));
+            foreach (var entry in fonts) entry.Key.Font = new Font(entry.Value.FontFamily, entry.Value.Size * ratio, entry.Value.Style);
+            ResumeLayout(true); previousScale = scale;
         foreach (var size in new[] { new Size(1500, 1100), new Size(1000, 700) })
         {
             Size = size;
             for (int page = 0; page < 3; page++)
             {
                 tabs.SelectedIndex = page; PerformLayout();
+                foreach (var label in Descendants(this).OfType<Label>())
+                {
+                    if (!label.Visible || !label.AutoSize || label.AutoEllipsis || label.MaximumSize.Width > 0) continue;
+                    var required = label.GetPreferredSize(Size.Empty);
+                    if (label.Width < required.Width || label.Height < required.Height)
+                        throw new Exception($"Beschriftung abgeschnitten bei {scale * 100}%: {label.Text} / {label.Size} / benötigt {required}");
+                }
+                foreach (var inputControl in new Control[] { provider, model, effort, measures, meter, tempo, musicalKey, ensemble })
+                    if (inputControl.Visible && inputControl.Height < inputControl.Font.Height + inputControl.Padding.Vertical + 4)
+                        throw new Exception($"Eingabefeld zu flach bei {scale * 100}%: {inputControl.Name}");
                 foreach (var control in slotCards.Cast<Control>().Concat(guiChecks))
                 {
                     if (!control.Visible) continue;
@@ -615,11 +643,12 @@ internal sealed partial class MainForm : Form
                     for (Control? parent = slotCards[0].Parent; parent != null; parent = parent.Parent) if (parent is ScrollableControl scroll && scroll.AutoScroll) scroll.AutoScrollPosition = Point.Empty;
                 }
                 using var bitmap = new Bitmap(Width, Height); DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size));
-                bitmap.Save(Path.Combine(output, (size.Width == 1500 ? "Windows-" : "Windows-Klein-") + new[] { "Main", "Noten", "Technik" }[page] + ".png"));
+                bitmap.Save(Path.Combine(output, $"DPI-{scale * 100:0}-" + (size.Width == 1500 ? "Windows-" : "Windows-Klein-") + new[] { "Main", "Noten", "Technik" }[page] + ".png"));
             }
         }
+        }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten 116x164 cards", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten 116x164 cards", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {

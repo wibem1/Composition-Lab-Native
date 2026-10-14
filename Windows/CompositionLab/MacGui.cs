@@ -50,6 +50,8 @@ internal sealed partial class MainForm
         public readonly TextBox Tempo = new() { Width = 50 };
         public readonly TrackBar Volume = new() { Width = 130, Height = 26, Maximum = 100, Value = 90, TickStyle = TickStyle.None, AutoSize = false };
     }
+    float testLayoutScale = 1;
+    int LayoutPixels(int logical) => (int)Math.Ceiling(logical * DeviceDpi / 96f * testLayoutScale);
     static Font MacFont(float points, FontStyle style = FontStyle.Regular) => new("Segoe UI", points * .75f, style);
     static Label MacLabel(string text, float size = 13, bool bold = false) => new() { Text = text, AutoSize = true, Font = MacFont(size, bold ? FontStyle.Bold : FontStyle.Regular), ForeColor = StudioTheme.Ink, Margin = new Padding(0, 5, 7, 0) };
     static StudioSurface MacPanel() => new() { Dock = DockStyle.Fill, Padding = new Padding(14, 12, 14, 12), BackColor = StudioTheme.Canvas, Margin = Padding.Empty };
@@ -60,13 +62,21 @@ internal sealed partial class MainForm
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28)); Controls.Add(root);
         root.Controls.Add(BuildMacMenus(), 0, 0);
         var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(233, 233, 233), Margin = Padding.Empty };
-        var project = MacLabel("Composition Lab · Composition Engine 2.3.1 · Build 231", 15, true); project.Location = new Point(16, 18); header.Controls.Add(project);
-        var navigation = MacRow(); navigation.Dock = DockStyle.None; navigation.Size = new Size(390, 30); navigation.WrapContents = false;
+        var project = MacLabel("Composition Lab · Composition Engine 2.3.1 · Build 231", 15, true); project.MaximumSize = Size.Empty; header.Controls.Add(project);
+        var navigation = MacRow(); navigation.Dock = DockStyle.None; navigation.Size = new Size(408, 34); navigation.WrapContents = false;
         foreach (string label in new[] { "Main", "Noten", "Technik" })
         { int index = navButtons.Count; var button = new StudioButton { Text = label, Width = 126, Height = 28, AutoSize = false, Selected = index == 0 }; button.Click += (_, _) => tabs.SelectedIndex = index; navButtons.Add(button); navigation.Controls.Add(button); }
-        header.Controls.Add(navigation); header.Resize += (_, _) => navigation.Location = new Point((header.Width - navigation.Width) / 2, 11);
+        header.Controls.Add(navigation);
+        void ArrangeHeader()
+        {
+            project.Location = new Point(LayoutPixels(16), Math.Max(0, (header.ClientSize.Height - project.PreferredHeight) / 2));
+            int left = Math.Max((header.ClientSize.Width - navigation.Width) / 2, project.Right + LayoutPixels(24));
+            navigation.Location = new Point(left, Math.Max(0, (header.ClientSize.Height - navigation.Height) / 2));
+            header.AutoScrollMinSize = new Size(left + navigation.Width + LayoutPixels(16), 0);
+        }
+        header.Layout += (_, _) => ArrangeHeader();
         // Mac centers the segmented control; a narrow Windows viewport may need horizontal scrolling.
-        header.AutoScroll = true; header.AutoScrollMinSize = new Size(1160, 0);
+        header.AutoScroll = true;
         tabs.SelectedIndexChanged += (_, _) => { for (int i = 0; i < 3; i++) { navButtons[i].Selected = tabs.SelectedIndex == i; navButtons[i].Invalidate(); } };
         root.Controls.Add(header, 0, 1);
         tabs.AddPage(BuildMacMain()); tabs.AddPage(BuildMacNotation()); tabs.AddPage(BuildMacTechnology()); root.Controls.Add(tabs, 0, 2);
@@ -85,13 +95,13 @@ internal sealed partial class MainForm
     {
         var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = StudioTheme.Canvas };
         content.Location = Point.Empty; content.Dock = DockStyle.None; scroll.Controls.Add(content);
-        void SizeContent() { content.Size = new Size(Math.Max(width, scroll.ClientSize.Width - (scroll.VerticalScroll.Visible ? SystemInformation.VerticalScrollBarWidth : 0)), Math.Max(height, scroll.ClientSize.Height - (scroll.HorizontalScroll.Visible ? SystemInformation.HorizontalScrollBarHeight : 0))); }
-        scroll.Resize += (_, _) => SizeContent(); SizeContent(); return scroll;
+        void SizeContent() { content.Size = new Size(Math.Max(LayoutPixels(width), scroll.ClientSize.Width - (scroll.VerticalScroll.Visible ? SystemInformation.VerticalScrollBarWidth : 0)), Math.Max(LayoutPixels(height), scroll.ClientSize.Height - (scroll.HorizontalScroll.Visible ? SystemInformation.HorizontalScrollBarHeight : 0))); }
+        scroll.Resize += (_, _) => SizeContent(); scroll.DpiChangedAfterParent += (_, _) => SizeContent(); SizeContent(); return scroll;
     }
     Control BuildMacMain()
     {
         var main = Grid(1, 4); main.Padding = new Padding(0, 18, 0, 18);
-        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 72)); main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        main.RowStyles.Add(new RowStyle(SizeType.AutoSize)); main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         main.RowStyles.Add(new RowStyle(SizeType.Absolute, 240)); main.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
         var controls = MacPanel(); var row = MacRow(); row.WrapContents = false;
         provider.Items.AddRange(["Google / Gemini", "Anthropic / Claude", "OpenAI"]); effort.Items.AddRange(["Sparsam – Low", "Standard – Medium", "Maximum – High"]); effort.SelectedIndex = 1;
@@ -104,18 +114,19 @@ internal sealed partial class MainForm
         rightParameters.Controls.Add(MacLabel("Tonart")); musicalKey.Width = 86; musicalKey.PlaceholderText = "C-Dur"; rightParameters.Controls.Add(musicalKey);
         rightParameters.Controls.Add(MacLabel("Instrumente")); ensemble.Width = 150; ensemble.PlaceholderText = "Piano"; rightParameters.Controls.Add(ensemble);
         var parameterLayout = Grid(3, 1); parameterLayout.ColumnStyles.Clear(); parameterLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); parameterLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); parameterLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); parameterLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); parameterLayout.Controls.Add(row, 0, 0); parameterLayout.Controls.Add(rightParameters, 2, 0);
+        parameterLayout.AutoSize = true; controls.AutoSize = true; controls.AutoSizeMode = AutoSizeMode.GrowAndShrink;
         controls.Controls.Add(parameterLayout); controls.Margin = new Padding(0, 0, 0, 14); main.Controls.Add(controls, 0, 0);
         var work = Grid(2, 1); work.ColumnStyles.Clear(); work.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 66)); work.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34)); work.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); work.Margin = new Padding(0, 0, 0, 14);
         var chatPanel = MacPanel(); chatPanel.Margin = new Padding(0, 0, 7, 0); var chatLayout = Grid(1, 3);
-        chatLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36)); chatLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); chatLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        chatLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); chatLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); chatLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         chatLayout.Controls.Add(MacLabel("MusicChat", 20, true), 0, 0); chat.BorderStyle = BorderStyle.FixedSingle; chat.Font = MacFont(13); chatLayout.Controls.Add(chat, 0, 1);
         var input = Grid(2, 1); input.ColumnStyles.Clear(); input.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); input.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100)); input.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); input.Padding = new Padding(0, 10, 0, 0);
         chatInput.Dock = DockStyle.Fill; chatInput.Font = MacFont(13); chatInput.Multiline = true; input.Controls.Add(chatInput, 0, 0); send.Dock = DockStyle.Fill; send.AutoSize = false; input.Controls.Add(send, 1, 0);
         chatLayout.Controls.Add(input, 0, 2); chatPanel.Controls.Add(chatLayout); work.Controls.Add(chatPanel, 0, 0);
-        var ideaPanel = MacPanel(); ideaPanel.Margin = new Padding(7, 0, 0, 0); var idea = Grid(1, 2); idea.RowStyles.Add(new RowStyle(SizeType.Absolute, 32)); idea.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var ideaPanel = MacPanel(); ideaPanel.Margin = new Padding(7, 0, 0, 0); var idea = Grid(1, 2); idea.RowStyles.Add(new RowStyle(SizeType.AutoSize)); idea.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         idea.Controls.Add(MacLabel("Aktuelle Kompositionsidee", 16, true), 0, 0); composition.BorderStyle = BorderStyle.FixedSingle; idea.Controls.Add(composition, 0, 1); ideaPanel.Controls.Add(idea); work.Controls.Add(ideaPanel, 1, 0); main.Controls.Add(work, 0, 1);
         var deck = MacPanel(); deck.Padding = new Padding(7, 5, 7, 5); deck.Margin = new Padding(0, 0, 0, 14);
-        var dl = Grid(1, 2); dl.RowStyles.Add(new RowStyle(SizeType.Absolute, 25)); dl.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); dl.Controls.Add(MacLabel("Stücke (1–10)", 14, true), 0, 0);
+        var dl = Grid(1, 2); dl.RowStyles.Add(new RowStyle(SizeType.AutoSize)); dl.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); dl.Controls.Add(MacLabel("Stücke (1–10)", 14, true), 0, 0);
         var cardScroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         var cards = new FlowLayoutPanel { Location = Point.Empty, Width = 1235, Height = 168, WrapContents = false, Margin = Padding.Empty, Padding = new Padding(1, 2, 1, 1) };
         for (int i = 0; i < 10; i++)
@@ -172,7 +183,7 @@ internal sealed partial class MainForm
         var page = Grid(2, 1); page.ColumnStyles.Clear(); page.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 301)); page.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var settings = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(16), BackColor = StudioTheme.Canvas };
         settings.Controls.Add(MacLabel("Noten", 17, true)); settings.Controls.Add(new Label { Text = "Darstellungsquantisierung für MusicXML. Die MIDI-Daten und die Komposition bleiben unverändert.", Width = 264, Height = 48, ForeColor = StudioTheme.Muted, Font = MacFont(12) });
-        settings.Controls.Add(MacLabel("Darstellungsquantisierung", 17, true));
+        var quantizationTitle = MacLabel("Darstellungsquantisierung", 17, true); quantizationTitle.MaximumSize = new Size(264, 0); settings.Controls.Add(quantizationTitle);
         string[] titles = ["Preset", "Rhythmusmodus", "Kleinster gerader Notenwert", "Kleinster triolischer Notenwert", "Kurze Pausen", "Notenlängen glätten", "Mini-Pausen am Taktanfang", "Darstellung", "Splitpunkt"];
         string[][] choices = [["Klavier – lesbar", "MIDI-nah", "Benutzerdefiniert"], ["Auto", "Gerade", "Triolisch"], ["Aus", "Viertel", "Achtel", "16tel", "32tel", "64tel"], ["Aus", "Vierteltriolen", "Achteltriolen", "16teltriolen", "32teltriolen"], ["Alle Pausen zeigen", "bis 32tel glätten", "bis 16tel glätten", "bis Achtel glätten"], ["Aus", "Leicht", "Mittel", "Stark"], ["Aus", "bis 32tel", "bis 16tel", "bis Achtel"], ["Automatisch", "Ein System", "Zwei Systeme"], ["C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"]];
         updatingNotation = true;
@@ -181,11 +192,11 @@ internal sealed partial class MainForm
         settings.Controls.Add(MacLabel("Notenwerte", 17, true)); settings.Controls.Add(splitBeats); splitBeats.CheckedChanged += async (_, _) => await NotationChangedAsync(-1); updatingNotation = false;
         page.Controls.Add(settings, 0, 0);
         var right = Grid(1, 6); right.Padding = new Padding(14, 12, 14, 12); right.RowStyles.Add(new RowStyle(SizeType.Absolute, 70)); right.RowStyles.Add(new RowStyle(SizeType.Absolute, 48)); right.RowStyles.Add(new RowStyle(SizeType.Absolute, 66)); right.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); right.RowStyles.Add(new RowStyle(SizeType.Absolute, 50)); right.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        var deck = Grid(1, 2); deck.RowStyles.Add(new RowStyle(SizeType.Absolute, 28)); deck.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); deck.Controls.Add(MacLabel("Stücke / Varianten", 17, true), 0, 0);
+        var deck = Grid(1, 2); deck.RowStyles.Add(new RowStyle(SizeType.AutoSize)); deck.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); deck.Controls.Add(MacLabel("Stücke / Varianten", 17, true), 0, 0);
         var numbers = Grid(10, 1); numbers.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         for (int i = 0; i < 10; i++) { int index = i; var button = new StudioButton { Text = (i + 1).ToString(), Dock = DockStyle.Fill, AutoSize = false, Padding = Padding.Empty }; button.Click += (_, _) => { if (!busy) slots.SelectedIndex = index; }; notationCards.Add(button); numbers.Controls.Add(button, i, 0); } deck.Controls.Add(numbers, 0, 1); right.Controls.Add(deck, 0, 0);
         var transport = MacPanel(); transport.Padding = new Padding(10, 6, 10, 6); transport.Controls.Add(BuildTransport(true)); right.Controls.Add(transport, 0, 1);
-        var previewHeader = Grid(1, 2); previewHeader.RowStyles.Add(new RowStyle(SizeType.Absolute, 30)); previewHeader.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); var titleRow = new Panel { Dock = DockStyle.Fill }; var title = MacLabel("Notenbildvorschau", 17, true); title.Dock = DockStyle.Left; notationCurrent.Dock = DockStyle.Right; notationCurrent.Width = 300; notationCurrent.TextAlign = ContentAlignment.MiddleRight; titleRow.Controls.Add(title); titleRow.Controls.Add(notationCurrent); previewHeader.Controls.Add(titleRow, 0, 0); previewHeader.Controls.Add(new Label { Text = "Schnelle Kontrolle der aktuellen MusicXML-Darstellung. Änderungen links werden automatisch in der Vorschau sichtbar; MIDI und interner Score bleiben unverändert.", Dock = DockStyle.Fill, ForeColor = StudioTheme.Muted, Font = MacFont(11.5f) }, 0, 1); right.Controls.Add(previewHeader, 0, 2);
+        var previewHeader = Grid(1, 2); previewHeader.RowStyles.Add(new RowStyle(SizeType.AutoSize)); previewHeader.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); var titleRow = Grid(2, 1); titleRow.AutoSize = true; titleRow.ColumnStyles.Clear(); titleRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); titleRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); titleRow.RowStyles.Add(new RowStyle(SizeType.AutoSize)); var title = MacLabel("Notenbildvorschau", 17, true); notationCurrent.Dock = DockStyle.Fill; notationCurrent.TextAlign = ContentAlignment.MiddleRight; titleRow.Controls.Add(title, 0, 0); titleRow.Controls.Add(notationCurrent, 1, 0); previewHeader.Controls.Add(titleRow, 0, 0); previewHeader.Controls.Add(new Label { Text = "Schnelle Kontrolle der aktuellen MusicXML-Darstellung. Änderungen links werden automatisch in der Vorschau sichtbar; MIDI und interner Score bleiben unverändert.", Dock = DockStyle.Fill, ForeColor = StudioTheme.Muted, Font = MacFont(11.5f) }, 0, 1); right.Controls.Add(previewHeader, 0, 2);
         var preview = Grid(1, 2); preview.RowStyles.Add(new RowStyle(SizeType.Absolute, 36)); preview.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var previewTools = MacRow();
         AddButton(previewTools, "◀", () => PreviewCommand("page(-1)")); previewTools.Controls.Add(previewPage); AddButton(previewTools, "▶", () => PreviewCommand("page(1)")); AddButton(previewTools, "−", () => PreviewCommand("zoom(-10)")); previewTools.Controls.Add(previewZoom); AddButton(previewTools, "+", () => PreviewCommand("zoom(10)")); AddButton(previewTools, "Aktualisieren", RefreshNotationAsync); AddButton(previewTools, "Drucken …", () => { if (webReady) web.CoreWebView2.ShowPrintUI(Microsoft.Web.WebView2.Core.CoreWebView2PrintDialogKind.Browser); return Task.CompletedTask; });
