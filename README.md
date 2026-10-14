@@ -1,6 +1,6 @@
 # Composition Lab Native 4.0 – Mac / Windows
 
-**Entwicklungszweig `v4-cross-platform` · 4.0.0-alpha.5 / Build 4005**
+**Entwicklungszweig `v4-cross-platform` · 4.0.0-alpha.6 / Build 4006**
 
 Die bisherige Version 3.5.3 bleibt auf `main` und unter
 `reference-v3.5.3-before-v4` unverändert. Version 4.0 installiert sich getrennt.
@@ -12,7 +12,7 @@ Windows-Oberfläche verwendet. Runtime-DLLs und .NET sind im Windows-ZIP enthalt
 
 - Windows: [Start und Funktionen](Windows/README-Windows.md)
 - Architektur: [V4-ARCHITECTURE.md](V4-ARCHITECTURE.md)
-- Tests und Downloads: [GitHub Actions](https://github.com/wibem1/Composition-Lab-Native/actions/runs/38412049865)
+- Tests und Downloads: [GitHub Actions](https://github.com/wibem1/Composition-Lab-Native/actions/runs/38528369749)
 - Tests lokal: `swift test`
 - Mac-Test-App: `bash 'Build Native App.command'`
 - Windows-Bundle: `pwsh Windows/Build.ps1` nach `swift build -c release`
@@ -45,6 +45,12 @@ Akzent. `StudioTheme.cs` kapselt die Windows-Darstellung. Der gemeinsame Kern
 und die kompatible Arbeitsablage bleiben erhalten. Alle drei Arbeitsbereiche
 bestehen die Fensterprüfungen bei kleiner und großer angeforderter Fenstergröße;
 der Windows-Testrechner begrenzt die große Größe auf seine Bildschirmauflösung.
+
+Alpha 6 übernimmt die Mac-GUI aus `main` in die Windows-Adapter. Die Referenz
+ist unter [MAC-GUI-REFERENCE.md](Shared/Interface/MAC-GUI-REFERENCE.md) dokumentiert.
+Reale Mac-Bilder und Windows-Starttests gehören zum Abgleich. Dreizehn Kerntests
+prüfen unter anderem die gemeinsamen Notationsoptionen und das Mac-Projektformat.
+Die plattformspezifischen Funktionsgrenzen stehen in der Windows-Anleitung.
 
 Die nachfolgende historische Dokumentation beschreibt 3.5.3 und frühere Stände.
 

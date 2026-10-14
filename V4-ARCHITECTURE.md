@@ -72,3 +72,18 @@ Schaltflächen, Stück-Karten und den Wechsel zwischen Arbeitsbereichen.
 `MainForm` setzt die Werkstatt aus diesen Bausteinen zusammen. Diese Windows-
 Adapter führen keine musikalische Änderung oder neue KI-Anfrage aus. Die zehn
 Stück-Plätze und Schlüsselablage verwenden weiterhin die bisherigen Datenpfade.
+
+## Mac-GUI-Port Alpha 6 (14.10.2026)
+
+`Shared/Interface/MAC-GUI-REFERENCE.md` dokumentiert die maßgebliche Mac-Quelle.
+`Windows/CompositionLab/MacGui.cs` übernimmt deren Main-/Noten-/Technik-Builder.
+Ein Startschalter nimmt die reale Mac-Oberfläche in der CI als Referenz auf.
+Die Windows-Oberfläche nutzt den gleichen MusicXML-Exporter mit denselben
+Preset-Werten; ein Änderungsprofil beeinflusst MIDI und Score nicht. Das
+Mac-Arbeitsplatzformat `composition-lab-v6-project` wird im Kern geprüft.
+
+Der eigene Windows-4.0-Datenspeicher und DPAPI-Schlüssel bleiben erhalten.
+Die isolierte Mac-App verwendet ihren Standard-Preferences-Domain, statt
+ihre eigene Bundle-ID als fremde Suite zu öffnen. Original-`main` bleibt
+unverändert. Schrift, native Systemdialoge und noch fehlende Plattformadapter
+sind in der Windows-Anleitung ausdrücklich getrennt von der GUI-Portierung.
