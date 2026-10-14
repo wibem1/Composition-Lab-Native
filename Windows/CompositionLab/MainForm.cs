@@ -29,7 +29,7 @@ internal sealed partial class MainForm : Form
     readonly RichTextBox chat = new() { Dock = DockStyle.Fill, ReadOnly = true, BackColor = Color.White, DetectUrls = true };
     readonly RichTextBox diagnostic = new() { Dock = DockStyle.Fill, ReadOnly = true, Font = new Font("Consolas", 10) };
     readonly RichTextBox composition = new() { Dock = DockStyle.Fill, ReadOnly = true, BackColor = Color.White };
-    readonly TextBox measures = new() { Width = 55 };
+    readonly ComboBox measures = new() { Width = 55, DropDownStyle = ComboBoxStyle.DropDown, AutoCompleteMode = AutoCompleteMode.None };
     readonly TextBox tempo = new() { Width = 55 };
     readonly TextBox musicalKey = new() { Width = 90 };
     readonly TextBox ensemble = new() { Width = 130, Text = "Klavier" };

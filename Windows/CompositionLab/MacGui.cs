@@ -8,6 +8,7 @@ namespace CompositionLab;
 // Each builder mirrors the corresponding build* function instead of redesigning it.
 internal sealed partial class MainForm
 {
+    static class NativeCue { [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr handle, uint message, IntPtr value, string text); }
     sealed record ModelChoice(string Id, string Label) { public override string ToString() => Label; }
     string SelectedModelId => (model.SelectedItem as ModelChoice)?.Id ?? model.Text;
     void SelectModel()
@@ -96,7 +97,7 @@ internal sealed partial class MainForm
         provider.Width = 130; model.Width = 148; effort.Width = 140;
         provider.SelectedIndexChanged += (_, _) => ProviderChanged();
         row.Controls.Add(MacLabel("KI", 12, true)); row.Controls.Add(provider); row.Controls.Add(model); row.Controls.Add(effort);
-        row.Controls.Add(MacLabel("Takte")); measures.Width = 62; measures.PlaceholderText = "24"; row.Controls.Add(measures); row.Controls.Add(meter);
+        row.Controls.Add(MacLabel("Takte")); measures.Width = 62; measures.Items.AddRange(new object[] { "2", "4", "8", "16", "24", "32", "48", "64" }); measures.HandleCreated += (_, _) => NativeCue.SendMessage(measures.Handle, 0x1703, new IntPtr(1), "24"); row.Controls.Add(measures); row.Controls.Add(meter);
         row.Controls.Add(MacLabel("Tempo")); tempo.Width = 58; tempo.PlaceholderText = "96"; row.Controls.Add(tempo);
         row.Controls.Add(MacLabel("Tonart")); musicalKey.Width = 86; musicalKey.PlaceholderText = "C-Dur"; row.Controls.Add(musicalKey);
         row.Controls.Add(MacLabel("Instrumente")); ensemble.Width = 150; ensemble.PlaceholderText = "Piano"; row.Controls.Add(ensemble);
