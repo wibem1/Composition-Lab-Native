@@ -291,7 +291,7 @@ internal sealed partial class MainForm
                 int sidebar = largePreview ? 0 : Math.Min(LayoutPixels(280), Math.Max(0, page.ClientSize.Width / 4));
                 page.ColumnStyles[0].Width = sidebar;
                 settings.Visible = !largePreview;
-                foreach (var pair in new[] { (deck, 0), (transport, 1), (previewHeader, 2), (exports, 5) }) pair.Item1.Visible = !largePreview;
+                foreach (var pair in new (Control, int)[] { (deck, 0), (transport, 1), (previewHeader, 2), (exports, 5) }) pair.Item1.Visible = !largePreview;
                 right.RowStyles[0].Height = largePreview ? 0 : LayoutPixels(62);
                 right.RowStyles[1].Height = largePreview ? 0 : notationPlayer.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal - transport.Padding.Horizontal), 0)).Height + transport.Padding.Vertical;
                 right.RowStyles[2].Height = largePreview ? 0 : LayoutPixels(30);
