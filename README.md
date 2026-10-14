@@ -12,7 +12,7 @@ Windows-Oberfläche verwendet. Runtime-DLLs und .NET sind im Windows-ZIP enthalt
 
 - Windows: [Start und Funktionen](Windows/README-Windows.md)
 - Architektur: [V4-ARCHITECTURE.md](V4-ARCHITECTURE.md)
-- Tests und Downloads: [GitHub Actions](https://github.com/wibem1/Composition-Lab-Native/actions/runs/38539519343)
+- Tests und Downloads: [GitHub Actions](https://github.com/wibem1/Composition-Lab-Native/actions/runs/38541542836)
 - Tests lokal: `swift test`
 - Mac-Test-App: `bash 'Build Native App.command'`
 - Windows-Bundle: `pwsh Windows/Build.ps1` nach `swift build -c release`
@@ -53,6 +53,8 @@ prüfen unter anderem die gemeinsamen Notationsoptionen und das Mac-Projektforma
 Die plattformspezifischen Funktionsgrenzen stehen in der Windows-Anleitung.
 
 Alpha 7 korrigiert die Windows-DPI-Initialisierung, skaliert Scrollflächen mit dem Monitor und verhindert überdeckte Titel sowie zu flache Textzeilen. Alpha 8 passt die Hauptseite an die sichtbare Fensterbreite an und ergänzt eine verschiebbare, gespeicherte Trennlinie zwischen MusicChat und Kompositionsidee. Parameter und Aktionen brechen bei schmalen Fenstern um. Die Windows-Prüfung kontrolliert Schriftmetriken, Geometrie und die verstellbaren Bereiche bei simulierten 100, 125, 150 und 200 Prozent.
+
+Alpha 9 stabilisiert Tabwechsel und Fokuswiederherstellung, fasst Layoutänderungen zusammen und speichert die Aufteilung nur nach einer tatsächlichen Bewegung der Trennlinie. Die Windows-Prüfung besteht 144 wiederholte Tabwechsel bei vier simulierten Skalierungen und zwei Fenstergrößen ohne verschwundene Hauptbedienelemente oder verschobene Parameterpositionen.
 
 Die nachfolgende historische Dokumentation beschreibt 3.5.3 und frühere Stände.
 
