@@ -254,7 +254,7 @@ internal sealed partial class MainForm : Form
         pieceInfo.Text = string.Join("  ·  ", new[] { document["ensemble"]?.GetValue<string>(), scoreInfo?["k"]?.GetValue<string>(), scoreInfo?["bpm"]?.ToString() is string bpm ? bpm + " BPM" : null }.Where(v => !string.IsNullOrWhiteSpace(v)));
         scoreJSON.Text = document["score"]?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
         validation.Text = "Technische Prüfung läuft …";
-        playerBpm = document["score"]?["bpm"]?.GetValue<int>() ?? 96; foreach (var transport in transports) transport.Tempo.Text = playerBpm.ToString();
+        playerBpm = double.TryParse(document["score"]?["bpm"]?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double bpmValue) ? (int)Math.Round(bpmValue) : 96; tempoOverride = false; foreach (var transport in transports) transport.Tempo.Text = playerBpm.ToString();
         try
         {
             var score = document["score"]!.DeepClone();
@@ -585,6 +585,8 @@ internal sealed partial class MainForm : Form
         SetStatus("Bereit · alle Windows-Prüfungen bestanden.");
         composition.Text = "Eine ruhige, gesangliche Melodie mit Raum zum Atmen.\n\nDie Begleitung trägt die Linie und entwickelt sich mit ihr. Ein kurzer Kontrast führt zum ursprünglichen Gedanken zurück.";
         string unchangedIdea = composition.Text; slots.SelectedIndex = 2; await DisplayCurrentAsync(); if (composition.Text != unchangedIdea) throw new Exception("Stückwahl verändert die Kompositionsidee."); slots.SelectedIndex = 0; await DisplayCurrentAsync();
+        var decimalTempo = fixture.DeepClone().AsObject(); decimalTempo["bpm"] = 81.25; documents[9] = CreateDocument(decimalTempo, "Tempo-Rückprüfung"); RefreshSlots(); slots.SelectedIndex = 9; await DisplayCurrentAsync(); if (currentMidi == null || playerBpm != 81) throw new Exception("Dezimaltempo nicht lesbar.");
+        slots.SelectedIndex = 0; await DisplayCurrentAsync();
         var midiBefore = currentMidi!.ToArray(); notationSettings[0].SelectedIndex = 1; await NotationChangedAsync(0);
         if (!midiBefore.SequenceEqual(currentMidi!)) throw new Exception("Notationsprofil verändert MIDI.");
         foreach (var size in new[] { new Size(1500, 1100), new Size(1000, 700) })
@@ -617,7 +619,7 @@ internal sealed partial class MainForm : Form
             }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten 116x164 cards", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "three Mac workspaces, large/small window with reachable scroll content" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten 116x164 cards", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {

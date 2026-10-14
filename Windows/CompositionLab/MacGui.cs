@@ -40,6 +40,7 @@ internal sealed partial class MainForm
     bool loopPlaying;
     bool seekUpdating;
     int playerBpm;
+    bool tempoOverride;
     int playerVolume = 90;
     sealed class Transport
     {
@@ -143,14 +144,14 @@ internal sealed partial class MainForm
         if (notation) transport.Position.Width = 220;
         transport.Loop.CheckedChanged += (_, _) => { loopPlaying = transport.Loop.Checked; foreach (var other in transports) if (other != transport) other.Loop.Checked = loopPlaying; };
         transport.Position.Scroll += (_, _) => { if (player.Loaded && !seekUpdating) { player.Seek(transport.Position.Value / 1000d); UpdateTransport(); } };
-        transport.Tempo.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter && int.TryParse(transport.Tempo.Text, out int bpm) && bpm is >= 20 and <= 400) { playerBpm = bpm; if (player.Loaded) player.SetTempo(bpm); foreach (var other in transports) other.Tempo.Text = bpm.ToString(); e.SuppressKeyPress = true; } };
+        transport.Tempo.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter && int.TryParse(transport.Tempo.Text, out int bpm) && bpm is >= 20 and <= 400) { playerBpm = bpm; tempoOverride = true; if (player.Loaded) player.SetTempo(bpm); foreach (var other in transports) other.Tempo.Text = bpm.ToString(); e.SuppressKeyPress = true; } };
         transport.Volume.Scroll += (_, _) => { playerVolume = transport.Volume.Value; foreach (var other in transports) other.Volume.Value = playerVolume; if (player.Loaded && !player.SetVolume(playerVolume)) SetStatus("Dieser Windows-MIDI-Treiber unterstützt keine Lautstärkeregelung.", true); };
         return row;
     }
     async Task PlayAsync()
     {
         if (currentMidi == null) throw new InvalidOperationException("Kein Stück geladen.");
-        if (!player.Loaded) player.Load(currentMidi); if (playerBpm > 0) player.SetTempo(playerBpm); player.SetVolume(playerVolume); player.Play(); await Task.CompletedTask;
+        if (!player.Loaded) player.Load(currentMidi); if (tempoOverride && playerBpm > 0) player.SetTempo(playerBpm); player.SetVolume(playerVolume); player.Play(); await Task.CompletedTask;
     }
     void UpdateTransport()
     {
