@@ -634,7 +634,9 @@ internal sealed partial class MainForm : Form
                 foreach (var label in Descendants(this).OfType<Label>())
                 {
                     if (!label.Visible || !label.AutoSize || label.AutoEllipsis) continue;
-                    var required = label.GetPreferredSize(label.MaximumSize.Width > 0 ? new Size(label.MaximumSize.Width, 0) : Size.Empty);
+                    // TableLayoutPanel may legitimately wrap an AutoSize heading in a narrow column.
+                    // Measure at its actual available width and check the full wrapped height.
+                    var required = label.GetPreferredSize(new Size(label.Width, 0));
                     if (label.Width < required.Width || label.Height < required.Height)
                         throw new Exception($"Beschriftung abgeschnitten bei {scale * 100}%: {label.Text} / {label.Size} / benötigt {required}");
                 }

@@ -28,4 +28,4 @@ DPI-Skalierung wird erst nach dem vollständigen Aufbau angewendet. Scrollfläch
 
 ## Anpassbare Hauptansicht in Alpha 8
 
-MusicChat und Kompositionsidee teilen sich beim ersten Start die sichtbare Fensterbreite gleichmäßig. Die graue Trennlinie lässt sich mit der Maus verschieben; ihre Position bleibt beim nächsten Start erhalten. Die Parameter- und Aktionsleisten brechen bei Bedarf um. Die Hauptseite benötigt keinen horizontalen Gesamtbildlauf mehr; die zehn Karten bleiben separat horizontal scrollbar.
+MusicChat und Kompositionsidee teilen sich beim ersten Start die sichtbare Fensterbreite gleichmäßig. Die graue Trennlinie lässt sich mit der Maus verschieben; ihre Position bleibt beim nächsten Start erhalten. Die Parameter- und Aktionsleisten brechen bei Bedarf um. Beide Textbereiche bleiben innerhalb der sichtbaren Fensterbreite; die zehn Karten bleiben separat horizontal scrollbar.
