@@ -615,8 +615,8 @@ internal sealed partial class MainForm : Form
                 tabs.SelectedIndex = page; PerformLayout();
                 foreach (var label in Descendants(this).OfType<Label>())
                 {
-                    if (!label.Visible || !label.AutoSize || label.AutoEllipsis || label.MaximumSize.Width > 0) continue;
-                    var required = label.GetPreferredSize(Size.Empty);
+                    if (!label.Visible || !label.AutoSize || label.AutoEllipsis) continue;
+                    var required = label.GetPreferredSize(label.MaximumSize.Width > 0 ? new Size(label.MaximumSize.Width, 0) : Size.Empty);
                     if (label.Width < required.Width || label.Height < required.Height)
                         throw new Exception($"Beschriftung abgeschnitten bei {scale * 100}%: {label.Text} / {label.Size} / benötigt {required}");
                 }

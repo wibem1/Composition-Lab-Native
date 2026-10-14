@@ -69,9 +69,10 @@ internal sealed partial class MainForm
         header.Controls.Add(navigation);
         void ArrangeHeader()
         {
-            project.Location = new Point(LayoutPixels(16), Math.Max(0, (header.ClientSize.Height - project.PreferredHeight) / 2));
-            int left = Math.Max((header.ClientSize.Width - navigation.Width) / 2, project.Right + LayoutPixels(24));
-            navigation.Location = new Point(left, Math.Max(0, (header.ClientSize.Height - navigation.Height) / 2));
+            int offset = header.AutoScrollPosition.X;
+            project.Location = new Point(LayoutPixels(16) + offset, Math.Max(0, (header.ClientSize.Height - project.PreferredHeight) / 2));
+            int left = Math.Max((header.ClientSize.Width - navigation.Width) / 2, project.Right - offset + LayoutPixels(24));
+            navigation.Location = new Point(left + offset, Math.Max(0, (header.ClientSize.Height - navigation.Height) / 2));
             header.AutoScrollMinSize = new Size(left + navigation.Width + LayoutPixels(16), 0);
         }
         header.Layout += (_, _) => ArrangeHeader();
@@ -182,7 +183,7 @@ internal sealed partial class MainForm
     {
         var page = Grid(2, 1); page.ColumnStyles.Clear(); page.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 301)); page.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var settings = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(16), BackColor = StudioTheme.Canvas };
-        settings.Controls.Add(MacLabel("Noten", 17, true)); settings.Controls.Add(new Label { Text = "Darstellungsquantisierung für MusicXML. Die MIDI-Daten und die Komposition bleiben unverändert.", Width = 264, Height = 48, ForeColor = StudioTheme.Muted, Font = MacFont(12) });
+        settings.Controls.Add(MacLabel("Noten", 17, true)); settings.Controls.Add(new Label { Text = "Darstellungsquantisierung für MusicXML. Die MIDI-Daten und die Komposition bleiben unverändert.", AutoSize = true, MaximumSize = new Size(264, 0), ForeColor = StudioTheme.Muted, Font = MacFont(12) });
         var quantizationTitle = MacLabel("Darstellungsquantisierung", 17, true); quantizationTitle.MaximumSize = new Size(264, 0); settings.Controls.Add(quantizationTitle);
         string[] titles = ["Preset", "Rhythmusmodus", "Kleinster gerader Notenwert", "Kleinster triolischer Notenwert", "Kurze Pausen", "Notenlängen glätten", "Mini-Pausen am Taktanfang", "Darstellung", "Splitpunkt"];
         string[][] choices = [["Klavier – lesbar", "MIDI-nah", "Benutzerdefiniert"], ["Auto", "Gerade", "Triolisch"], ["Aus", "Viertel", "Achtel", "16tel", "32tel", "64tel"], ["Aus", "Vierteltriolen", "Achteltriolen", "16teltriolen", "32teltriolen"], ["Alle Pausen zeigen", "bis 32tel glätten", "bis 16tel glätten", "bis Achtel glätten"], ["Aus", "Leicht", "Mittel", "Stark"], ["Aus", "bis 32tel", "bis 16tel", "bis Achtel"], ["Automatisch", "Ein System", "Zwei Systeme"], ["C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"]];
