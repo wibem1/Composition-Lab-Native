@@ -307,7 +307,7 @@ internal sealed partial class MainForm
             }
             finally { preview.ResumeLayout(true); right.ResumeLayout(true); page.ResumeLayout(true); arranging = false; FitFlowRow(previewTools, preview.RowStyles[0]); if (!largePreview) { FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical); FitFlowRow(exports, right.RowStyles[5]); } }
         }
-        void FitFlowRow(FlowLayoutPanel flow, RowStyle style, int padding = 0)
+        void FitFlowRow(Control flow, RowStyle style, int padding = 0)
         {
             if (flow.ClientSize.Width <= 0 || !flow.Visible) return;
             int needed = flow.Controls.Cast<Control>().Where(c => c.Visible).Select(c => c.Bottom + c.Margin.Bottom).DefaultIfEmpty(0).Max() + padding;
