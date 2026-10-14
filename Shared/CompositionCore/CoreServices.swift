@@ -3,7 +3,7 @@ import Foundation
 /// Small public boundary for desktop clients. JSON preserves the existing score
 /// and CLAB wire format; AppKit and Windows APIs never enter this module.
 public enum CoreServices {
-    public static let version = "4.0.0-alpha.9"
+    public static let version = "4.0.0-alpha.10"
 
     public static func midi(scoreJSON: Data) throws -> Data {
         MIDIBuilder.build(try validatedScore(scoreJSON))
@@ -83,6 +83,34 @@ public enum CoreServices {
         } catch { completion(.failure(error)) }
     }
 
+    public static func translateExisting(requestJSON: Data, apiKey: String,
+                               progress: ((String) -> Void)? = nil,
+                               completion: @escaping (Result<Data, Error>) -> Void) {
+        do {
+            let dto = try JSONDecoder().decode(RequestDTO.self, from: requestJSON)
+            guard !(dto.composition ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !dto.model.isEmpty, !apiKey.isEmpty else {
+                throw APIError.badResponse("Auftrag, Modell und API-Schlüssel fehlen.")
+            }
+            let request = CompositionRequest(assignment: dto.assignment, provider: dto.provider,
+                model: dto.model, effort: dto.effort, key: apiKey)
+            CompositionWorkflow().translateExisting(request, composition: dto.composition ?? "", priorInputTokens: dto.priorInputTokens ?? 0, priorOutputTokens: dto.priorOutputTokens ?? 0, priorCostUSD: dto.priorCostUSD ?? 0, progress: { stage, _ in
+                progress?(stage.rawValue)
+            }) { result in
+                switch result {
+                case .success(let work):
+                    completion(Result { try JSONSerialization.data(withJSONObject: work.diagnostic,
+                                                                   options: [.prettyPrinted, .sortedKeys]) })
+                case .failure(let failure):
+                    let data = (try? JSONSerialization.data(withJSONObject: failure.diagnostic,
+                                                            options: [.prettyPrinted, .sortedKeys])) ?? Data()
+                    completion(.failure(CoreCompositionError(message: failure.localizedDescription,
+                                                             diagnosticJSON: data)))
+                }
+            }
+        } catch { completion(.failure(error)) }
+    }
+
     public static func chat(requestJSON: Data, apiKey: String,
                             completion: @escaping (Result<Data, Error>) -> Void) {
         do {
@@ -92,7 +120,7 @@ public enum CoreServices {
                 effort: dto.effort, purpose: "music-chat", system: "", user: dto.assignment,
                 wantJSON: false) { result in
                 completion(result.flatMap { response in Result {
-                    let diagnostic: [String: Any] = ["text": response.text,
+                    let diagnostic: [String: Any] = ["text": response.text, "provider": dto.provider.rawValue, "model": dto.model, "assignment": dto.assignment, "reasoning": dto.effort.rawValue, "stage": "chat-completed",
                         "inputTokens": response.inputTokens, "outputTokens": response.outputTokens,
                         "estimatedCostUSD": APICost.estimate(provider: dto.provider, model: dto.model,
                             inputTokens: response.inputTokens, outputTokens: response.outputTokens)]
@@ -103,6 +131,10 @@ public enum CoreServices {
     }
 
     private struct RequestDTO: Decodable {
+        let composition: String?
+        let priorInputTokens: Int?
+        let priorOutputTokens: Int?
+        let priorCostUSD: Double?
         let assignment: String
         let provider: Provider
         let model: String

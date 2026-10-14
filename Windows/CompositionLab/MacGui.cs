@@ -105,7 +105,7 @@ internal sealed partial class MainForm
         root.Controls.Add(header, 0, 1);
         tabs.AddPage(BuildMacMain()); tabs.AddPage(BuildMacNotation()); tabs.AddPage(BuildMacTechnology()); root.Controls.Add(tabs, 0, 2);
         var strip = new StatusStrip { Dock = DockStyle.Fill, BackColor = Color.FromArgb(233, 233, 233), SizingGrip = true }; strip.Items.Add(status); strip.Items.Add(cost); root.Controls.Add(strip, 0, 3);
-        slots.SelectedIndexChanged += async (_, _) => { RefreshCards(); await DisplayCurrentAsync(); };
+        slots.SelectedIndexChanged += async (_, _) => { if (!refreshingSlots) { RefreshCards(); await DisplayCurrentAsync(); } };
         send.Text = "Senden"; send.Click += async (_, _) => await RequestAIAsync(false);
         compose.Text = "Mit gewählter KI komponieren"; compose.Click += async (_, _) => await RequestAIAsync(true);
         cancel.Click += (_, _) => pending?.Cancel();
@@ -139,7 +139,7 @@ internal sealed partial class MainForm
     {
         var main = Grid(1, 4); main.Padding = new Padding(0, 18, 0, 18);
         main.RowStyles.Add(new RowStyle(SizeType.AutoSize)); main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 240)); main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 172)); main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         var controls = MacPanel(); var row = MacRow(true); row.Dock = DockStyle.None;
         provider.Items.AddRange(["Google / Gemini", "Anthropic / Claude", "OpenAI"]); effort.Items.AddRange(["Sparsam – Low", "Standard – Medium", "Maximum – High"]); effort.SelectedIndex = 1;
         provider.Width = 130; model.Width = 148; effort.Width = 140;
@@ -179,10 +179,10 @@ internal sealed partial class MainForm
         var deck = MacPanel(); deck.Padding = new Padding(7, 5, 7, 5); deck.Margin = new Padding(0, 0, 0, 14);
         var dl = Grid(1, 2); dl.RowStyles.Add(new RowStyle(SizeType.AutoSize)); dl.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); dl.Controls.Add(MacLabel("Stücke (1–10)", 14, true), 0, 0);
         var cardScroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
-        var cards = new FlowLayoutPanel { Location = Point.Empty, Width = 1235, Height = 168, WrapContents = false, Margin = Padding.Empty, Padding = new Padding(1, 2, 1, 1) };
+        var cards = new FlowLayoutPanel { Location = Point.Empty, Width = 1115, Height = 106, WrapContents = false, Margin = Padding.Empty, Padding = new Padding(1, 2, 1, 1) };
         for (int i = 0; i < 10; i++)
         {
-            int index = i; var card = new PieceCard { Number = i + 1, Width = 116, Height = 164, AutoSize = false, Margin = new Padding(0, 0, 8, 0), Font = MacFont(12), AllowDrop = true };
+            int index = i; var card = new PieceCard { Number = i + 1, Width = 104, Height = 100, AutoSize = false, Margin = new Padding(0, 0, 8, 0), Font = MacFont(12), AllowDrop = true };
             card.Click += (_, _) => { if (!busy) slots.SelectedIndex = index; };
             card.DragEnter += (_, e) => e.Effect = !busy && e.Data?.GetDataPresent(DataFormats.FileDrop) == true ? DragDropEffects.Copy : DragDropEffects.None;
             card.DragDrop += async (_, e) => { if (!busy && e.Data?.GetData(DataFormats.FileDrop) is string[] paths && paths.Length == 1) await GuardAsync(() => ImportIntoSlotAsync(paths[0], index)); };
@@ -343,7 +343,7 @@ internal sealed partial class MainForm
         file.DropDownItems.Add(new ToolStripSeparator()); Action(file, "MIDI sichern …", () => ExportAsync("mid")); Action(file, "JSON sichern …", SaveScoreJSON); Action(file, "LilyPond sichern …", ExportLilyPondAsync); Action(file, "An Hacklily übergeben", () => { OpenHacklily(); return Task.CompletedTask; });
         var edit = new ToolStripMenuItem("Bearbeiten"); menu.Items.Add(edit);
         Action(edit, "Rückgängig", () => { if (ActiveControl is TextBoxBase text) text.Undo(); return Task.CompletedTask; }); Action(edit, "Wiederholen", () => { if (ActiveControl is RichTextBox text && text.CanRedo) text.Redo(); return Task.CompletedTask; }); Action(edit, "Ausschneiden", () => { if (ActiveControl is TextBoxBase text) text.Cut(); return Task.CompletedTask; }); Action(edit, "Kopieren", () => { if (ActiveControl is TextBoxBase text) text.Copy(); return Task.CompletedTask; }); Action(edit, "Einsetzen", () => { if (ActiveControl is TextBoxBase text) text.Paste(); return Task.CompletedTask; }); Action(edit, "Alles auswählen", () => { if (ActiveControl is TextBoxBase text) text.SelectAll(); return Task.CompletedTask; });
-        var compositionMenu = new ToolStripMenuItem("Komposition"); menu.Items.Add(compositionMenu); Action(compositionMenu, "Mit gewählter KI komponieren", () => RequestAIAsync(true)); Action(compositionMenu, "Anfrage abbrechen", () => { pending?.Cancel(); return Task.CompletedTask; });
+        var compositionMenu = new ToolStripMenuItem("Komposition"); menu.Items.Add(compositionMenu); Action(compositionMenu, "Mit gewählter KI komponieren", () => RequestAIAsync(true)); Action(compositionMenu, "Fertige Komposition übernehmen", RecoverDisplayedMusicAsync); Action(compositionMenu, "Anfrage abbrechen", () => { pending?.Cancel(); return Task.CompletedTask; });
         var technical = new ToolStripMenuItem("Technisches"); menu.Items.Add(technical); Action(technical, "API-Schlüssel …", ShowKeys); Action(technical, "MIDI-Ausgabe …", ShowMidiOutput); Action(technical, "Backup laden …", () => { MessageBox.Show(this, "Das verschlüsselte Mac-Backup wird unter Windows noch nicht gelesen. Für den Austausch Projekt laden verwenden."); return Task.CompletedTask; }); Action(technical, "Backup sichern …", () => { MessageBox.Show(this, "Das verschlüsselte Mac-Backup ist noch nicht portiert. Projekt speichern sichert alle Stück-Plätze ohne API-Schlüssel."); return Task.CompletedTask; }); Action(technical, "Diagnosedatei sichern …", () => { SaveDiagnostic(); return Task.CompletedTask; });
         var diagnosis = new ToolStripMenuItem("Diagnose"); menu.Items.Add(diagnosis); Action(diagnosis, "Diagnosedatei sichern …", () => { SaveDiagnostic(); return Task.CompletedTask; });
         var display = new ToolStripMenuItem("Darstellung"); menu.Items.Add(display); foreach (int percent in new[] { 80, 90, 100, 110, 120, 130, 140, 150 }) Action(display, percent + " %", () => { Scale(new SizeF(percent / (float)guiZoom, percent / (float)guiZoom)); guiZoom = percent; return Task.CompletedTask; });

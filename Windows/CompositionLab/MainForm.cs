@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.9 · Build 4009";
+    const string Version = "4.0.0-alpha.10 · Build 4010";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -62,6 +62,7 @@ internal sealed partial class MainForm : Form
     JsonObject? lastDiagnostic;
     bool busy;
     int displayGeneration;
+    bool refreshingSlots;
     JsonObject? Current => slots.SelectedIndex >= 0 ? documents[slots.SelectedIndex] : null;
     JsonObject? Score => Current?["score"]?.AsObject();
 
@@ -211,22 +212,88 @@ internal sealed partial class MainForm : Form
             UpdateDiagnostic();
             if (makeMusic)
             {
-                var document = CreateDocument(result["score"]!.DeepClone().AsObject(), result["composition"]!.GetValue<string>(), userText);
-                document["provider"] = selectedProvider; document["model"] = selectedModel;
-                document["costUSD"] = result["estimatedCostUSD"]!.DeepClone();
-                document["inputTokens"] = result["inputTokens"]!.DeepClone(); document["outputTokens"] = result["outputTokens"]!.DeepClone();
-                documents[destination] = document; RememberPiece(document); RefreshSlots(); slots.SelectedIndex = destination;
-                await DisplayCurrentAsync();
+                var document = await AcceptCompositionAsync(result, destination, userText, selectedProvider, selectedModel);
                 chat.AppendText("KI: Stück fertig: " + document["title"]?.GetValue<string>() + "\n\n");
             }
-            else { string answer = result["text"]!.GetValue<string>(); chat.AppendText("KI: " + answer + "\n\n"); if (string.IsNullOrWhiteSpace(composition.Text)) composition.Text = answer; chatInput.Clear(); }
+            else
+            {
+                string answer = result["text"]!.GetValue<string>(); chat.AppendText("KI: " + answer + "\n\n"); chatInput.Clear();
+                if (ContainsFinishedMusic(answer))
+                {
+                    destination = Array.FindIndex(documents, d => d == null);
+                    if (destination < 0) throw new InvalidOperationException("Komposition erhalten, aber alle Slots sind belegt. Einen Slot leeren und unter Komposition → Fertige Komposition übernehmen fortsetzen.");
+                    var translated = await TranslateExistingAsync(answer, request, result, pending.Token);
+                    result = translated;
+                    var document = await AcceptCompositionAsync(result, destination, userText, selectedProvider, selectedModel);
+                    chat.AppendText("KI: Stück übernommen in Slot " + (destination + 1) + ": " + document["title"] + "\n\n");
+                    makeMusic = true;
+                }
+                else if (string.IsNullOrWhiteSpace(composition.Text)) composition.Text = answer;
+            }
             cost.Text = "Anfrage ca. $" + result["estimatedCostUSD"]!.GetValue<double>().ToString("0.0000");
             SetStatus(makeMusic ? "Komposition abgeschlossen." : "Antwort erhalten."); SaveLocalState();
         }
         catch (OperationCanceledException) { SetStatus("Anfrage lokal abgebrochen."); }
         catch (CoreRequestException e)
         { lastDiagnostic = e.Diagnostic; UpdateDiagnostic(); SetStatus(e.Message, true); SaveLocalState(); }
-        catch (Exception e) { SetStatus(e.Message, true); }
+        catch (Exception e) { SetStatus(e.Message, true); SaveLocalState(); }
+        finally { pending?.Dispose(); pending = null; SetBusy(false); }
+    }
+
+    static bool ContainsFinishedMusic(string text)
+    {
+        try { return ExtractLilyPond(text).Contains(@"\score"); }
+        catch (InvalidOperationException) { return false; }
+    }
+    async Task<JsonObject> TranslateExistingAsync(string music, JsonObject request, JsonObject source, CancellationToken token)
+    {
+        var dto = request.DeepClone().AsObject(); dto["composition"] = music;
+        dto["priorInputTokens"] = source["inputTokens"]?.DeepClone() ?? JsonValue.Create(0);
+        dto["priorOutputTokens"] = source["outputTokens"]?.DeepClone() ?? JsonValue.Create(0);
+        dto["priorCostUSD"] = source["estimatedCostUSD"]?.DeepClone() ?? JsonValue.Create(0d);
+        SetStatus("Fertige Komposition wird technisch in MIDI übertragen …");
+        var response = await core.RunAsync(new JsonObject { ["operation"] = "translate-existing", ["apiKey"] = apiKey.Text.Trim(), ["request"] = dto }, token);
+        var result = response["result"]!.AsObject(); lastDiagnostic = result.DeepClone().AsObject();
+        lastDiagnostic["sourceDiagnostic"] = source.DeepClone(); lastDiagnostic["interfaceVersion"] = Version; UpdateDiagnostic();
+        return result;
+    }
+    async Task<JsonObject> AcceptCompositionAsync(JsonObject result, int destination, string userText, string selectedProvider, string selectedModel)
+    {
+        if (destination < 0 || destination >= documents.Length || documents[destination] != null) throw new InvalidOperationException("Der Ziel-Slot ist nicht mehr frei; die fertige Komposition bleibt in der Diagnose erhalten.");
+        var document = CreateDocument(result["score"]!.DeepClone().AsObject(), result["composition"]!.GetValue<string>(), userText);
+        // Validate playback before replacing state; an invalid translation never occupies a slot.
+        await core.RunAsync(new JsonObject { ["operation"] = "midi", ["score"] = document["score"]!.DeepClone() });
+        document["provider"] = selectedProvider; document["model"] = selectedModel;
+        document["costUSD"] = result["estimatedCostUSD"]?.DeepClone();
+        document["inputTokens"] = result["inputTokens"]?.DeepClone(); document["outputTokens"] = result["outputTokens"]?.DeepClone();
+        documents[destination] = document; RememberPiece(document); RefreshSlots();
+        refreshingSlots = true; try { slots.SelectedIndex = destination; } finally { refreshingSlots = false; }
+        SaveLocalState(); await DisplayCurrentAsync(); return document;
+    }
+    async Task RecoverDisplayedMusicAsync()
+    {
+        var source = lastDiagnostic?.DeepClone().AsObject() ?? throw new InvalidOperationException("Keine fertige Komposition vorhanden.");
+        int destination = Array.FindIndex(documents, d => d == null);
+        if (destination < 0) throw new InvalidOperationException("Bitte zuerst einen Slot freimachen.");
+        await TranslateStoredDiagnosticAsync(source, destination);
+    }
+    async Task TranslateStoredDiagnosticAsync(JsonObject source, int destination)
+    {
+        if (busy) throw new InvalidOperationException("Bitte die laufende Anfrage abwarten.");
+        string music = source["composition"]?.GetValue<string>() ?? source["text"]?.GetValue<string>() ?? "";
+        if (!ContainsFinishedMusic(music)) throw new InvalidOperationException("Diese Antwort enthält keine fertige LilyPond-Komposition.");
+        if (string.IsNullOrWhiteSpace(apiKey.Text)) throw new InvalidOperationException("Für die technische Übertragung bitte den API-Schlüssel des gewählten Anbieters eintragen.");
+        string assignmentText = source["assignment"]?.GetValue<string>() ?? "Die vorhandene fertige Komposition unverändert technisch übertragen.";
+        try
+        {
+            pending = new CancellationTokenSource(); SetBusy(true);
+            var request = new JsonObject { ["assignment"] = assignmentText, ["provider"] = activeProvider, ["model"] = SelectedModelId,
+                ["effort"] = effort.SelectedIndex switch { 0 => "low", 2 => "high", _ => "medium" } };
+            var result = await TranslateExistingAsync(music, request, source, pending.Token);
+            await AcceptCompositionAsync(result, destination, assignmentText, activeProvider, SelectedModelId);
+            SetStatus("Vorhandene Komposition in Slot " + (destination + 1) + " übernommen; MIDI bereit.");
+        }
+        catch (CoreRequestException e) { lastDiagnostic = e.Diagnostic; UpdateDiagnostic(); SaveLocalState(); throw; }
         finally { pending?.Dispose(); pending = null; SetBusy(false); }
     }
 
@@ -263,9 +330,10 @@ internal sealed partial class MainForm : Form
         {
             var score = document["score"]!.DeepClone();
             var midi = await core.RunAsync(new JsonObject { ["operation"] = "midi", ["score"] = score });
-            var xml = await core.RunAsync(new JsonObject { ["operation"] = "musicxml", ["score"] = score.DeepClone(), ["options"] = notationOptions?.DeepClone() });
             if (generation != displayGeneration) return;
             currentMidi = Convert.FromBase64String(midi["data"]!.GetValue<string>());
+            var xml = await core.RunAsync(new JsonObject { ["operation"] = "musicxml", ["score"] = score.DeepClone(), ["options"] = notationOptions?.DeepClone() });
+            if (generation != displayGeneration) return;
             currentXML = Encoding.UTF8.GetString(Convert.FromBase64String(xml["data"]!.GetValue<string>()));
             if (webReady) RenderNotation();
             validation.Text = "Technische Partiturprüfung bestanden. MIDI und MusicXML erzeugt.\n\n" + (document["title"]?.GetValue<string>() ?? "");
@@ -277,9 +345,11 @@ internal sealed partial class MainForm : Form
     void RefreshSlots()
     {
         int selected = slots.SelectedIndex;
-        slots.BeginUpdate(); slots.Items.Clear();
-        for (int i = 0; i < documents.Length; i++) slots.Items.Add($"{i + 1:00}  " + (documents[i]?["title"]?.GetValue<string>() ?? "— frei —"));
-        slots.SelectedIndex = selected < 0 ? 0 : selected; slots.EndUpdate(); RefreshCards();
+        refreshingSlots = true;
+        try { slots.BeginUpdate(); slots.Items.Clear();
+            for (int i = 0; i < documents.Length; i++) slots.Items.Add($"{i + 1:00}  " + (documents[i]?["title"]?.GetValue<string>() ?? "— frei —"));
+            slots.SelectedIndex = selected < 0 ? 0 : selected; slots.EndUpdate(); RefreshCards();
+        } finally { refreshingSlots = false; }
     }
     void RefreshCards()
     {
@@ -318,6 +388,8 @@ internal sealed partial class MainForm : Form
         else if (Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase))
         {
             var sourceDiagnostic = JsonNode.Parse(data)!.AsObject();
+            if (sourceDiagnostic["scoreResponse"] == null && ContainsFinishedMusic(sourceDiagnostic["composition"]?.GetValue<string>() ?? sourceDiagnostic["text"]?.GetValue<string>() ?? ""))
+            { await TranslateStoredDiagnosticAsync(sourceDiagnostic, destination); return; }
             var raw = RepairLegacyText(sourceDiagnostic["scoreResponse"]?.GetValue<string>() ?? throw new InvalidDataException("Diese Diagnose enthält keine technische Partiturantwort."));
             var response = await core.RunAsync(new JsonObject { ["operation"] = "recover-score", ["response"] = raw });
             document = CreateDocument(response["score"]!.DeepClone().AsObject(),
@@ -532,7 +604,7 @@ internal sealed partial class MainForm : Form
         const string probe = "ÄÖÜ äöü ß – musikalischer Dialog";
         var version = await core.RunAsync(new JsonObject { ["operation"] = "version", ["title"] = probe });
         if (version["titleEcho"]?.GetValue<string>() != probe) throw new Exception("UTF-8-Prozesskommunikation beschädigt.");
-        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.9") throw new Exception("Falscher Kern.");
+        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.10") throw new Exception("Falscher Kern.");
         var fixture = JsonNode.Parse("""{"ti":"Windows Starttest","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,0,1],[1,1,64,80,0,1],[2,2,67,80,0,1]]}]}""")!.AsObject();
         documents[0] = CreateDocument(fixture, "Automatischer Test ohne KI-Kosten."); RefreshSlots();
         await DisplayCurrentAsync();
@@ -580,6 +652,15 @@ internal sealed partial class MainForm : Form
         bool midiDevice = false; string playbackInfo = "";
         try { player.Load(currentMidi); player.Play(); await Task.Delay(500); midiDevice = player.Position > 0; playbackInfo = midiDevice ? "Sequencer läuft; hörbarer Klang nicht automatisch geprüft." : "Kein Positionsfortschritt."; player.Stop(); }
         catch (Exception e) { playbackInfo = "Runner ohne nutzbaren MIDI-Synthesizer: " + e.Message; }
+        const string finishedMusic = "Meine fertige Komposition\n```lilypond\n\\version \"2.24.0\"\n\\score { { c'4 d'4 } }\n```";
+        if (!ContainsFinishedMusic(finishedMusic) || ContainsFinishedMusic("Wie schreibt man eine Melodie?")) throw new Exception("Chat-Komposition nicht eindeutig erkannt.");
+        int freeDestination = Array.FindIndex(documents, d => d == null);
+        var occupiedBefore = documents[0]!.ToJsonString();
+        var translatedResult = new JsonObject { ["score"] = fixture.DeepClone(), ["composition"] = finishedMusic,
+            ["estimatedCostUSD"] = .1, ["inputTokens"] = 140, ["outputTokens"] = 3850 };
+        await AcceptCompositionAsync(translatedResult, freeDestination, "Schon fertiges Stück", "openai", "test");
+        if (slots.SelectedIndex != freeDestination || documents[freeDestination]?["concept"]?.GetValue<string>() != finishedMusic || currentMidi == null || Encoding.ASCII.GetString(currentMidi, 0, 4) != "MThd") throw new Exception("Chat-Komposition ohne aktiven Slot oder MIDI.");
+        if (documents[0]!.ToJsonString() != occupiedBefore) throw new Exception("Chat-Komposition überschreibt vorhandenes Stück.");
         // Synthetic demo music for visual QA; no user composition or real API call.
         documents[0] = CreateDocument(fixture.DeepClone().AsObject(), "Elegie im Abendlicht\n\n" + lily, "Ein ruhiges Klavierstück mit einer klaren musikalischen Idee.");
         documents[0]!["title"] = "Elegie im Abendlicht"; documents[0]!["ensemble"] = "Klavier";
@@ -694,7 +775,7 @@ internal sealed partial class MainForm : Form
         }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten 116x164 cards", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches after low-button focus keep top parameters and all main controls stable" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten compact 104x100 cards", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches after low-button focus keep top parameters and all main controls stable", "finished chat music commits into a free active slot with MIDI, original source and no overwrite" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {

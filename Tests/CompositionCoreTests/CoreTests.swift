@@ -107,6 +107,38 @@ final class CoreTests: XCTestCase {
         XCTAssertFalse(diagnostic.contains("TEST-KEY-DO-NOT-LOG"))
     }
 
+    func testExistingCompositionIsTranslatedOnceWithoutRecomposition() throws {
+        let json = String(data: try JSONEncoder().encode(score()), encoding: .utf8)!
+        let music = "Schon fertige Musik\n```lilypond\n\\score { { c'4 d'4 } }\n```"
+        let fake = FakeAI([.success(LLMResponse(text: json, inputTokens: 30, outputTokens: 40))])
+        var received: CompositionResult?
+        CompositionWorkflow(client: fake).translateExisting(request(), composition: music,
+            priorInputTokens: 110, priorOutputTokens: 3810, priorCostUSD: .07664) { result in
+            if case .success(let work) = result { received = work } else { XCTFail("Translation failed") }
+        }
+        let work = try XCTUnwrap(received)
+        XCTAssertEqual(fake.calls.count, 1)
+        XCTAssertEqual(fake.calls[0].purpose, "composition.technical-translation")
+        XCTAssertEqual(fake.calls[0].user, ComposerPrompts.translationPrompt(composition: music))
+        XCTAssertEqual(work.composition, music)
+        XCTAssertEqual(work.inputTokens, 140); XCTAssertEqual(work.outputTokens, 3850)
+        XCTAssertGreaterThanOrEqual(work.estimatedCostUSD, .07664)
+        XCTAssertEqual(try CoreServices.midi(scoreJSON: JSONEncoder().encode(work.score)).prefix(4), Data("MThd".utf8))
+    }
+
+    func testFailedExistingTranslationPreservesTheFinishedMusic() {
+        let fake = FakeAI([.success(LLMResponse(text: "bad JSON", inputTokens: 1, outputTokens: 2))])
+        var failed = false
+        CompositionWorkflow(client: fake).translateExisting(request(), composition: "Meine fertige Komposition") { result in
+            if case .failure(let error) = result {
+                failed = true
+                XCTAssertEqual(error.diagnostic["composition"] as? String, "Meine fertige Komposition")
+                XCTAssertEqual(error.diagnostic["scoreResponse"] as? String, "bad JSON")
+            }
+        }
+        XCTAssertTrue(failed); XCTAssertEqual(fake.calls.count, 1)
+    }
+
     func testWorkflowDoesNotTranslateAfterCreativeFailure() {
         let fake = FakeAI([.failure(APIError.emptyResponse)])
         var failed = false

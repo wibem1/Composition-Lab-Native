@@ -40,7 +40,7 @@ $oldPath = $env:Path
 try {
     $env:Path = "$env:windir/System32;$env:windir"
     $version = & (Join-Path $core 'composition-lab-core.exe') --version
-    if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.0.0-alpha.9') { throw 'Bundled core runtime is incomplete' }
+    if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.0.0-alpha.10') { throw 'Bundled core runtime is incomplete' }
 } finally { $env:Path = $oldPath }
 $tests = Join-Path $PWD 'Windows/TestResults'
 New-Item $tests -ItemType Directory -Force | Out-Null
@@ -59,6 +59,6 @@ if ($process.ExitCode -ne 0) {
 $report = Get-Content (Join-Path $tests 'result.json') -Raw | ConvertFrom-Json
 if (-not $report.passed) { throw 'Windows test result is not green' }
 Get-Content (Join-Path $tests 'result.json')
-$zip = Join-Path $PWD 'Composition-Lab-4.0-alpha.9-Windows-x64.zip'
+$zip = Join-Path $PWD 'Composition-Lab-4.0-alpha.10-Windows-x64.zip'
 Compress-Archive -Path $destination -DestinationPath $zip -Force
 Write-Output "Windows test package: $zip"

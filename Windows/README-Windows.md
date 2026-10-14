@@ -1,4 +1,4 @@
-# Alpha 9 · Build 4009 · 14.10.2026 – Korrektur der Windows-Skalierung
+# Alpha 10 · Build 4010 · 14.10.2026 – Korrektur der Windows-Skalierung
 
 Maßgeblich ist die GUI aus `main` (Mac 3.5.3, Commit a2aefd7). Die folgenden älteren Abschnitte beschreiben frühere Windows-Stände.
 
@@ -33,3 +33,11 @@ MusicChat und Kompositionsidee teilen sich beim ersten Start die sichtbare Fenst
 ## Stabile Tabwechsel in Alpha 9
 
 Beim Aktivieren eines Arbeitsbereichs wird seine Scrollposition auf den Anfang gesetzt. Die native Fokuswiederherstellung darf dabei die oberen Elemente nicht wegscrollen; der Fokus bleibt auf dem gewählten Tab. Größenänderungen und Zeilenhöhen werden zusammen angewendet, unveränderte Größen bleiben unangetastet. Die Aufteilung wird nur nach einer tatsächlichen Bewegung der Trennlinie gespeichert. Gepufferte Container reduzieren Zwischenbilder. Die Windows-Prüfung wechselt die Tabs wiederholt nach Fokus auf einem unteren Button bei allen vier simulierten Skalierungen und zwei Fenstergrößen.
+
+## Chat-Kompositionen und kleinere Slots in Alpha 10
+
+Fertige LilyPond-Kompositionen aus dem Chat werden einmal technisch in die interne Partitur übertragen, anschließend in einem freien Slot gespeichert, ausgewählt und für MIDI-Abspielen vorbereitet. Eine neue Komposition wird dabei nicht angefordert. Die Diagnose enthält Quelltext, technische Antwort und Gesamtkosten. Bei Fehlern bleibt die fertige Musik erhalten.
+
+Zum Übernehmen einer früheren Chat-Komposition: Komposition → Fertige Komposition übernehmen. Alternativ ihre Diagnose-JSON öffnen/importieren. Diese technische Übertragung benötigt den eingetragenen KI-Schlüssel und verursacht die Kosten einer Übersetzungsanfrage; die ursprüngliche Komposition wird nicht neu erzeugt.
+
+Die Karten sind 104 × 100 statt 116 × 164 logische Pixel groß; die Slot-Leiste ist entsprechend flacher.

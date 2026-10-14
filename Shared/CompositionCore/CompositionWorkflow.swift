@@ -40,7 +40,7 @@ struct CompositionFailure: Error, LocalizedError {
 }
 
 final class CompositionWorkflow {
-    private let client: AIRequesting
+    let client: AIRequesting
     init(client: AIRequesting = APIClient.shared) { self.client = client }
 
     func compose(_ request: CompositionRequest,
