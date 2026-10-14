@@ -139,11 +139,11 @@ internal sealed partial class MainForm : Form
     static FlowLayoutPanel Row() => new() { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(4, 2, 4, 2) };
     static void Add(Control row, string label, Control field)
     { row.Controls.Add(new Label { Text = label, AutoSize = true, Padding = new Padding(5, 7, 0, 0) }); row.Controls.Add(field); }
-    void AddButton(Control row, string title, Func<Task> action)
+    StudioButton AddButton(Control row, string title, Func<Task> action)
     {
         var button = new StudioButton { Text = title, AutoSize = true };
         button.Click += async (_, _) => { try { await action(); } catch (Exception e) { SetStatus(e.Message, true); } };
-        row.Controls.Add(button); guiChecks.Add(button);
+        row.Controls.Add(button); guiChecks.Add(button); return button;
     }
 
     void ProviderChanged()
@@ -600,7 +600,7 @@ internal sealed partial class MainForm : Form
                     {
                         if (ancestor is ScrollableControl viewport && viewport.AutoScroll) break;
                         if (!ancestor.RectangleToScreen(ancestor.ClientRectangle).Contains(control.RectangleToScreen(control.ClientRectangle)))
-                            throw new Exception("Bedienelement außerhalb seines Panels: " + control.Text + " / " + ancestor.GetType().Name);
+                            throw new Exception("Bedienelement außerhalb seines Panels: " + control.Text + " / " + ancestor.GetType().Name + " / " + control.Bounds + " / parent " + ancestor.ClientRectangle);
                     }
                     // Native Mac has a horizontal card deck; Windows also allows the full
                     // fixed layout to scroll when smaller than the original minimum content.

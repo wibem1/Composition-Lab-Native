@@ -42,7 +42,7 @@ internal sealed partial class MainForm
     {
         public readonly Label Time = new() { AutoSize = true, Text = "0:00 / 0:00", Padding = new Padding(0, 6, 0, 0) };
         public readonly TrackBar Position = new() { Width = 260, Height = 26, Maximum = 1000, TickStyle = TickStyle.None, AutoSize = false };
-        public readonly CheckBox Loop = new() { Text = "↻ Loop", Appearance = Appearance.Button, AutoSize = true };
+        public readonly CheckBox Loop = new() { Text = "↻ Loop", Appearance = Appearance.Button, AutoSize = false, Width = 62, Height = 26 };
         public readonly TextBox Tempo = new() { Width = 50 };
         public readonly TrackBar Volume = new() { Width = 130, Height = 26, Maximum = 100, Value = 90, TickStyle = TickStyle.None, AutoSize = false };
     }
@@ -132,7 +132,8 @@ internal sealed partial class MainForm
     Control BuildTransport(bool notation)
     {
         var transport = new Transport(); transports.Add(transport); var row = MacRow();
-        AddButton(row, "▶", PlayAsync); AddButton(row, "■", () => { player.Stop(); return Task.CompletedTask; }); row.Controls.Add(transport.Loop); row.Controls.Add(transport.Time); row.Controls.Add(transport.Position);
+        var play = AddButton(row, "▶", PlayAsync); play.AutoSize = false; play.Size = new Size(36, 26);
+        var stop = AddButton(row, "■", () => { player.Stop(); return Task.CompletedTask; }); stop.AutoSize = false; stop.Size = new Size(36, 26); row.Controls.Add(transport.Loop); row.Controls.Add(transport.Time); row.Controls.Add(transport.Position);
         row.Controls.Add(MacLabel("Tempo")); row.Controls.Add(transport.Tempo); row.Controls.Add(MacLabel("Lautstärke")); row.Controls.Add(transport.Volume);
         if (notation) transport.Position.Width = 220;
         transport.Loop.CheckedChanged += (_, _) => { loopPlaying = transport.Loop.Checked; foreach (var other in transports) if (other != transport) other.Loop.Checked = loopPlaying; };
@@ -201,7 +202,10 @@ internal sealed partial class MainForm
     JsonObject BuildNotationOptions()
     {
         double?[] straight = [null, 1, .5, .25, .125, .0625], triplet = [null, 2d/3, 1d/3, 1d/6, 1d/12]; double[] rest = [0, .125, .25, .5], occupancy = [1, .75, .6, .45], tolerance = [0, .10, .18, .30]; int[] split = [48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72];
-        return new JsonObject { ["startGrid"] = 0, ["shortRestThreshold"] = rest[notationSettings[4].SelectedIndex], ["occupancyThreshold"] = occupancy[notationSettings[5].SelectedIndex], ["durationTolerance"] = tolerance[notationSettings[5].SelectedIndex], ["minimumNoteValue"] = null, ["rhythmMode"] = new[] { "auto", "straight", "triplet" }[notationSettings[1].SelectedIndex], ["minimumStraightNoteValue"] = straight[notationSettings[2].SelectedIndex], ["minimumTripletNoteValue"] = triplet[notationSettings[3].SelectedIndex], ["barStartSnapThreshold"] = rest[notationSettings[6].SelectedIndex], ["splitAtBeatBoundaries"] = splitBeats.Checked, ["pianoStaffMode"] = new[] { "auto", "single", "two" }[notationSettings[7].SelectedIndex], ["pianoSplitPoint"] = split[notationSettings[8].SelectedIndex] };
+        var options = new JsonObject { ["startGrid"] = 0, ["shortRestThreshold"] = rest[notationSettings[4].SelectedIndex], ["occupancyThreshold"] = occupancy[notationSettings[5].SelectedIndex], ["durationTolerance"] = tolerance[notationSettings[5].SelectedIndex], ["minimumNoteValue"] = null, ["rhythmMode"] = new[] { "auto", "straight", "triplet" }[notationSettings[1].SelectedIndex], ["minimumStraightNoteValue"] = straight[notationSettings[2].SelectedIndex], ["minimumTripletNoteValue"] = triplet[notationSettings[3].SelectedIndex], ["barStartSnapThreshold"] = rest[notationSettings[6].SelectedIndex], ["splitAtBeatBoundaries"] = splitBeats.Checked, ["pianoStaffMode"] = new[] { "auto", "single", "two" }[notationSettings[7].SelectedIndex], ["pianoSplitPoint"] = split[notationSettings[8].SelectedIndex] };
+        if (notationSettings[0].SelectedIndex == 0) { options["startGrid"] = .25; options["durationTolerance"] = .21; }
+        else if (notationSettings[0].SelectedIndex == 1) options["durationTolerance"] = .02;
+        return options;
     }
     async Task RefreshNotationAsync()
     {
