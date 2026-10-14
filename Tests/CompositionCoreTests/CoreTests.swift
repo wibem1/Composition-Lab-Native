@@ -30,6 +30,25 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(MIDIBuilder.build(original), before)
     }
 
+    func testWindowsNotationOptionsUseTheSameMacExporter() throws {
+        let data = try JSONEncoder().encode(score())
+        let before = try CoreServices.midi(scoreJSON: data)
+        let options = MusicXMLDisplayOptions.midiNear
+        let windows = try CoreServices.musicXML(scoreJSON: data, optionsJSON: JSONEncoder().encode(options))
+        XCTAssertEqual(windows, MusicXMLBuilder.build(score(), options: options))
+        XCTAssertEqual(try CoreServices.midi(scoreJSON: data), before)
+    }
+
+    func testMacWorkspaceFormatIsValidatedBySharedCore() throws {
+        let item = HistoryItem(id: UUID(), time: Date(), title: "Test", provider: .openai, model: "test", concept: "Idee", score: score())
+        var json: [String: Any] = ["format": "composition-lab-v6-project", "name": "Test", "activeSlot": 0,
+            "slots": [try JSONSerialization.jsonObject(with: JSONEncoder().encode(item))],
+            "settings": try JSONSerialization.jsonObject(with: JSONEncoder().encode(AppSettings())), "history": []]
+        try CoreServices.validateWorkspace(JSONSerialization.data(withJSONObject: json))
+        json["activeSlot"] = 10
+        XCTAssertThrowsError(try CoreServices.validateWorkspace(JSONSerialization.data(withJSONObject: json)))
+    }
+
     func testExistingMusicXMLFixturesImportAndRoundTrip() throws {
         for name in ["musicxml-ev-roundtrip", "musicxml-musescore-tie-import", "musicxml-piano-two-staff-roundtrip"] {
             let url = try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: "musicxml", subdirectory: "Fixtures"))

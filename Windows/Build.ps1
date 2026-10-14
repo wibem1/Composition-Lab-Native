@@ -40,10 +40,11 @@ $oldPath = $env:Path
 try {
     $env:Path = "$env:windir/System32;$env:windir"
     $version = & (Join-Path $core 'composition-lab-core.exe') --version
-    if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.0.0-alpha.5') { throw 'Bundled core runtime is incomplete' }
+    if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.0.0-alpha.6') { throw 'Bundled core runtime is incomplete' }
 } finally { $env:Path = $oldPath }
 $tests = Join-Path $PWD 'Windows/TestResults'
 New-Item $tests -ItemType Directory -Force | Out-Null
+try { Set-DisplayResolution -Width 1600 -Height 1200 -Force -ErrorAction Stop | Out-Null } catch { Write-Output 'Default Windows display retained; GUI scroll reachability is tested.' }
 $start = New-Object System.Diagnostics.ProcessStartInfo
 $start.FileName = Join-Path $destination 'Composition Lab 4.0.exe'
 $start.Arguments = "--self-test --test-output `"$tests`""
@@ -58,6 +59,6 @@ if ($process.ExitCode -ne 0) {
 $report = Get-Content (Join-Path $tests 'result.json') -Raw | ConvertFrom-Json
 if (-not $report.passed) { throw 'Windows test result is not green' }
 Get-Content (Join-Path $tests 'result.json')
-$zip = Join-Path $PWD 'Composition-Lab-4.0-alpha.5-Windows-x64.zip'
+$zip = Join-Path $PWD 'Composition-Lab-4.0-alpha.6-Windows-x64.zip'
 Compress-Archive -Path $destination -DestinationPath $zip -Force
 Write-Output "Windows test package: $zip"

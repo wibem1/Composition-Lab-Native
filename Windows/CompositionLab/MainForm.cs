@@ -8,9 +8,9 @@ using Microsoft.Web.WebView2.WinForms;
 
 namespace CompositionLab;
 
-internal sealed class MainForm : Form
+internal sealed partial class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.5 · Build 4005";
+    const string Version = "4.0.0-alpha.6 · Build 4006";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -21,7 +21,7 @@ internal sealed class MainForm : Form
     readonly JsonObject?[] documents = new JsonObject?[10];
     readonly ListBox slots = new() { Dock = DockStyle.Fill, IntegralHeight = false };
     readonly ComboBox provider = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 155 };
-    readonly TextBox model = new() { Width = 250 };
+    readonly ComboBox model = new() { Width = 250, DropDownStyle = ComboBoxStyle.DropDownList, DropDownWidth = 190 };
     readonly ComboBox effort = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 145 };
     readonly TextBox apiKey = new() { Width = 240, UseSystemPasswordChar = true };
     readonly CheckBox remember = new() { Text = "Schlüssel speichern", AutoSize = true };
@@ -72,9 +72,9 @@ internal sealed class MainForm : Form
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Klangwerke", "Composition Lab 4.0");
         secrets = new SecretStore(dataDirectory);
         Text = "Composition Lab Native · Windows · " + Version;
-        MinimumSize = new Size(1000, 700); Size = new Size(1400, 940);
+        MinimumSize = new Size(900, 680); ClientSize = new Size(1260, 950);
         StartPosition = FormStartPosition.CenterScreen;
-        Font = new Font("Segoe UI", 10); ForeColor = StudioTheme.Ink;
+        Font = MacFont(13); ForeColor = StudioTheme.Ink;
         BackColor = StudioTheme.Canvas;
         AutoScaleDimensions = new SizeF(96, 96); AutoScaleMode = AutoScaleMode.Dpi;
         BuildUI();
@@ -103,153 +103,13 @@ internal sealed class MainForm : Form
         playbackTimer.Tick += (_, _) =>
         {
             if (!player.Loaded) return;
-            try { playback.Text = FormatTime(player.Position) + " / " + FormatTime(player.Length); }
+            try { UpdateTransport(); }
             catch (Exception e) { SetStatus(e.Message, true); playbackTimer.Stop(); }
         };
         playbackTimer.Start();
     }
 
-    void BuildUI()
-    {
-        var root = Grid(1, 4); root.Padding = Padding.Empty;
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); Controls.Add(root);
-
-        var header = new Panel { Dock = DockStyle.Fill, BackColor = StudioTheme.Navy, Padding = new Padding(22, 8, 22, 8), Margin = Padding.Empty };
-        var identity = new Panel { Dock = DockStyle.Fill };
-        identity.Controls.Add(new Label { Text = "Composition Lab", Font = new Font("Segoe UI", 20, FontStyle.Bold), ForeColor = Color.White, Dock = DockStyle.Top, Height = 30 });
-        identity.Controls.Add(new Label { Text = "Deine Werkstatt für Musik", Font = new Font("Segoe UI", 10), ForeColor = Color.FromArgb(178, 199, 211), Dock = DockStyle.Bottom, Height = 18 });
-        var versionInfo = new Label { Text = "WINDOWS · 13.10.2026\n" + Version, Dock = DockStyle.Right, Width = 260, TextAlign = ContentAlignment.MiddleRight, ForeColor = Color.FromArgb(178, 199, 211), Font = new Font("Segoe UI", 9) };
-        header.Controls.Add(identity); header.Controls.Add(versionInfo); root.Controls.Add(header, 0, 0);
-
-        var navigation = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(16, 4, 16, 4), Margin = Padding.Empty };
-        var navRow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
-        foreach (var title in new[] { "Werkstatt", "Noten", "Technik" })
-        {
-            int page = navButtons.Count; var button = new StudioButton { Text = title, Width = 116, Height = 32, AutoSize = false, Selected = page == 0 };
-            button.Click += (_, _) => tabs.SelectedIndex = page; navButtons.Add(button); navRow.Controls.Add(button);
-        }
-        tabs.SelectedIndexChanged += (_, _) => { for (int i = 0; i < navButtons.Count; i++) { navButtons[i].Selected = i == tabs.SelectedIndex; navButtons[i].Invalidate(); } };
-        var files = new MenuStrip { Dock = DockStyle.Right, Width = 160, AutoSize = false, BackColor = Color.White, Padding = new Padding(4, 6, 4, 6), Font = new Font("Segoe UI", 10) };
-        MainMenuStrip = files;
-        var fileMenu = new ToolStripMenuItem("Datei & Export"); files.Items.Add(fileMenu);
-        void FileAction(string title, Func<Task> action) { var item = new ToolStripMenuItem(title); item.Click += async (_, _) => await GuardAsync(action); fileMenu.DropDownItems.Add(item); }
-        FileAction("Öffnen / Import …", () => OpenAsync()); FileAction("Stück speichern …", SaveDocumentAsync);
-        fileMenu.DropDownItems.Add(new ToolStripSeparator());
-        FileAction("MIDI exportieren …", () => ExportAsync("mid")); FileAction("MusicXML exportieren …", () => ExportAsync("musicxml"));
-        FileAction("LilyPond exportieren …", ExportLilyPondAsync); FileAction("An Hacklily übergeben", () => { OpenHacklily(); return Task.CompletedTask; });
-        fileMenu.DropDownItems.Add(new ToolStripSeparator()); FileAction("Diagnose speichern …", () => { SaveDiagnostic(); return Task.CompletedTask; });
-        navigation.Controls.Add(navRow); navigation.Controls.Add(files); root.Controls.Add(navigation, 0, 1);
-
-        var body = Grid(2, 1); body.Padding = new Padding(16, 12, 16, 12); body.Margin = Padding.Empty;
-        body.ColumnStyles.Clear(); body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 270)); body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        body.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.Controls.Add(body, 0, 2);
-        var library = new StudioSurface { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 12, 0), Padding = new Padding(10) };
-        var libraryLayout = Grid(1, 3); libraryLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        libraryLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); libraryLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        var libraryHeading = new Panel { Dock = DockStyle.Fill };
-        libraryHeading.Controls.Add(new Label { Text = "Deine Stücke", Dock = DockStyle.Top, Height = 26, Font = new Font("Segoe UI", 14, FontStyle.Bold), ForeColor = StudioTheme.Ink });
-        libraryCount.Dock = DockStyle.Bottom; libraryCount.Height = 21; libraryCount.ForeColor = StudioTheme.Muted; libraryCount.Font = new Font("Segoe UI", 9); libraryHeading.Controls.Add(libraryCount);
-        libraryLayout.Controls.Add(libraryHeading, 0, 0);
-        var cards = Grid(1, 10);
-        for (int row = 0; row < 10; row++) cards.RowStyles.Add(new RowStyle(SizeType.Percent, 10));
-        for (int i = 0; i < 10; i++)
-        {
-            int index = i;
-            var cell = new Panel { Dock = DockStyle.Fill, Margin = new Padding(2) };
-            var card = new PieceCard { Number = i + 1, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9, FontStyle.Bold), AutoSize = false, AllowDrop = true, AccessibleName = "Stück " + (i + 1) };
-            card.Click += async (_, _) => { if (busy) return; if (documents[index] == null) await GuardAsync(() => OpenAsync(index)); else slots.SelectedIndex = index; };
-            card.DragEnter += (_, e) => e.Effect = !busy && e.Data?.GetDataPresent(DataFormats.FileDrop) == true ? DragDropEffects.Copy : DragDropEffects.None;
-            card.DragDrop += async (_, e) => { if (!busy && e.Data?.GetData(DataFormats.FileDrop) is string[] paths && paths.Length == 1) await GuardAsync(() => ImportIntoSlotAsync(paths[0], index)); };
-            var menu = new ContextMenuStrip();
-            menu.Items.Add("Datei in diesen Platz laden …", null, async (_, _) => await GuardAsync(() => OpenAsync(index)));
-            menu.Items.Add("Dieses Stück speichern …", null, async (_, _) => { if (busy) return; slots.SelectedIndex = index; await GuardAsync(SaveDocumentAsync); });
-            menu.Items.Add("Dieses Stück löschen", null, async (_, _) => await DeleteSlotAsync(index)); card.ContextMenuStrip = menu;
-            var tools = new Panel { Dock = DockStyle.Right, Width = 58, Padding = new Padding(3, 2, 0, 2) };
-            var load = new StudioButton { Text = "+", AccessibleName = "Datei in Stück " + (i + 1) + " laden", Dock = DockStyle.Fill, Padding = Padding.Empty, AutoSize = false, Font = new Font("Segoe UI", 8.5f) };
-            var delete = new StudioButton { Text = "×", Dock = DockStyle.Right, Width = 27, Padding = Padding.Empty, AutoSize = false, AccessibleName = "Stück " + (i + 1) + " löschen" };
-            load.Click += async (_, _) => await GuardAsync(() => OpenAsync(index)); delete.Click += async (_, _) => await DeleteSlotAsync(index);
-            slotTips.SetToolTip(delete, "Dieses Stück löschen"); slotTips.SetToolTip(load, "Datei in Stück " + (index + 1) + " laden");
-            tools.Controls.Add(load); tools.Controls.Add(delete); cell.Controls.Add(card); cell.Controls.Add(tools);
-            slotActions.Add(load); slotActions.Add(delete); slotCards.Add(card); cards.Controls.Add(cell, 0, i);
-        }
-        libraryLayout.Controls.Add(cards, 0, 1);
-        var free = new StudioButton { Text = "+ Freien Platz wählen", Dock = DockStyle.Fill, AutoSize = false }; free.Click += (_, _) => SelectFreeSlot();
-        libraryLayout.Controls.Add(free, 0, 2); library.Controls.Add(libraryLayout); body.Controls.Add(library, 0, 0);
-
-        var work = Grid(1, 5); work.Margin = Padding.Empty;
-        work.RowStyles.Add(new RowStyle(SizeType.Absolute, 52)); work.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-        work.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); work.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-        work.RowStyles.Add(new RowStyle(SizeType.Absolute, 190)); body.Controls.Add(work, 1, 0);
-        var heading = new Panel { Dock = DockStyle.Fill, Padding = new Padding(3, 0, 3, 0) };
-        pieceTitle.Dock = DockStyle.Top; pieceTitle.AutoSize = false; pieceTitle.Height = 32; pieceTitle.Padding = Padding.Empty;
-        pieceTitle.Font = new Font("Segoe UI", 16, FontStyle.Bold); pieceTitle.ForeColor = StudioTheme.Ink; heading.Controls.Add(pieceTitle);
-        pieceInfo.Dock = DockStyle.Bottom; pieceInfo.Height = 20; pieceInfo.ForeColor = StudioTheme.Muted; pieceInfo.Font = new Font("Segoe UI", 9); heading.Controls.Add(pieceInfo);
-        work.Controls.Add(heading, 0, 0);
-        provider.Items.AddRange(["Claude / Anthropic", "OpenAI", "Google / Gemini"]); provider.FlatStyle = FlatStyle.Flat;
-        effort.Items.AddRange(["Sparsam", "Standard", "Hoch"]); effort.SelectedIndex = 1; effort.FlatStyle = FlatStyle.Flat;
-        provider.SelectedIndexChanged += (_, _) => ProviderChanged();
-        var settings = Grid(3, 1); settings.ColumnStyles.Clear();
-        settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 29)); settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45)); settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 26));
-        settings.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        settings.Controls.Add(Field("KI-Anbieter", provider), 0, 0); settings.Controls.Add(Field("Modell", model), 1, 0); settings.Controls.Add(Field("Denkaufwand", effort), 2, 0); work.Controls.Add(settings, 0, 1);
-
-        var workshop = new Panel { BackColor = StudioTheme.Canvas };
-        var workshopSplit = new SplitContainer { Size = new Size(900, 350), Dock = DockStyle.Fill, SplitterDistance = 380, SplitterWidth = 10, BackColor = StudioTheme.Canvas };
-        workshopSplit.Panel1.Controls.Add(TextSurface("MusicChat", "Besprechen und gemeinsam weiterdenken", chat));
-        workshopSplit.Panel2.Controls.Add(TextSurface("Komposition", "Der vollständige musikalische Quelltext", composition));
-        workshop.Controls.Add(workshopSplit); tabs.AddPage(workshop);
-        var notation = new StudioSurface { Padding = new Padding(1) }; notation.Controls.Add(notationHost); notationHost.Controls.Add(web); tabs.AddPage(notation);
-        var technology = Grid(1, 2); technology.RowStyles.Add(new RowStyle(SizeType.AutoSize)); technology.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var credentials = Row(); Add(credentials, "API-Schlüssel", apiKey); credentials.Controls.Add(remember);
-        AddButton(credentials, "Übernehmen", () => { StoreKey(); return Task.CompletedTask; });
-        AddButton(credentials, "Schlüssel löschen", () => { keys.Remove(activeProvider); apiKey.Clear(); remember.Checked = false; secrets.Save(keys); SetStatus("Schlüssel gelöscht."); return Task.CompletedTask; });
-        technology.Controls.Add(credentials, 0, 0);
-        var technicalTabs = new TabControl { Dock = DockStyle.Fill };
-        var diagnostics = new TabPage("Diagnose") { BackColor = Color.White }; diagnostics.Controls.Add(diagnostic); technicalTabs.TabPages.Add(diagnostics);
-        var info = new TabPage("Info") { BackColor = Color.White };
-        info.Controls.Add(new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, BorderStyle = BorderStyle.None, BackColor = Color.White, Text =
-            "Composition Lab Native · Windows · " + Version + "\n\nGemeinsamer Swift-Kern für Mac und Windows.\n\n" +
-            "Chat bespricht Musik. Komponieren erzeugt das fertige Stück, anschließend folgt die technische Übertragung. Die zehn Stück-Plätze und der Dialog werden lokal wiederhergestellt.\n\n" +
-            "CLAB-Stücke lassen sich mit der Mac-App austauschen. MIDI und MusicXML können importiert und exportiert werden. Der vorhandene LilyPond-Quelltext kann als .ly gespeichert oder per Zwischenablage an Hacklily übergeben werden.\n\n" +
-            "API-Schlüssel werden auf Wunsch für dein Windows-Konto verschlüsselt gespeichert und bleiben aus Diagnosen und Projektdateien ausgeschlossen. Modellnamen sind frei eingebbar; sie müssen für deinen API-Zugang freigeschaltet sein.\n\n" +
-            "Die Kostenanzeige ist eine Schätzung. Abbrechen beendet die lokale Anfrage; bereits entstandene Anbieter-Kosten können bleiben.\n\n" +
-            "Player: Windows-General-MIDI. Noch keine Soundfont-/MIDI-Gerätewahl oder DAW-Brücke. Noten: Verovio mit WebView2, zum ersten Laden ist Internet erforderlich. Ein Import vollständiger CLABPROJECT-Arbeitsplätze ist noch nicht enthalten." });
-        technicalTabs.TabPages.Add(info); technology.Controls.Add(technicalTabs, 0, 1); tabs.AddPage(technology);
-        tabs.Dock = DockStyle.Fill; tabs.Margin = new Padding(0, 6, 0, 6); work.Controls.Add(tabs, 0, 2);
-
-        var playerSurface = new StudioSurface { Dock = DockStyle.Fill, Padding = new Padding(8, 4, 8, 4), Margin = new Padding(0, 4, 0, 6) };
-        var play = Row(); play.WrapContents = false;
-        AddButton(play, "▶ Abspielen", async () => { if (currentMidi == null) throw new InvalidOperationException("Kein Stück geladen."); if (!player.Loaded) player.Load(currentMidi); player.Play(); await Task.CompletedTask; });
-        AddButton(play, "Pause", () => { player.Pause(); return Task.CompletedTask; }); AddButton(play, "Stopp", () => { player.Stop(); return Task.CompletedTask; });
-        playback.Font = new Font("Consolas", 9); playback.Padding = new Padding(8, 9, 8, 0); play.Controls.Add(playback);
-        AddButton(play, "LilyPond …", ExportLilyPondAsync); AddButton(play, "Hacklily ↗", () => { OpenHacklily(); return Task.CompletedTask; });
-        playerSurface.Controls.Add(play); work.Controls.Add(playerSurface, 0, 3);
-
-        var input = new StudioSurface { Dock = DockStyle.Fill, Padding = new Padding(12), Margin = Padding.Empty };
-        var inputLayout = Grid(1, 4); inputLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26)); inputLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
-        inputLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); inputLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-        inputLayout.Controls.Add(new Label { Text = "Dein Auftrag", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = StudioTheme.Ink }, 0, 0);
-        var fields = Grid(4, 1); fields.ColumnStyles.Clear();
-        for (int i = 0; i < 4; i++) fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, i == 3 ? 40 : 20));
-        fields.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        fields.Controls.Add(Field("Takte", measures), 0, 0); fields.Controls.Add(Field("Tempo · BPM", tempo), 1, 0);
-        fields.Controls.Add(Field("Tonart", musicalKey), 2, 0); fields.Controls.Add(Field("Besetzung", ensemble), 3, 0); inputLayout.Controls.Add(fields, 0, 1);
-        assignment.BorderStyle = BorderStyle.None; assignment.BackColor = Color.FromArgb(246, 249, 250); assignment.Margin = new Padding(3, 6, 3, 4);
-        assignment.Font = new Font("Segoe UI", 10); inputLayout.Controls.Add(assignment, 0, 2);
-        var actions = new Panel { Dock = DockStyle.Fill };
-        var actionButtons = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false };
-        actionButtons.Controls.Add(send); actionButtons.Controls.Add(compose); actionButtons.Controls.Add(cancel);
-        useSource.Dock = DockStyle.Left; useSource.AutoSize = false; useSource.Width = 255; useSource.Font = new Font("Segoe UI", 9); actions.Controls.Add(useSource); actions.Controls.Add(actionButtons);
-        compose.Font = new Font("Segoe UI", 10, FontStyle.Bold); ((StudioButton)compose).Primary = true;
-        send.Click += async (_, _) => await RequestAIAsync(false); compose.Click += async (_, _) => await RequestAIAsync(true); cancel.Click += (_, _) => pending?.Cancel();
-        inputLayout.Controls.Add(actions, 0, 3); input.Controls.Add(inputLayout); work.Controls.Add(input, 0, 4);
-        var strip = new StatusStrip { BackColor = Color.White, ForeColor = StudioTheme.Muted, SizingGrip = true }; strip.Items.Add(status); strip.Items.Add(cost); root.Controls.Add(strip, 0, 3);
-        slots.SelectedIndexChanged += async (_, _) => { RefreshCards(); await DisplayCurrentAsync(); };
-        assignment.Text = "Komponiere ein eigenständiges Klavierstück mit einer tragenden musikalischen Idee.";
-    }
+    void BuildUI() => BuildMacUI();
 
     static TableLayoutPanel Grid(int columns, int rows)
     {
@@ -289,9 +149,9 @@ internal sealed class MainForm : Form
     void ProviderChanged()
     {
         if (loadingSettings) return;
-        models[activeProvider] = model.Text;
-        activeProvider = provider.SelectedIndex switch { 1 => "openai", 2 => "gemini", _ => "anthropic" };
-        model.Text = models[activeProvider];
+        models[activeProvider] = SelectedModelId;
+        activeProvider = provider.SelectedIndex switch { 1 => "anthropic", 2 => "openai", _ => "gemini" };
+        SelectModel();
         apiKey.Text = keys.GetValueOrDefault(activeProvider, ""); remember.Checked = keys.ContainsKey(activeProvider);
         SaveLocalState();
     }
@@ -307,7 +167,9 @@ internal sealed class MainForm : Form
     async Task RequestAIAsync(bool makeMusic)
     {
         if (busy) return;
-        if (string.IsNullOrWhiteSpace(assignment.Text)) { SetStatus("Bitte einen Auftrag eingeben.", true); return; }
+        if (makeMusic) assignment.Text = composition.Text.Length > 0 ? composition.Text : assignment.Text;
+        string inputText = makeMusic ? assignment.Text : chatInput.Text;
+        if (string.IsNullOrWhiteSpace(inputText)) { SetStatus("Bitte einen Auftrag eingeben.", true); return; }
         if (string.IsNullOrWhiteSpace(apiKey.Text)) { SetStatus("Bitte API-Schlüssel eingeben.", true); return; }
         int destination = -1;
         if (makeMusic)
@@ -315,11 +177,12 @@ internal sealed class MainForm : Form
             destination = Current == null ? slots.SelectedIndex : Array.FindIndex(documents, d => d == null);
             if (destination < 0) { SetStatus("Alle zehn Slots sind belegt. Bitte zuerst ein Stück speichern und einen Slot leeren.", true); return; }
         }
-        string userText = assignment.Text.Trim();
+        string userText = inputText.Trim();
         string instruction = userText;
         if (makeMusic)
         {
             if (!string.IsNullOrWhiteSpace(measures.Text)) instruction += "\nTaktanzahl: " + measures.Text;
+            if (!string.IsNullOrWhiteSpace(meter.Text)) instruction += "\nTaktart: " + meter.Text;
             if (!string.IsNullOrWhiteSpace(tempo.Text)) instruction += "\nTempo (BPM): " + tempo.Text;
             if (!string.IsNullOrWhiteSpace(musicalKey.Text)) instruction += "\nTonart: " + musicalKey.Text;
             if (!string.IsNullOrWhiteSpace(ensemble.Text)) instruction += "\nBesetzung: " + ensemble.Text;
@@ -328,8 +191,8 @@ internal sealed class MainForm : Form
                 (chat.Text.Length > 16000 ? chat.Text[^16000..] : chat.Text) + "\n\nAktuelle Nachricht:\n" + instruction;
         if (useSource.Checked && Score != null) instruction += "\nBewusst gewählte musikalische Vorlage:\n" + Score.ToJsonString();
         var request = new JsonObject { ["assignment"] = instruction, ["provider"] = activeProvider,
-            ["model"] = model.Text.Trim(), ["effort"] = effort.SelectedIndex switch { 0 => "low", 2 => "high", _ => "medium" } };
-        string selectedProvider = activeProvider, selectedModel = model.Text.Trim();
+            ["model"] = SelectedModelId, ["effort"] = effort.SelectedIndex switch { 0 => "low", 2 => "high", _ => "medium" } };
+        string selectedProvider = activeProvider, selectedModel = SelectedModelId;
         try
         {
             StoreKey(); pending = new CancellationTokenSource(); SetBusy(true);
@@ -348,11 +211,11 @@ internal sealed class MainForm : Form
                 document["provider"] = selectedProvider; document["model"] = selectedModel;
                 document["costUSD"] = result["estimatedCostUSD"]!.DeepClone();
                 document["inputTokens"] = result["inputTokens"]!.DeepClone(); document["outputTokens"] = result["outputTokens"]!.DeepClone();
-                documents[destination] = document; RefreshSlots(); slots.SelectedIndex = destination;
+                documents[destination] = document; RememberPiece(document); RefreshSlots(); slots.SelectedIndex = destination;
                 await DisplayCurrentAsync();
                 chat.AppendText("KI: Stück fertig: " + document["title"]?.GetValue<string>() + "\n\n");
             }
-            else chat.AppendText("KI: " + result["text"]!.GetValue<string>() + "\n\n");
+            else { string answer = result["text"]!.GetValue<string>(); chat.AppendText("KI: " + answer + "\n\n"); if (string.IsNullOrWhiteSpace(composition.Text)) composition.Text = answer; chatInput.Clear(); }
             cost.Text = "Anfrage ca. $" + result["estimatedCostUSD"]!.GetValue<double>().ToString("0.0000");
             SetStatus(makeMusic ? "Komposition abgeschlossen." : "Antwort erhalten."); SaveLocalState();
         }
@@ -374,7 +237,7 @@ internal sealed class MainForm : Form
         ["format"] = "composition-lab-document", ["version"] = 1,
         ["savedAt"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 978307200,
         ["title"] = score["ti"]?.GetValue<string>() ?? "Komposition", ["score"] = score,
-        ["concept"] = concept, ["measures"] = measures.Text, ["meter"] = "",
+        ["concept"] = concept, ["measures"] = measures.Text, ["meter"] = meter.Text,
         ["tempo"] = tempo.Text, ["musicalKey"] = musicalKey.Text, ["ensemble"] = ensemble.Text,
         ["assignment"] = userAssignment
     };
@@ -385,20 +248,23 @@ internal sealed class MainForm : Form
         player.Close(); currentMidi = null; currentXML = null; currentPath = null;
         var document = Current;
         playback.Text = "00:00 / 00:00";
-        if (document == null) { cost.Text = "Kosten: –"; pieceInfo.Text = "Wähle links ein Stück oder komponiere etwas Neues."; pieceTitle.Text = "Raum für deine nächste Idee"; composition.Clear(); if (webReady) web.NavigateToString("<html><body>Kein Stück geladen.</body></html>"); return; }
+        if (document == null) { cost.Text = "Kosten: –"; pieceInfo.Text = "Wähle links ein Stück oder komponiere etwas Neues."; pieceTitle.Text = "Raum für deine nächste Idee"; scoreJSON.Clear(); validation.Clear(); if (webReady) web.NavigateToString("<html><body>Kein Stück geladen.</body></html>"); return; }
         pieceTitle.Text = document["title"]?.GetValue<string>() ?? "Komposition";
         var scoreInfo = document["score"];
         pieceInfo.Text = string.Join("  ·  ", new[] { document["ensemble"]?.GetValue<string>(), scoreInfo?["k"]?.GetValue<string>(), scoreInfo?["bpm"]?.ToString() is string bpm ? bpm + " BPM" : null }.Where(v => !string.IsNullOrWhiteSpace(v)));
-        composition.Text = document["concept"]?.GetValue<string>() ?? "";
+        scoreJSON.Text = document["score"]?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
+        validation.Text = "Technische Prüfung läuft …";
+        playerBpm = document["score"]?["bpm"]?.GetValue<int>() ?? 96; foreach (var transport in transports) transport.Tempo.Text = playerBpm.ToString();
         try
         {
             var score = document["score"]!.DeepClone();
             var midi = await core.RunAsync(new JsonObject { ["operation"] = "midi", ["score"] = score });
-            var xml = await core.RunAsync(new JsonObject { ["operation"] = "musicxml", ["score"] = score.DeepClone() });
+            var xml = await core.RunAsync(new JsonObject { ["operation"] = "musicxml", ["score"] = score.DeepClone(), ["options"] = notationOptions?.DeepClone() });
             if (generation != displayGeneration) return;
             currentMidi = Convert.FromBase64String(midi["data"]!.GetValue<string>());
             currentXML = Encoding.UTF8.GetString(Convert.FromBase64String(xml["data"]!.GetValue<string>()));
             if (webReady) RenderNotation();
+            validation.Text = "Technische Partiturprüfung bestanden. MIDI und MusicXML erzeugt.\n\n" + (document["title"]?.GetValue<string>() ?? "");
             cost.Text = document["costUSD"] is JsonValue c && c.TryGetValue<double>(out double n) ? "Stück ca. $" + n.ToString("0.0000") : "Kosten: –";
         }
         catch (Exception e) { if (generation == displayGeneration) SetStatus(e.Message, true); }
@@ -413,14 +279,15 @@ internal sealed class MainForm : Form
     }
     void RefreshCards()
     {
-        libraryCount.Text = documents.Count(d => d != null) + " von 10 Plätzen belegt";
+
         for (int i = 0; i < slotCards.Count; i++)
         {
-            var title = documents[i]?["title"]?.GetValue<string>() ?? "Freier Platz";
+            var title = documents[i]?["title"]?.GetValue<string>() ?? "";
             var card = (PieceCard)slotCards[i]; card.PieceTitle = title; card.Occupied = documents[i] != null;
             card.Selected = i == slots.SelectedIndex; card.Text = (i + 1) + ": " + title; card.Invalidate();
             slotTips.SetToolTip(card, title + "\nKlick: auswählen / freien Platz laden. Rechtsklick: laden, speichern, löschen. Dateidrop möglich.");
         }
+        for (int i = 0; i < notationCards.Count; i++) { notationCards[i].Text = (documents[i] == null ? "" : "●") + (i + 1); notationCards[i].Selected = i == slots.SelectedIndex; notationCards[i].Invalidate(); }
     }
     void SelectFreeSlot()
     { int free = Array.FindIndex(documents, d => d == null); if (free < 0) SetStatus("Alle Slots belegt.", true); else slots.SelectedIndex = free; }
@@ -428,7 +295,7 @@ internal sealed class MainForm : Form
     async Task OpenAsync(int? destination = null)
     {
         if (busy) return;
-        using var dialog = new OpenFileDialog { Filter = "Musikdateien und Diagnosen|*.clab;*.mid;*.midi;*.musicxml;*.xml;*.json|Alle Dateien|*.*" };
+        using var dialog = new OpenFileDialog { Filter = "Musikdateien und Diagnosen|*.clab;*.mid;*.midi;*.musicxml;*.xml;*.json;*.clabproject|Alle Dateien|*.*" };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         if (destination.HasValue) await ImportIntoSlotAsync(dialog.FileName, destination.Value);
         else await ImportPathAsync(dialog.FileName);
@@ -437,6 +304,7 @@ internal sealed class MainForm : Form
     {
         int destination = targetSlot ?? (Current == null ? slots.SelectedIndex : Array.FindIndex(documents, d => d == null));
         if (destination < 0) throw new InvalidOperationException("Alle Slots belegt. Bitte einen Slot freimachen.");
+        if (Path.GetExtension(path).Equals(".clabproject", StringComparison.OrdinalIgnoreCase)) { await LoadProjectPathAsync(path); return; }
         var data = await File.ReadAllBytesAsync(path); JsonObject document;
         if (Path.GetExtension(path).Equals(".clab", StringComparison.OrdinalIgnoreCase))
         {
@@ -465,7 +333,7 @@ internal sealed class MainForm : Form
             document = CreateDocument(response["score"]!.DeepClone().AsObject(), "Import: " + Path.GetFileName(path));
             if (!midi) document["originalMusicXMLData"] = Convert.ToBase64String(data);
         }
-        documents[destination] = document; RefreshSlots(); slots.SelectedIndex = destination;
+        documents[destination] = document; RememberPiece(document); RefreshSlots(); slots.SelectedIndex = destination;
         await DisplayCurrentAsync(); currentPath = Path.GetExtension(path).Equals(".clab", StringComparison.OrdinalIgnoreCase) ? path : null;
         SaveLocalState(); SetStatus("Datei geladen.");
     }
@@ -533,7 +401,7 @@ internal sealed class MainForm : Form
         using var dialog = new SaveFileDialog { Filter = extension == "mid" ? "MIDI|*.mid" : "MusicXML|*.musicxml",
             FileName = SafeName(pieceTitle.Text) + "." + extension, OverwritePrompt = true };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        var result = await core.RunAsync(new JsonObject { ["operation"] = extension == "mid" ? "midi" : "musicxml", ["score"] = Score.DeepClone() });
+        var result = await core.RunAsync(new JsonObject { ["operation"] = extension == "mid" ? "midi" : "musicxml", ["score"] = Score.DeepClone(), ["options"] = extension == "mid" ? null : notationOptions?.DeepClone() });
         AtomicFile.WriteBytes(dialog.FileName, Convert.FromBase64String(result["data"]!.GetValue<string>()));
         SetStatus("Export gespeichert.");
     }
@@ -601,6 +469,11 @@ internal sealed class MainForm : Form
                     foreach (var pair in savedModels) if (models.ContainsKey(pair.Key)) models[pair.Key] = pair.Value?.GetValue<string>() ?? models[pair.Key];
                 activeProvider = state["provider"]?.GetValue<string>() ?? "anthropic";
                 if (!models.ContainsKey(activeProvider)) activeProvider = "anthropic";
+                editableIdea = state["editableIdea"]?.GetValue<string>() ?? ""; loadingIdea = true; composition.Text = editableIdea; loadingIdea = false;
+                meter.Text = state["meter"]?.GetValue<string>() ?? "";
+                if (state["history"] is JsonArray savedHistory) foreach (var item in savedHistory.OfType<JsonObject>()) pieceHistory.Add(item.DeepClone().AsObject()); RefreshHistory();
+                projectName = state["projectName"]?.GetValue<string>() ?? "Unbenannt";
+                if (state["notation"] is JsonArray notationState && notationState.Count == 9) { updatingNotation = true; for (int i = 0; i < 9; i++) notationSettings[i].SelectedIndex = Math.Clamp(notationState[i]!.GetValue<int>(), 0, notationSettings[i].Items.Count - 1); splitBeats.Checked = state["splitBeats"]?.GetValue<bool>() ?? true; updatingNotation = false; notationOptions = BuildNotationOptions(); }
                 assignment.Text = state["assignment"]?.GetValue<string>() ?? assignment.Text;
                 measures.Text = state["measures"]?.GetValue<string>() ?? "";
                 tempo.Text = state["tempo"]?.GetValue<string>() ?? "";
@@ -611,8 +484,8 @@ internal sealed class MainForm : Form
         catch (Exception e) { SetStatus("Gespeicherter Stand konnte nicht geladen werden: " + e.Message, true); }
         finally
         {
-            provider.SelectedIndex = activeProvider switch { "openai" => 1, "gemini" => 2, _ => 0 };
-            model.Text = models[activeProvider]; apiKey.Text = keys.GetValueOrDefault(activeProvider, "");
+            provider.SelectedIndex = activeProvider switch { "openai" => 2, "gemini" => 0, _ => 1 };
+            SelectModel(); apiKey.Text = keys.GetValueOrDefault(activeProvider, "");
             remember.Checked = keys.ContainsKey(activeProvider); loadingSettings = false;
         }
     }
@@ -621,11 +494,12 @@ internal sealed class MainForm : Form
         if (loadingSettings) return;
         try
         {
-            models[activeProvider] = model.Text;
+            models[activeProvider] = SelectedModelId;
             var state = new JsonObject { ["format"] = "composition-lab-windows-workspace", ["version"] = 1,
                 ["slots"] = new JsonArray(documents.Select(d => d?.DeepClone()).ToArray()), ["chat"] = chat.Text,
                 ["diagnostic"] = lastDiagnostic?.DeepClone(), ["provider"] = activeProvider,
                 ["models"] = JsonSerializer.SerializeToNode(models), ["assignment"] = assignment.Text,
+                ["editableIdea"] = editableIdea, ["meter"] = meter.Text, ["projectName"] = projectName, ["history"] = new JsonArray(pieceHistory.Select(d => d.DeepClone()).ToArray()), ["notation"] = new JsonArray(notationSettings.Select(c => (JsonNode?)JsonValue.Create(c.SelectedIndex)).ToArray()), ["splitBeats"] = splitBeats.Checked,
                 ["measures"] = measures.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text, ["ensemble"] = ensemble.Text };
             AtomicFile.WriteText(Path.Combine(dataDirectory, "workspace.json"), state.ToJsonString());
         }
@@ -652,7 +526,7 @@ internal sealed class MainForm : Form
         const string probe = "ÄÖÜ äöü ß – musikalischer Dialog";
         var version = await core.RunAsync(new JsonObject { ["operation"] = "version", ["title"] = probe });
         if (version["titleEcho"]?.GetValue<string>() != probe) throw new Exception("UTF-8-Prozesskommunikation beschädigt.");
-        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.5") throw new Exception("Falscher Kern.");
+        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.6") throw new Exception("Falscher Kern.");
         var fixture = JsonNode.Parse("""{"ti":"Windows Starttest","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,0,1],[1,1,64,80,0,1],[2,2,67,80,0,1]]}]}""")!.AsObject();
         documents[0] = CreateDocument(fixture, "Automatischer Test ohne KI-Kosten."); RefreshSlots();
         await DisplayCurrentAsync();
@@ -708,29 +582,35 @@ internal sealed class MainForm : Form
         RefreshSlots(); slots.SelectedIndex = 0; await DisplayCurrentAsync();
         chat.Text = "Du: Ein ruhiges Klavierstück mit einer klaren musikalischen Idee.\n\nKI: Stück fertig: Elegie im Abendlicht\n\nDu: Die Melodie soll beim nächsten Abschnitt etwas mehr Raum bekommen.";
         SetStatus("Bereit · alle Windows-Prüfungen bestanden.");
-        foreach (var size in new[] { new Size(1400, 940), new Size(1000, 700) })
+        composition.Text = "Eine ruhige, gesangliche Melodie mit Raum zum Atmen.\n\nDie Begleitung trägt die Linie und entwickelt sich mit ihr. Ein kurzer Kontrast führt zum ursprünglichen Gedanken zurück.";
+        string unchangedIdea = composition.Text; slots.SelectedIndex = 2; await DisplayCurrentAsync(); if (composition.Text != unchangedIdea) throw new Exception("Stückwahl verändert die Kompositionsidee."); slots.SelectedIndex = 0; await DisplayCurrentAsync();
+        var midiBefore = currentMidi!.ToArray(); notationSettings[0].SelectedIndex = 1; await NotationChangedAsync(0);
+        if (!midiBefore.SequenceEqual(currentMidi!)) throw new Exception("Notationsprofil verändert MIDI.");
+        foreach (var size in new[] { new Size(1500, 1100), new Size(1000, 700) })
         {
             Size = size;
             for (int page = 0; page < 3; page++)
             {
                 tabs.SelectedIndex = page; PerformLayout();
-                foreach (var control in slotCards.Concat(slotActions).Cast<Control>().Concat(navButtons).Concat(new Control[] { provider, model, effort, ensemble, composition, compose, assignment, apiKey }))
+                foreach (var control in slotCards.Cast<Control>().Concat(guiChecks))
                 {
                     if (!control.Visible) continue;
-                    var bounds = control.RectangleToScreen(control.ClientRectangle);
-                    for (Control? ancestor = control.Parent; ancestor != null; ancestor = ancestor.Parent)
-                        if (!ancestor.RectangleToScreen(ancestor.ClientRectangle).Contains(bounds))
-                            throw new Exception("Bedienelement abgeschnitten: " + control.Text + " / " + size + " / " + ancestor.GetType().Name);
+                    if (control.Width < 10 || control.Height < 10) throw new Exception("Bedienelement unbedienbar: " + control.Text);
+                    // Native Mac has a horizontal card deck; Windows also allows the full
+                    // fixed layout to scroll when smaller than the original minimum content.
+                    for (Control? parent = control.Parent; parent != null; parent = parent.Parent)
+                        if (parent is ScrollableControl scroll && scroll.AutoScroll) { scroll.ScrollControlIntoView(control); }
                 }
                 if (page == 0)
                 {
-                    using var bitmap = new Bitmap(Width, Height); DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size));
-                    bitmap.Save(Path.Combine(output, size.Width == 1400 ? "Windows-Starttest.png" : "Windows-Kleines-Fenster.png"));
+                    for (Control? parent = slotCards[0].Parent; parent != null; parent = parent.Parent) if (parent is ScrollableControl scroll && scroll.AutoScroll) scroll.AutoScrollPosition = Point.Empty;
                 }
+                using var bitmap = new Bitmap(Width, Height); DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size));
+                bitmap.Save(Path.Combine(output, (size.Width == 1500 ? "Windows-" : "Windows-Klein-") + new[] { "Main", "Noten", "Technik" }[page] + ".png"));
             }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "all three workspaces at 1000x700 and 1400x940" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten 116x164 cards", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "three Mac workspaces, large/small window with reachable scroll content" }, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {

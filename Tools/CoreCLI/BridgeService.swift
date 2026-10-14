@@ -28,9 +28,11 @@ enum BridgeService {
             guard let response = obj["response"] as? String else { throw NSError(domain: "BridgeService", code: 6) }
             send(["ok": true, "score": try JSONSerialization.jsonObject(with: CoreServices.recoverScore(response: response))])
         case "midi": send(["ok": true, "data": try CoreServices.midi(scoreJSON: data("score")).base64EncodedString()])
-        case "musicxml": send(["ok": true, "data": try CoreServices.musicXML(scoreJSON: data("score")).base64EncodedString()])
+        case "musicxml": send(["ok": true, "data": try CoreServices.musicXML(scoreJSON: data("score"), optionsJSON: obj["options"] is [String: Any] ? data("options") : nil).base64EncodedString()])
         case "import-midi": send(["ok": true, "score": try JSONSerialization.jsonObject(with: CoreServices.importMIDI(bytes(), title: title))])
         case "import-musicxml": send(["ok": true, "score": try JSONSerialization.jsonObject(with: CoreServices.importMusicXML(bytes(), title: title))])
+        case "validate-workspace":
+            try CoreServices.validateWorkspace(data("document")); send(["ok": true])
         case "validate-document":
             try CoreServices.validateDocument(data("document"))
             send(["ok": true])

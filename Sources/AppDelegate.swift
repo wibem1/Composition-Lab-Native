@@ -23,6 +23,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         buildMenus()
         createMainWindowIfNeeded()
         DispatchQueue.main.async { [weak self] in self?.showMainWindow() }
+        if let index = CommandLine.arguments.firstIndex(of: "--capture-gui-reference"), CommandLine.arguments.count > index + 1 {
+            let output = CommandLine.arguments[index + 1]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.captureGUIReference(output) }
+        }
+    }
+
+    private func captureGUIReference(_ output: String) {
+        guard let window, let content = window.contentView else { exit(2) }
+        NSApp.appearance = NSAppearance(named: .aqua)
+        window.setContentSize(NSSize(width: 1260, height: 950))
+        func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap { descendants($0) } }
+        guard let navigation = descendants(content).compactMap({ $0 as? NSSegmentedControl }).first(where: { $0.segmentCount == 3 && $0.label(forSegment: 0) == "Main" }) else { exit(3) }
+        do {
+            try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
+            var frames: [[String: Any]] = []
+            for page in 0..<3 {
+                navigation.selectedSegment = page
+                if let action = navigation.action { navigation.sendAction(action, to: navigation.target) }
+                content.layoutSubtreeIfNeeded()
+                guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { exit(4) }
+                content.cacheDisplay(in: content.bounds, to: bitmap)
+                guard let png = bitmap.representation(using: .png, properties: [:]) else { exit(5) }
+                try png.write(to: URL(fileURLWithPath: output).appendingPathComponent("Mac-" + ["Main", "Noten", "Technik"][page] + ".png"))
+                for view in descendants(content) where !view.isHiddenOrHasHiddenAncestor {
+                    let text = (view as? NSTextField)?.stringValue ?? (view as? NSButton)?.title ?? ""
+                    let frame = view.convert(view.bounds, to: content)
+                    if !text.isEmpty { frames.append(["page": page, "text": text, "frame": NSStringFromRect(frame)]) }
+                }
+            }
+            try JSONSerialization.data(withJSONObject: frames, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: output).appendingPathComponent("Mac-GUI-Frames.json"))
+            NSApp.terminate(nil)
+        } catch { print(error); exit(6) }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {

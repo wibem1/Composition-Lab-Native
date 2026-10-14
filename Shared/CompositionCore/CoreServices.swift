@@ -3,14 +3,15 @@ import Foundation
 /// Small public boundary for desktop clients. JSON preserves the existing score
 /// and CLAB wire format; AppKit and Windows APIs never enter this module.
 public enum CoreServices {
-    public static let version = "4.0.0-alpha.5"
+    public static let version = "4.0.0-alpha.6"
 
     public static func midi(scoreJSON: Data) throws -> Data {
         MIDIBuilder.build(try validatedScore(scoreJSON))
     }
 
-    public static func musicXML(scoreJSON: Data) throws -> Data {
-        guard let data = MusicXMLBuilder.build(try validatedScore(scoreJSON)) else {
+    public static func musicXML(scoreJSON: Data, optionsJSON: Data? = nil) throws -> Data {
+        let options = try optionsJSON.map { try JSONDecoder().decode(MusicXMLDisplayOptions.self, from: $0) } ?? .readablePiano
+        guard let data = MusicXMLBuilder.build(try validatedScore(scoreJSON), options: options) else {
             throw APIError.badResponse("MusicXML konnte nicht erzeugt werden.")
         }
         return data
@@ -31,6 +32,13 @@ public enum CoreServices {
             throw APIError.badResponse("Unbekanntes CLAB-Format.")
         }
         try ScoreValidation.validate(document.score)
+    }
+
+    public static func validateWorkspace(_ data: Data) throws {
+        struct Workspace: Decodable { let format: String; let name: String; let activeSlot: Int; let slots: [HistoryItem?]; let settings: AppSettings; let history: [HistoryItem] }
+        let workspace = try JSONDecoder().decode(Workspace.self, from: data)
+        guard workspace.format == "composition-lab-v6-project", (0..<10).contains(workspace.activeSlot), workspace.slots.count <= 10 else { throw APIError.badResponse("Ungültiger Arbeitsplatz.") }
+        for item in workspace.slots.compactMap({ $0 }) + workspace.history { try ScoreValidation.validate(item.score) }
     }
 
     public static func compositionPrompt(assignment: String) -> String {

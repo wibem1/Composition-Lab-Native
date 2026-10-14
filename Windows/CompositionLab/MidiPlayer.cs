@@ -36,6 +36,12 @@ internal sealed class MidiPlayer : IDisposable
         }
         catch { mciSendString($"close {alias}", null, 0, IntPtr.Zero); File.Delete(path); file = null; throw; }
     }
+    [DllImport("winmm.dll")]
+    static extern uint midiOutSetVolume(IntPtr device, uint volume);
+    public string Mode => Loaded ? Send($"status {alias} mode") : "stopped";
+    public void Seek(double fraction) { if (Loaded) { bool playing = Mode == "playing"; int position = (int)(Length * Math.Clamp(fraction, 0, 1)); Send($"seek {alias} to {position}"); if (playing) Send($"play {alias} from {position}"); } }
+    public void SetTempo(int bpm) { if (Loaded) Send($"set {alias} tempo {Math.Clamp(bpm, 20, 400)}"); }
+    public bool SetVolume(int percent) { uint volume = (uint)(Math.Clamp(percent, 0, 100) * 65535 / 100); return midiOutSetVolume(new IntPtr(-1), volume | (volume << 16)) == 0; }
     public void Play() { if (Loaded) Send($"play {alias}"); }
     public void Pause() { if (Loaded) Send($"pause {alias}"); }
     public void Stop() { if (Loaded) { Send($"stop {alias}"); Send($"seek {alias} to start"); } }
