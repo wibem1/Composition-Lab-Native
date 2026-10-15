@@ -54,10 +54,10 @@ internal sealed partial class MainForm
     sealed class Transport
     {
         public readonly Label Time = new() { AutoSize = true, Text = "0:00 / 0:00", Padding = new Padding(0, 6, 0, 0) };
-        public readonly TrackBar Position = new() { Width = 260, Height = 26, Maximum = 1000, TickStyle = TickStyle.None, AutoSize = false };
+        public readonly TrackBar Position = new() { AutoSize = false, Width = 260, Height = 26, Maximum = 1000, TickStyle = TickStyle.None };
         public readonly CheckBox Loop = new() { Text = "↻ Loop", Appearance = Appearance.Button, AutoSize = false, Width = 62, Height = 26 };
         public readonly TextBox Tempo = new() { Width = 50 };
-        public readonly TrackBar Volume = new() { Width = 130, Height = 26, Maximum = 100, Value = 90, TickStyle = TickStyle.None, AutoSize = false };
+        public readonly TrackBar Volume = new() { AutoSize = false, Width = 130, Height = 26, Maximum = 100, Value = 90, TickStyle = TickStyle.None };
     }
     SplitContainer? mainSplit;
     double mainSplitRatio = .5;
@@ -292,7 +292,7 @@ internal sealed partial class MainForm
         }
         settings.Controls.Add(settingsContent);
         AddSetting(MacLabel("Noten", 17, true)); AddSetting(new Label { Text = "Darstellungsquantisierung für MusicXML. Die MIDI-Daten und die Komposition bleiben unverändert.", AutoSize = true, MaximumSize = new Size(264, 0), ForeColor = StudioTheme.Muted, Font = MacFont(12) });
-        var quantizationTitle = MacLabel("Darstellungsquantisierung", 17, true); quantizationTitle.MaximumSize = new Size(264, 0); AddSetting(quantizationTitle);
+        var quantizationTitle = MacLabel("Quantisierung", 17, true); quantizationTitle.MaximumSize = new Size(264, 0); AddSetting(quantizationTitle);
         string[] titles = ["Preset", "Rhythmusmodus", "Kleinster gerader Notenwert", "Kleinster triolischer Notenwert", "Kurze Pausen", "Notenlängen glätten", "Mini-Pausen am Taktanfang", "Darstellung", "Splitpunkt"];
         string[][] choices = [["Klavier – lesbar", "MIDI-nah", "Benutzerdefiniert"], ["Auto", "Gerade", "Triolisch"], ["Aus", "Viertel", "Achtel", "16tel", "32tel", "64tel"], ["Aus", "Vierteltriolen", "Achteltriolen", "16teltriolen", "32teltriolen"], ["Alle Pausen zeigen", "bis 32tel glätten", "bis 16tel glätten", "bis Achtel glätten"], ["Aus", "Leicht", "Mittel", "Stark"], ["Aus", "bis 32tel", "bis 16tel", "bis Achtel"], ["Automatisch", "Ein System", "Zwei Systeme"], ["C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"]];
         updatingNotation = true;
@@ -358,7 +358,7 @@ internal sealed partial class MainForm
         void FitFlowRow(Control flow, RowStyle style, int padding = 0)
         {
             if (flow.ClientSize.Width <= 0 || !flow.Visible) return;
-            int needed = flow.Controls.Cast<Control>().Where(c => c.Visible).Select(c => c.Bottom + c.Margin.Bottom).DefaultIfEmpty(0).Max() + padding;
+            int needed = flow.Controls.Cast<Control>().Where(c => c.Visible).Select(c => c.Top + Math.Max(c.Height, c.ClientSize.Height) + c.Margin.Bottom).DefaultIfEmpty(0).Max() + padding;
             if (Math.Abs(style.Height - needed) > .5f) style.Height = needed;
         }
         void ScheduleFlowRows()
