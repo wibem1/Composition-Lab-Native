@@ -791,6 +791,8 @@ internal sealed partial class MainForm : Form
                     CheckNotationPlayer();
                     toggleLargePreview?.Invoke(); await Task.Delay(30); CheckNotationPlayer();
                     toggleLargePreview?.Invoke(); await Task.Delay(30); CheckNotationPlayer();
+                    if (!splitBeats.Visible || splitBeats.Width < 80 || splitBeats.ClientSize.Height < splitBeats.Font.Height + 4)
+                        throw new Exception("Notenwerte-Kontrollkästchen fehlt oder ist abgeschnitten.");
                     var settingControls = notationSettings[0].Parent!.Controls.Cast<Control>().ToArray();
                     foreach (var setting in settingControls)
                     {

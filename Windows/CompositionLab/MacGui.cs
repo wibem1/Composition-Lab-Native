@@ -266,14 +266,46 @@ internal sealed partial class MainForm
         tempoLabel.TextAlign = volumeLabel.TextAlign = ContentAlignment.MiddleLeft;
         transport.Position.Dock = DockStyle.Fill;
         fixedPlayer.Controls.Add(buttons, 0, 0); fixedPlayer.Controls.Add(transport.Position, 0, 1); fixedPlayer.Controls.Add(levels, 0, 2);
+        bool sizingFixedPlayer = false;
         void SizeFixedPlayer()
         {
-            int height = Math.Max(LayoutPixels(34), first.Concat(last).Append(transport.Position).Max(c => c.Font.Height + c.Margin.Vertical + LayoutPixels(8)));
-            foreach (RowStyle style in fixedPlayer.RowStyles) style.Height = height;
-            fixedPlayer.MinimumSize = new Size(0, 3 * height);
-            int[] buttonWidths = [42, 42, 68], levelWidths = [60, 64, 94];
-            for (int i = 0; i < 3; i++) { buttons.ColumnStyles[i].Width = LayoutPixels(buttonWidths[i]); levels.ColumnStyles[i].Width = LayoutPixels(levelWidths[i]); }
+            if (sizingFixedPlayer) return;
+            sizingFixedPlayer = true; fixedPlayer.SuspendLayout(); buttons.SuspendLayout(); levels.SuspendLayout();
+            try
+            {
+                bool wide = fixedPlayer.ClientSize.Width >= LayoutPixels(410);
+                int height = Math.Max(LayoutPixels(34), first.Concat(last).Append(transport.Position).Max(c => c.Font.Height + c.Margin.Vertical + LayoutPixels(8)));
+                buttons.ColumnCount = wide ? 6 : 4;
+                buttons.ColumnStyles.Clear(); foreach (int width in new[] { 42, 42, 68 }) buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, LayoutPixels(width)));
+                buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                if (wide)
+                {
+                    buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, LayoutPixels(60)));
+                    buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, LayoutPixels(64)));
+                    if (tempoLabel.Parent != buttons) buttons.Controls.Add(tempoLabel, 4, 0);
+                    if (transport.Tempo.Parent != buttons) buttons.Controls.Add(transport.Tempo, 5, 0);
+                    levels.ColumnCount = 3; levels.ColumnStyles.Clear();
+                    levels.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60)); levels.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, LayoutPixels(94))); levels.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+                    if (transport.Position.Parent != levels) levels.Controls.Add(transport.Position, 0, 0);
+                    levels.SetColumn(volumeLabel, 1); levels.SetColumn(transport.Volume, 2);
+                    fixedPlayer.SetRow(levels, 1);
+                }
+                else
+                {
+                    if (tempoLabel.Parent != levels) levels.Controls.Add(tempoLabel, 0, 0);
+                    if (transport.Tempo.Parent != levels) levels.Controls.Add(transport.Tempo, 1, 0);
+                    levels.SetColumn(volumeLabel, 2); levels.SetColumn(transport.Volume, 3);
+                    levels.ColumnCount = 4; levels.ColumnStyles.Clear(); foreach (int width in new[] { 60, 64, 94 }) levels.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, LayoutPixels(width)));
+                    levels.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                    if (transport.Position.Parent != fixedPlayer) fixedPlayer.Controls.Add(transport.Position, 0, 1);
+                    fixedPlayer.SetRow(levels, 2);
+                }
+                for (int i = 0; i < 3; i++) fixedPlayer.RowStyles[i].Height = wide && i == 2 ? 0 : height;
+                fixedPlayer.MinimumSize = new Size(0, (wide ? 2 : 3) * height);
+            }
+            finally { levels.ResumeLayout(true); buttons.ResumeLayout(true); fixedPlayer.ResumeLayout(true); sizingFixedPlayer = false; }
         }
+        fixedPlayer.SizeChanged += (_, _) => SizeFixedPlayer();
         foreach (var control in first.Concat(last).Append(transport.Position)) control.FontChanged += (_, _) => SizeFixedPlayer();
         fixedPlayer.DpiChangedAfterParent += (_, _) => SizeFixedPlayer();
         SizeFixedPlayer(); return fixedPlayer;
@@ -301,15 +333,8 @@ internal sealed partial class MainForm
     {
         var page = Grid(2, 1); page.ColumnStyles.Clear(); page.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 301)); page.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var settings = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = StudioTheme.Canvas };
-        var settingsContent = Grid(1, 0); settingsContent.Dock = DockStyle.Top; settingsContent.AutoSize = true;
-        settingsContent.AutoSizeMode = AutoSizeMode.GrowAndShrink; settingsContent.Padding = new Padding(16);
-        void AddSetting(Control control)
-        {
-            int row = settingsContent.RowCount++;
-            settingsContent.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            control.Dock = DockStyle.Fill;
-            settingsContent.Controls.Add(control, 0, row);
-        }
+        var settingsContent = new Panel { Dock = DockStyle.Top, Padding = new Padding(16), BackColor = StudioTheme.Canvas };
+        void AddSetting(Control control) { control.Dock = DockStyle.None; settingsContent.Controls.Add(control); }
         settings.Controls.Add(settingsContent);
         AddSetting(MacLabel("Noten", 17, true)); AddSetting(new Label { Text = "Darstellungsquantisierung für MusicXML. Die MIDI-Daten und die Komposition bleiben unverändert.", AutoSize = true, MaximumSize = new Size(264, 0), ForeColor = StudioTheme.Muted, Font = MacFont(12) });
         var quantizationTitle = MacLabel("Quantisierung", 17, true); quantizationTitle.MaximumSize = new Size(264, 0); AddSetting(quantizationTitle);
@@ -355,27 +380,26 @@ internal sealed partial class MainForm
                 right.RowStyles[2].Height = compact || shortWindow ? 0 : LayoutPixels(30);
                 right.RowStyles[5].Height = compact || shortWindow ? 0 : exports.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
                 preview.RowStyles[0].Height = previewTools.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
-                int settingWidth = Math.Max(1, settingsContent.ClientSize.Width - settingsContent.Padding.Horizontal);
-                splitBeats.Height = Math.Max(LayoutPixels(50), TextRenderer.MeasureText(splitBeats.Text, splitBeats.Font,
-                    new Size(Math.Max(1, settingWidth - splitBeats.Margin.Horizontal - LayoutPixels(24)), 0), TextFormatFlags.WordBreak).Height + LayoutPixels(12));
+                int settingWidth = Math.Max(1, settings.ClientSize.Width - settingsContent.Padding.Horizontal);
+                int settingTop = settingsContent.Padding.Top;
                 foreach (Control control in settingsContent.Controls)
                 {
                     int available = Math.Max(1, settingWidth - control.Margin.Horizontal);
-                    control.MaximumSize = new Size(available, 0);
-                    if (control is Label label) { label.AutoSize = true; label.AutoEllipsis = false; }
-                    if (!control.AutoSize) control.Width = available;
-                    if (control is ComboBox sizedCombo)
+                    control.MaximumSize = Size.Empty; control.AutoSize = false;
+                    int height;
+                    if (control is Label label)
                     {
-                        sizedCombo.Height = sizedCombo.PreferredHeight;
+                        label.AutoEllipsis = false;
+                        height = TextRenderer.MeasureText(label.Text, label.Font, new Size(available, 0), TextFormatFlags.WordBreak).Height + LayoutPixels(2);
                     }
-                    // A native ComboBox enforces PreferredHeight even when the table's
-                    // AutoSize calculation uses its old DPI height. Reserve the actual
-                    // text/control height explicitly so adjacent rows cannot overlap.
-                    int height = control is ComboBox combo ? combo.PreferredHeight : control is Label
-                        ? control.GetPreferredSize(new Size(available, 0)).Height : control.Height;
-                    var style = settingsContent.RowStyles[settingsContent.GetRow(control)];
-                    style.SizeType = SizeType.Absolute; style.Height = height + control.Margin.Vertical;
+                    else if (control is ComboBox combo) height = combo.PreferredHeight;
+                    else height = Math.Max(LayoutPixels(50), TextRenderer.MeasureText(control.Text, control.Font,
+                        new Size(Math.Max(1, available - LayoutPixels(24)), 0), TextFormatFlags.WordBreak).Height + LayoutPixels(12));
+                    control.Bounds = new Rectangle(settingsContent.Padding.Left + control.Margin.Left,
+                        settingTop + control.Margin.Top, available, height);
+                    settingTop = control.Bottom + control.Margin.Bottom;
                 }
+                settingsContent.Height = settingTop + settingsContent.Padding.Bottom;
             }
             finally { preview.ResumeLayout(true); right.ResumeLayout(true); page.ResumeLayout(true); arranging = false; FitFlowRow(previewTools, preview.RowStyles[0]); FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical); if (!compact) FitFlowRow(exports, right.RowStyles[5]); ScheduleFlowRows(); }
         }
