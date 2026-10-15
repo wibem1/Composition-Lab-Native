@@ -283,6 +283,7 @@ internal sealed partial class MainForm : Form
         document["inputTokens"] = result["inputTokens"]?.DeepClone(); document["outputTokens"] = result["outputTokens"]?.DeepClone();
         documents[destination] = document; RememberPiece(document); RefreshSlots();
         refreshingSlots = true; try { slots.SelectedIndex = destination; } finally { refreshingSlots = false; }
+        SaveLocalState(); // Persist the slot while recovery source is still available.
         pendingComposition = null;
         SaveLocalState(); await DisplayCurrentAsync(); return document;
     }
@@ -306,7 +307,7 @@ internal sealed partial class MainForm : Form
             for (int i = matches.Count - 1; i >= 0; i--)
                 if (ContainsFinishedMusic(matches[i].Value)) { source = new JsonObject { ["composition"] = matches[i].Value, ["assignment"] = "Aus dem Chatverlauf wiederhergestellt", ["estimatedCostUSD"] = 0d }; break; }
         }
-        source ??= lastDiagnostic?.DeepClone().AsObject();
+        if (source == null || !ContainsFinishedMusic(source["composition"]?.GetValue<string>() ?? "")) source = lastDiagnostic?.DeepClone().AsObject();
         if (source == null) throw new InvalidOperationException("Keine fertige Komposition im Chatverlauf oder der Diagnose vorhanden.");
         int destination = Array.FindIndex(documents, d => d == null);
         if (destination < 0) throw new InvalidOperationException("Bitte zuerst einen Slot freimachen.");
@@ -325,7 +326,9 @@ internal sealed partial class MainForm : Form
             var request = new JsonObject { ["assignment"] = assignmentText, ["provider"] = activeProvider, ["model"] = SelectedModelId,
                 ["effort"] = effort.SelectedIndex switch { 0 => "low", 2 => "high", _ => "medium" } };
             var result = await TranslateExistingAsync(music, request, source, pending.Token);
-            await AcceptCompositionAsync(result, destination, assignmentText, activeProvider, SelectedModelId);
+            await AcceptCompositionAsync(result, destination, assignmentText,
+                source["provider"]?.GetValue<string>() ?? activeProvider,
+                source["model"]?.GetValue<string>() ?? SelectedModelId);
             SetStatus("Vorhandene Komposition in Slot " + (destination + 1) + " übernommen; MIDI bereit.");
         }
         catch (CoreRequestException e) { lastDiagnostic = e.Diagnostic; UpdateDiagnostic(); SaveLocalState(); throw; }
@@ -727,6 +730,15 @@ internal sealed partial class MainForm : Form
         const string lily = "\\version \"2.24.0\"\n\\score { { c'4 d' e' f' } }";
         var extracted = ExtractLilyPond("Einleitung\n```lilypond\n" + lily + "\n```\nNachwort");
         if (extracted != lily + "\n") throw new Exception("LilyPond-Code verändert.");
+        // Raw music must survive a translation failure and application restart.
+        string broken = "KI: \`\`\`lilypond\n\\version \"2.24.0\"\n\\score { c'4\n\`\`\`";
+        chat.Text = broken;
+        PreservePendingComposition(broken, new JsonObject { ["estimatedCostUSD"] = 0d }, "Testauftrag", "gemini", "test-model");
+        var snapshot = JsonNode.Parse(File.ReadAllText(Path.Combine(dataDirectory, "workspace.json")))!.AsObject();
+        if (snapshot["pendingComposition"]?["composition"]?.GetValue<string>() != broken ||
+            snapshot["chat"]?.GetValue<string>() != broken)
+            throw new Exception("Unvollständige Komposition ging vor der Slot-Übernahme verloren.");
+        chat.Text = ""; pendingComposition = null; SaveLocalState();
         string lyPath = Path.Combine(output, "Windows-Starttest.ly"); await File.WriteAllTextAsync(lyPath, extracted, new UTF8Encoding(false));
         string longSource = extracted + "\n% " + string.Concat(Enumerable.Repeat("Übergabe # + = & <script> 𝄞\n% ", 2500));
         string handoff = HacklilySourceUri(longSource);
