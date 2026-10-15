@@ -240,7 +240,18 @@ internal sealed partial class MainForm
         var play = AddButton(row, "▶", PlayAsync); play.AutoSize = false; play.Size = new Size(36, 26);
         var stop = AddButton(row, "■", () => { player.Stop(); return Task.CompletedTask; }); stop.AutoSize = false; stop.Size = new Size(36, 26); row.Controls.Add(transport.Loop); row.Controls.Add(transport.Time); row.Controls.Add(transport.Position);
         row.Controls.Add(MacLabel("Tempo")); row.Controls.Add(transport.Tempo); row.Controls.Add(MacLabel("Lautstärke")); row.Controls.Add(transport.Volume);
-        if (notation) transport.Position.Width = 220;
+        if (notation)
+        {
+            void FitTransport()
+            {
+                int width = row.ClientSize.Width;
+                if (width <= 0) return;
+                transport.Position.Width = Math.Clamp(width / 4, LayoutPixels(90), LayoutPixels(220));
+                transport.Volume.Width = Math.Clamp(width / 6, LayoutPixels(70), LayoutPixels(130));
+            }
+            row.SizeChanged += (_, _) => FitTransport();
+            row.DpiChangedAfterParent += (_, _) => FitTransport();
+        }
         transport.Loop.CheckedChanged += (_, _) => { loopPlaying = transport.Loop.Checked; foreach (var other in transports) if (other != transport) other.Loop.Checked = loopPlaying; };
         transport.Position.Scroll += (_, _) => { if (player.Loaded && !seekUpdating) { player.Seek(transport.Position.Value / 1000d); UpdateTransport(); } };
         transport.Tempo.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter && int.TryParse(transport.Tempo.Text, out int bpm) && bpm is >= 20 and <= 400) { playerBpm = bpm; tempoOverride = true; if (player.Loaded) player.SetTempo(bpm); foreach (var other in transports) other.Tempo.Text = bpm.ToString(); e.SuppressKeyPress = true; } };
@@ -318,11 +329,11 @@ internal sealed partial class MainForm
                 settings.Visible = !compact;
                 deck.Visible = !compact && !shortWindow;
                 transport.Visible = true;
-                previewHeader.Visible = exports.Visible = !compact;
+                previewHeader.Visible = exports.Visible = !compact && !shortWindow;
                 right.RowStyles[0].Height = compact || shortWindow ? 0 : LayoutPixels(62);
                 right.RowStyles[1].Height = notationPlayer.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal - transport.Padding.Horizontal), 0)).Height + transport.Padding.Vertical;
-                right.RowStyles[2].Height = compact ? 0 : LayoutPixels(30);
-                right.RowStyles[5].Height = compact ? 0 : exports.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
+                right.RowStyles[2].Height = compact || shortWindow ? 0 : LayoutPixels(30);
+                right.RowStyles[5].Height = compact || shortWindow ? 0 : exports.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
                 preview.RowStyles[0].Height = previewTools.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
                 int settingWidth = Math.Max(1, settingsContent.ClientSize.Width - settingsContent.Padding.Horizontal);
                 foreach (Control control in settingsContent.Controls)
