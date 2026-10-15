@@ -51,6 +51,26 @@ internal sealed partial class MainForm
         string music = "Originalprüfung\n```lilypond\n" + source + "\n```";
         var result = await CompileCompositionAsync(music, new JsonObject { ["provider"] = "gemini", ["model"] = "test-local", ["estimatedCostUSD"] = .01 }, CancellationToken.None);
         if (result["conversionAICalls"]!.GetValue<int>() != 0 || result["composition"]!.GetValue<string>() != music) throw new Exception("Lokale Ausgabe verändert die Komposition oder ruft die KI auf.");
+        // Regression: a failed automatic octave repair must not discard a valid score.
+        const string extreme = "\\version \"2.24.0\"\n\\score { \\new Staff { \\clef bass c,,,4 } \\layout {} \\midi {} }";
+        var previousTransport = registerRepairTransport;
+        bool previousReview = automaticRegisterReview, previousForce = forceRegisterReview;
+        try
+        {
+            automaticRegisterReview = true; forceRegisterReview = false;
+            registerRepairTransport = (_, _) => throw new InvalidOperationException("Simulierter Oktavkorrekturfehler");
+            var preserved = await CompileCheckedCompositionAsync(extreme,
+                new JsonObject { ["provider"] = "gemini", ["model"] = "offline-test", ["estimatedCostUSD"] = 0d }, CancellationToken.None);
+            if (preserved["octaveReview"]?["status"]?.GetValue<string>() != "warning" ||
+                preserved["sourceMidiData"]?.GetValue<string>() is not string midiSource || midiSource.Length < 20 ||
+                preserved["composition"]?.GetValue<string>() != extreme)
+                throw new Exception("Eine fehlgeschlagene automatische Oktavkorrektur verwirft die Originalkomposition.");
+        }
+        finally
+        {
+            registerRepairTransport = previousTransport;
+            automaticRegisterReview = previousReview; forceRegisterReview = previousForce;
+        }
         var notes = result["score"]!["tr"]!.AsArray().OfType<JsonObject>().SelectMany(t => t["nt"]!.AsArray()).OfType<JsonArray>().ToArray();
         if (!notes.Any(n => n[0]!.GetValue<double>() == 0 && n[2]!.GetValue<double>() == 60) || !notes.Any(n => n[0]!.GetValue<double>() == .5 && n[2]!.GetValue<double>() == 65)) throw new Exception("Achtelauftakt oder erste volle Taktposition falsch.");
         int originalTab = tabs.SelectedIndex;
