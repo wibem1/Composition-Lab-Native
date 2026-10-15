@@ -746,7 +746,7 @@ internal sealed partial class MainForm : Form
             tabSwitchMeasurements.Add(new { scale, requestedWidth = size.Width, switches = 18, layoutCount, milliseconds = watch.ElapsedMilliseconds });
             for (int page = 0; page < 3; page++)
             {
-                tabs.SelectedIndex = page; PerformLayout();
+                tabs.SelectedIndex = page; PerformLayout(); await Task.Delay(40);
                 if (page == 0)
                 {
                     ArrangeMainSplit();

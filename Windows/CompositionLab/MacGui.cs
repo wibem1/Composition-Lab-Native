@@ -315,7 +315,7 @@ internal sealed partial class MainForm
         preview.Controls.Add(previewTools, 0, 0); notationHost.Controls.Add(web); preview.Controls.Add(notationHost, 0, 1); right.Controls.Add(preview, 0, 3); notationSummary.Text = "Darstellungsregeln · Klavier – lesbar"; notationSummary.Visible = false; right.Controls.Add(notationSummary, 0, 4);
         var exports = MacRow(); exports.Controls.Add(MacLabel("Export", 12, true)); var export = new StudioButton { Text = "MusicXML sichern / ziehen …", AutoSize = true }; export.Click += async (_, _) => await GuardAsync(() => ExportAsync("musicxml")); Point dragStart = Point.Empty; export.MouseDown += (_, e) => dragStart = e.Location; export.MouseMove += async (_, e) => { if (e.Button != MouseButtons.Left || Math.Abs(e.X - dragStart.X) + Math.Abs(e.Y - dragStart.Y) < 10 || Score == null) return; dragStart = e.Location; await GuardAsync(async () => { var result = await core.RunAsync(new JsonObject { ["operation"] = "musicxml", ["score"] = Score.DeepClone(), ["options"] = notationOptions?.DeepClone() }); string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".musicxml"); await File.WriteAllBytesAsync(path, Convert.FromBase64String(result["data"]!.GetValue<string>())); export.DoDragDrop(new DataObject(DataFormats.FileDrop, new[] { path }), DragDropEffects.Copy); }); }; exports.Controls.Add(export); right.Controls.Add(exports, 0, 5); page.Controls.Add(right, 1, 0);
         // The browser remains in a fixed viewport: only the score itself scrolls.
-        bool arranging = false;
+        bool arranging = false, flowRowsPending = false;
         void ArrangeNotation()
         {
             if (arranging || right.ClientSize.Width <= 0) return;
@@ -353,7 +353,7 @@ internal sealed partial class MainForm
                     style.SizeType = SizeType.Absolute; style.Height = height + control.Margin.Vertical;
                 }
             }
-            finally { preview.ResumeLayout(true); right.ResumeLayout(true); page.ResumeLayout(true); arranging = false; FitFlowRow(previewTools, preview.RowStyles[0]); FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical); if (!compact) FitFlowRow(exports, right.RowStyles[5]); }
+            finally { preview.ResumeLayout(true); right.ResumeLayout(true); page.ResumeLayout(true); arranging = false; FitFlowRow(previewTools, preview.RowStyles[0]); FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical); if (!compact) FitFlowRow(exports, right.RowStyles[5]); ScheduleFlowRows(); }
         }
         void FitFlowRow(Control flow, RowStyle style, int padding = 0)
         {
@@ -361,6 +361,24 @@ internal sealed partial class MainForm
             int needed = flow.Controls.Cast<Control>().Where(c => c.Visible).Select(c => c.Bottom + c.Margin.Bottom).DefaultIfEmpty(0).Max() + padding;
             if (Math.Abs(style.Height - needed) > .5f) style.Height = needed;
         }
+        void ScheduleFlowRows()
+        {
+            if (flowRowsPending || !page.IsHandleCreated || page.IsDisposed) return;
+            flowRowsPending = true;
+            page.BeginInvoke((Action)(() =>
+            {
+                flowRowsPending = false;
+                if (page.IsDisposed || !page.Visible) return;
+                // Layout events precede the flow engine's final child positions.
+                // Measure those positions on the next message-loop turn.
+                FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical);
+                FitFlowRow(previewTools, preview.RowStyles[0]);
+                if (exports.Visible) FitFlowRow(exports, right.RowStyles[5]);
+            }));
+        }
+        notationPlayer.Layout += (_, _) => ScheduleFlowRows();
+        previewTools.Layout += (_, _) => ScheduleFlowRows();
+        exports.Layout += (_, _) => ScheduleFlowRows();
         previewTools.Layout += (_, _) => FitFlowRow(previewTools, preview.RowStyles[0]);
         notationPlayer.Layout += (_, _) => FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical);
         exports.Layout += (_, _) => { if (!largePreview) FitFlowRow(exports, right.RowStyles[5]); };
