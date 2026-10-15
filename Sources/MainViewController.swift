@@ -2213,14 +2213,15 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     private func refreshAvailableModels() {
+        let selectedProvider = provider
+        let selectedModelID = model
         for candidate in Provider.allCases {
             let key = SessionSecrets.shared.key(for: candidate)
             guard !key.isEmpty else { continue }
             ProviderModelCatalog.refresh(candidate, key: key) { [weak self] result in
                 guard let self else { return }
                 if case .success(let count) = result, self.provider == candidate {
-                    let current = self.model
-                    self.refillModels(preferred: current)
+                    self.refillModels(preferred: candidate == selectedProvider ? selectedModelID : self.settings.models[candidate.rawValue])
                     self.status("\(count) Modelle für \(candidate.displayName) geladen.", good: true)
                 }
             }
@@ -2240,7 +2241,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     @objc private func providerChanged() {
-        saveSettingsFromUI()
+        settings.provider = provider
+        Storage.shared.saveSettings(settings)
         refillModels()
         keyField.stringValue = SessionSecrets.shared.key(for: provider)
         refreshAvailableModels()
