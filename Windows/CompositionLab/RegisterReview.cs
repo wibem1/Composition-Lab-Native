@@ -53,7 +53,7 @@ internal sealed partial class MainForm
         var a = before["tr"]!.AsArray().OfType<JsonObject>().ToArray();
         var b = after["tr"]!.AsArray().OfType<JsonObject>().ToArray();
         if (a.Length != b.Length || Math.Abs(before["bpm"]!.GetValue<double>() - after["bpm"]!.GetValue<double>()) > .01 || before["ts"]!.ToJsonString() != after["ts"]!.ToJsonString() || before["k"]?.ToString() != after["k"]?.ToString()) return false;
-        return a.Zip(b).All(pair => pair.First["pg"]?.ToString() == pair.Second["pg"]?.ToString() && Signature(pair.First).SequenceEqual(Signature(pair.Second)));
+        return a.Zip(b).All(pair => pair.First["pg"]?.ToString() == pair.Second["pg"]?.ToString() && Signature(pair.First).SequenceEqual(Signature(pair.Second)) && new[] { "ct", "me" }.All(k => pair.First[k]?.ToJsonString() == pair.Second[k]?.ToJsonString()));
     }
 
     async Task<JsonObject> RequestRegisterRepairAsync(JsonObject request, CancellationToken token)
@@ -91,7 +91,7 @@ internal sealed partial class MainForm
                 var candidate = await CompileCompositionAsync(corrected, source, token, updateDiagnostic: false);
                 if (!OctaveOnlyChange(original["score"]!.AsObject(), candidate["score"]!.AsObject()))
                     throw new InvalidDataException("Die vorgeschlagene Oktavkorrektur verändert Tonklassen, Rhythmus, Dynamik oder Besetzung und wurde verworfen.");
-                if (Regex.IsMatch(ExtractLilyPond(corrected), @"\\relative\b") || RegisterIssues(candidate["score"]!.AsObject(), corrected).Count > 0)
+                if (Regex.IsMatch(ExtractLilyPond(corrected), @"\\relative\b") || RegisterIssues(candidate["score"]!.AsObject(), music).Count > 0)
                     throw new InvalidDataException("Die Oktavkorrektur ist weiterhin auffällig und wurde nicht übernommen.");
                 review["status"] = "corrected";
                 candidate["octaveReview"] = review.DeepClone(); candidate["originalLilyPond"] = music;

@@ -772,9 +772,19 @@ internal sealed partial class MainForm : Form
         await RunLilyPondTestsAsync(output);
         await RunRegisterReviewTestsAsync(output);
         var navigationReady = new TaskCompletionSource<bool>();
-        web.CoreWebView2.NavigationCompleted += (_, e) => navigationReady.TrySetResult(e.IsSuccess);
-        web.NavigateToString("<!doctype html><html><body style='margin:0'><div style='height:2400px;background:linear-gradient(white,#8ac)'>Native Notenvorschau · Scrolltest</div></body></html>");
-        if (!await navigationReady.Task.WaitAsync(TimeSpan.FromSeconds(20))) throw new Exception("Native Vorschau lädt nicht.");
+        string scrollTestPath = Path.Combine(output, "NativeScrollTest.html");
+        AtomicFile.WriteText(scrollTestPath, "<!doctype html><html><body style='margin:0'><div style='height:2400px;background:linear-gradient(white,#8ac)'>Native Notenvorschau · Scrolltest</div></body></html>");
+        var scrollTestUri = new Uri(Path.GetFullPath(scrollTestPath));
+        ulong scrollNavigation = 0;
+        void ScrollStarting(object? sender, CoreWebView2NavigationStartingEventArgs e) { if (new Uri(e.Uri) == scrollTestUri) scrollNavigation = e.NavigationId; }
+        void ScrollLoaded(object? sender, CoreWebView2NavigationCompletedEventArgs e) { if (scrollNavigation != 0 && e.NavigationId == scrollNavigation) navigationReady.TrySetResult(e.IsSuccess); }
+        web.CoreWebView2.NavigationStarting += ScrollStarting; web.CoreWebView2.NavigationCompleted += ScrollLoaded;
+        try
+        {
+            web.CoreWebView2.Navigate(scrollTestUri.AbsoluteUri);
+            if (!await navigationReady.Task.WaitAsync(TimeSpan.FromSeconds(20))) throw new Exception("Native Vorschau lädt nicht.");
+        }
+        finally { web.CoreWebView2.NavigationStarting -= ScrollStarting; web.CoreWebView2.NavigationCompleted -= ScrollLoaded; }
         int normalPreviewHeight = web.Height;
         toggleLargePreview?.Invoke(); await Task.Delay(100);
         if (web.Height <= normalPreviewHeight || web.Width <= 0) throw new Exception("Große Notenansicht vergrößert Vorschau nicht.");
