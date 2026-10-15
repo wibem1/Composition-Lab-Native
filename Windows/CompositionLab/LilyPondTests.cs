@@ -52,6 +52,7 @@ internal sealed partial class MainForm
         if (result["conversionAICalls"]!.GetValue<int>() != 0 || result["composition"]!.GetValue<string>() != music) throw new Exception("Lokale Ausgabe verändert die Komposition oder ruft die KI auf.");
         var notes = result["score"]!["tr"]!.AsArray().OfType<JsonObject>().SelectMany(t => t["nt"]!.AsArray()).OfType<JsonArray>().ToArray();
         if (!notes.Any(n => n[0]!.GetValue<double>() == 0 && n[2]!.GetValue<double>() == 60) || !notes.Any(n => n[0]!.GetValue<double>() == .5 && n[2]!.GetValue<double>() == 65)) throw new Exception("Achtelauftakt oder erste volle Taktposition falsch.");
+        int originalTab = tabs.SelectedIndex;
         int selected = slots.SelectedIndex, free = Array.FindIndex(documents, d => d == null);
         var old = documents[free];
         var savedHistory = pieceHistory.Select(d => d.DeepClone().AsObject()).ToArray();
@@ -91,10 +92,14 @@ internal sealed partial class MainForm
             string edited = music.Replace("Auftakt – Originalprüfung", "Bearbeitet – G statt C").Replace("c8\\mf", "g8\\mf").Replace("4 = 104", "4 = 116");
             var previousPages = currentLilyPond!.Pages.ToArray();
             composition.Text = edited;
+            edited = composition.Text; // RichTextBox owns the visible newline representation.
+            tabs.SelectedIndex = 1;
+            await Task.Delay(100);
             var refreshButton = WorkspaceViewState.ControlsIn(this).OfType<Button>().Single(b => b.Text == "Aktualisieren");
+            if (!refreshButton.Visible || !refreshButton.Enabled) throw new Exception("Aktualisieren ist im Noten-Tab nicht erreichbar.");
             refreshButton.PerformClick();
             for (int i = 0; busy && i < 1200; i++) await Task.Delay(50);
-            if (busy || Current!["lilyPondSource"]?.GetValue<string>() != edited || currentLilyPond!.Pages.SequenceEqual(previousPages) || currentMidi!.SequenceEqual(generated.Midi)) throw new Exception("Aktualisieren ignoriert den bearbeiteten LilyPond-Code.");
+            if (busy || Current!["lilyPondSource"]?.GetValue<string>() != edited || currentLilyPond!.Pages.SequenceEqual(previousPages) || currentMidi!.SequenceEqual(generated.Midi)) throw new Exception($"Aktualisieren: busy={busy}, source={Current!["lilyPondSource"]?.GetValue<string>() == edited}, pagesChanged={!currentLilyPond!.Pages.SequenceEqual(previousPages)}, midiChanged={!currentMidi!.SequenceEqual(generated.Midi)}, status={status.Text}");
             if (Current["concept"]?.GetValue<string>() != music || Current["title"]?.GetValue<string>() != "Bearbeitet – G statt C") throw new Exception("Bearbeitung überschreibt Original oder aktualisiert Titel nicht.");
             var editedNotes = Score!["tr"]!.AsArray().OfType<JsonObject>().SelectMany(t => t["nt"]!.AsArray()).OfType<JsonArray>();
             if (!editedNotes.Any(n => n[0]!.GetValue<double>() == 0 && n[2]!.GetValue<double>() == 67)) throw new Exception("Bearbeitete Tonhöhe fehlt im neuen MIDI/Score.");
@@ -132,6 +137,7 @@ internal sealed partial class MainForm
         }
         finally
         {
+            tabs.SelectedIndex = originalTab;
             pieceHistory.Clear(); pieceHistory.AddRange(savedHistory); RefreshHistory();
             documents[free] = old; RefreshSlots(); slots.SelectedIndex = selected; await DisplayCurrentAsync();
         }

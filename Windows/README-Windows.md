@@ -13,6 +13,11 @@ und übernimmt Notation, MIDI, Titel und interne Partitur gemeinsam in dasselbe
 Stück. Dafür wird keine KI angefragt. Erfolgreiche Änderungen bleiben beim
 Wechseln der Slots, in CLAB-Dateien und in Projektdateien erhalten. LilyPond-Export
 und Hacklily-Übergabe verwenden den aktuellen Quelltext.
+Hacklily erhält den Code direkt über seinen URL-Import; manuelles Einfügen ist
+nicht mehr nötig. Auch lange Kompositionen werden über eine lokale Startdatei
+vollständig übergeben. Hacklily behandelt URL-Importe als schreibgeschützt;
+zum Bearbeiten dort eine Kopie speichern. Die direkte Website-Übernahme konnte
+hier mangels Browserfreigabe nicht live geprüft werden.
 
 Speichern: **Datei → LilyPond sichern …** und **Datei → MusicXML sichern …**.
 Beide Formate sind auch unten im Notenbereich erreichbar. MusicXML ist eine
