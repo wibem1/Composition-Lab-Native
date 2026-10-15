@@ -305,6 +305,7 @@ internal sealed partial class MainForm : Form
         busy = value; compose.Enabled = !value; send.Enabled = !value; cancel.Enabled = value;
         if (modelsButton != null) modelsButton.Enabled = !value;
         provider.Enabled = !value; model.Enabled = !value; effort.Enabled = !value; apiKey.Enabled = !value;
+        if (!value) SelectModel();
     }
 
     JsonObject CreateDocument(JsonObject score, string concept, string userAssignment = "") => new()

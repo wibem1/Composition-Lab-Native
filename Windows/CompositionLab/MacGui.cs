@@ -174,7 +174,7 @@ internal sealed partial class MainForm
         }
         provider.SelectedIndexChanged += (_, _) => ProviderChanged();
         model.SelectedIndexChanged += (_, _) => { if (!bindingModel && !loadingSettings && model.SelectedItem != null) { models[activeProvider] = SelectedModelId; slotTips.SetToolTip(model, SelectedModelId); SaveLocalState(); } };
-        model.AutoCompleteMode = AutoCompleteMode.SuggestAppend; model.AutoCompleteSource = AutoCompleteSource.ListItems;
+        model.AutoCompleteSource = AutoCompleteSource.ListItems; model.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
         row.Controls.Add(MacLabel("KI", 12, true)); row.Controls.Add(provider); row.Controls.Add(model); row.Controls.Add(effort); modelsButton = AddButton(row, "Modelle …", ShowModelsAsync);
         var rightParameters = MacRow(true); rightParameters.Dock = DockStyle.None;
         rightParameters.Controls.Add(MacLabel("Takte")); measures.Width = 62; measures.Items.AddRange(new object[] { "2", "4", "8", "16", "24", "32", "48", "64" }); measures.HandleCreated += (_, _) => NativeCue.SendMessage(measures.Handle, 0x1703, new IntPtr(1), "24"); rightParameters.Controls.Add(measures); rightParameters.Controls.Add(meter);
