@@ -367,7 +367,16 @@ internal sealed partial class MainForm
         toggleLargePreview = () => { largePreview = !largePreview; enlarge.Text = largePreview ? "Normale Ansicht" : "Große Ansicht"; ArrangeNotation(); };
         page.SizeChanged += (_, _) => ArrangeNotation();
         page.VisibleChanged += (_, _) => { if (page.Visible) ArrangeNotation(); };
-        settingsContent.SizeChanged += (_, _) => ArrangeNotation();
+        bool notationLayoutPending = false;
+        void ScheduleNotationLayout()
+        {
+            if (notationLayoutPending || !page.IsHandleCreated || page.IsDisposed) return;
+            notationLayoutPending = true;
+            page.BeginInvoke((Action)(() => { notationLayoutPending = false; if (!page.IsDisposed && page.Visible) ArrangeNotation(); }));
+        }
+        settingsContent.SizeChanged += (_, _) => ScheduleNotationLayout();
+        foreach (Control control in settingsContent.Controls) control.FontChanged += (_, _) => ScheduleNotationLayout();
+        page.DpiChangedAfterParent += (_, _) => ScheduleNotationLayout();
         right.SizeChanged += (_, _) => ArrangeNotation();
         var viewport = new WorkspacePanel { Dock = DockStyle.Fill, AutoScroll = false, BackColor = StudioTheme.Canvas };
         viewport.Controls.Add(page); return viewport;
