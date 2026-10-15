@@ -14,6 +14,9 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: '6.2'
       - name: Confirm Swift compiler
         shell: pwsh
         run: swift --version
