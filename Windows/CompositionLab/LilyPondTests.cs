@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -130,6 +131,21 @@ internal sealed partial class MainForm
             await WriteMusicExportAsync(Path.Combine(output, "Bearbeitet.musicxml"), "musicxml");
             await WriteMusicExportAsync(Path.Combine(output, "Bearbeitet.mid"), "mid");
             if (File.ReadAllText(Path.Combine(output, "Bearbeitet.ly")) != ExtractLilyPond(edited) || !File.ReadAllBytes(Path.Combine(output, "Bearbeitet.mid")).SequenceEqual(currentMidi!)) throw new Exception("Dateiexporte verwenden die alte Fassung.");
+            // Frescobaldi uses LilyPond's default PDF backend. Exercise the saved
+            // .ly itself, without the app's preparation or SVG-specific options.
+            var pdfStart = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "LilyPond", "bin", "lilypond.exe"))
+            { WorkingDirectory = output, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            foreach (string arg in new[] { "-dno-point-and-click", "--output=Frescobaldi-Exportpruefung", "Bearbeitet.ly" }) pdfStart.ArgumentList.Add(arg);
+            using (var pdfProcess = Process.Start(pdfStart)!)
+            {
+                var pdfOut = pdfProcess.StandardOutput.ReadToEndAsync(); var pdfErr = pdfProcess.StandardError.ReadToEndAsync();
+                try { await pdfProcess.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60)); }
+                catch (TimeoutException) { pdfProcess.Kill(true); throw; }
+                string pdfLog = await pdfOut + await pdfErr;
+                AtomicFile.WriteText(Path.Combine(output, "Frescobaldi-Exportpruefung.log"), pdfLog);
+                string pdfPath = Path.Combine(output, "Frescobaldi-Exportpruefung.pdf");
+                if (pdfProcess.ExitCode != 0 || !File.Exists(pdfPath) || !File.ReadAllBytes(pdfPath).Take(5).SequenceEqual(Encoding.ASCII.GetBytes("%PDF-"))) throw new Exception("LilyPond-Dateiexport scheitert bei normalem PDF-Aufruf: " + pdfLog);
+            }
             var xmlCheck = await core.RunAsync(new JsonObject { ["operation"] = "import-musicxml", ["data"] = Convert.ToBase64String(File.ReadAllBytes(Path.Combine(output, "Bearbeitet.musicxml"))), ["title"] = "Exportprüfung" });
             if (!xmlCheck["score"]!["tr"]!.AsArray().OfType<JsonObject>().SelectMany(t => t["nt"]!.AsArray()).OfType<JsonArray>().Any(n => n[2]!.GetValue<double>() == 67)) throw new Exception("MusicXML enthält die bearbeitete Tonhöhe nicht.");
             AtomicFile.WriteBytes(Path.Combine(output, "LilyPond-Original.mid"), generated.Midi);
