@@ -781,7 +781,11 @@ internal sealed partial class MainForm : Form
                             var bounds = control.RectangleToScreen(control.ClientRectangle);
                             if (control.Width <= 0 || control.Height <= 0 || !viewportBounds.Contains(bounds) ||
                                 !notationTransport.RectangleToScreen(notationTransport.ClientRectangle).Contains(bounds))
-                                throw new Exception($"Player abgeschnitten: {control.Text} bei {scale * 100}% / {size}.");
+                                {
+                                using var failureImage = new Bitmap(Width, Height); DrawToBitmap(failureImage, new Rectangle(Point.Empty, Size));
+                                failureImage.Save(Path.Combine(output, "Player-Failure.png"));
+                                throw new Exception($"Player abgeschnitten: {control.GetType().Name} {control.Text} bei {scale * 100}% / {size}. Element {bounds}, Player {notationTransport.RectangleToScreen(notationTransport.ClientRectangle)}, Fenster {viewportBounds}, große Ansicht {largePreview}.");
+                            }
                         }
                     }
                     CheckNotationPlayer();

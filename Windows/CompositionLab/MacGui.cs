@@ -304,7 +304,7 @@ internal sealed partial class MainForm
         var deck = Grid(1, 2); deck.RowStyles.Add(new RowStyle(SizeType.AutoSize)); deck.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); deck.Controls.Add(MacLabel("Stücke / Varianten", 17, true), 0, 0);
         var numbers = Grid(10, 1); numbers.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         for (int i = 0; i < 10; i++) { int index = i; var button = new StudioButton { Text = (i + 1).ToString(), Dock = DockStyle.Fill, AutoSize = false, Padding = Padding.Empty }; button.Click += (_, _) => { if (!busy) slots.SelectedIndex = index; }; notationCards.Add(button); numbers.Controls.Add(button, i, 0); } deck.Controls.Add(numbers, 0, 1); right.Controls.Add(deck, 0, 0);
-        var transport = MacPanel(); transport.Padding = new Padding(10, 6, 10, 6); var notationPlayer = BuildTransport(true); notationTransport = transport; transport.Controls.Add(notationPlayer); right.Controls.Add(transport, 0, 1);
+        var transport = MacPanel(); transport.Padding = new Padding(10, 6, 10, 6); var notationPlayer = BuildTransport(true); notationPlayer.AutoSize = false; notationTransport = transport; transport.Controls.Add(notationPlayer); right.Controls.Add(transport, 0, 1);
         var previewHeader = Grid(2, 1); previewHeader.ColumnStyles.Clear(); previewHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55)); previewHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45)); previewHeader.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var title = new Label { Text = "Notenbildvorschau", Dock = DockStyle.Fill, AutoEllipsis = true, Font = MacFont(17, FontStyle.Bold) }; notationCurrent.Dock = DockStyle.Fill; notationCurrent.TextAlign = ContentAlignment.MiddleRight; previewHeader.Controls.Add(title, 0, 0); previewHeader.Controls.Add(notationCurrent, 1, 0); right.Controls.Add(previewHeader, 0, 2);
         var preview = Grid(1, 2); preview.RowStyles.Add(new RowStyle(SizeType.Absolute, 36)); preview.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -374,6 +374,7 @@ internal sealed partial class MainForm
             notationLayoutPending = true;
             page.BeginInvoke((Action)(() => { notationLayoutPending = false; if (!page.IsDisposed && page.Visible) ArrangeNotation(); }));
         }
+        page.VisibleChanged += (_, _) => ScheduleNotationLayout();
         settingsContent.SizeChanged += (_, _) => ScheduleNotationLayout();
         foreach (Control control in settingsContent.Controls) control.FontChanged += (_, _) => ScheduleNotationLayout();
         page.DpiChangedAfterParent += (_, _) => ScheduleNotationLayout();
