@@ -111,19 +111,26 @@ public enum CoreServices {
         } catch { completion(.failure(error)) }
     }
 
-    public static func chat(requestJSON: Data, apiKey: String,
+    public static func chat(requestJSON: Data, apiKey: String, compositionOnly: Bool = false,
                             completion: @escaping (Result<Data, Error>) -> Void) {
         do {
             let dto = try JSONDecoder().decode(RequestDTO.self, from: requestJSON)
             guard !dto.assignment.isEmpty, !apiKey.isEmpty else { throw APIError.emptyResponse }
             APIClient.shared.call(provider: dto.provider, model: dto.model, key: apiKey,
-                effort: dto.effort, purpose: "music-chat", system: "", user: dto.assignment,
+                effort: dto.effort, purpose: compositionOnly ? "composition" : "music-chat", system: ComposerPrompts.system, user: compositionOnly ? ComposerPrompts.compositionPrompt(dto.assignment) : dto.assignment,
                 wantJSON: false) { result in
                 completion(result.flatMap { response in Result {
-                    let diagnostic: [String: Any] = ["text": response.text, "provider": dto.provider.rawValue, "model": dto.model, "assignment": dto.assignment, "reasoning": dto.effort.rawValue, "stage": "chat-completed",
+                    var diagnostic: [String: Any] = ["text": response.text, "provider": dto.provider.rawValue, "model": dto.model, "assignment": dto.assignment, "reasoning": dto.effort.rawValue, "stage": "chat-completed",
                         "inputTokens": response.inputTokens, "outputTokens": response.outputTokens,
                         "estimatedCostUSD": APICost.estimate(provider: dto.provider, model: dto.model,
                             inputTokens: response.inputTokens, outputTokens: response.outputTokens)]
+                    if compositionOnly {
+                        diagnostic["composition"] = response.text
+                        diagnostic["compositionPrompt"] = ComposerPrompts.compositionPrompt(dto.assignment)
+                        diagnostic["engineBuild"] = ComposerPrompts.engineBuild
+                        diagnostic["engineVersion"] = ComposerPrompts.referenceVersion
+                        diagnostic["stage"] = "composition-completed"
+                    }
                     return try JSONSerialization.data(withJSONObject: diagnostic)
                 } })
             }

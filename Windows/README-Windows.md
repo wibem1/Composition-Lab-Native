@@ -1,4 +1,4 @@
-# Alpha 14 · Build 4015 · 15.10.2026 – Tabzustand, Stückbeschreibungen und Provider-Modelllisten
+# Alpha 14 · Build 4016 · 15.10.2026 – Tabzustand, Stückbeschreibungen und Provider-Modelllisten
 
 Maßgeblich ist die GUI aus `main` (Mac 3.5.3, Commit a2aefd7). Die folgenden älteren Abschnitte beschreiben frühere Windows-Stände.
 
@@ -67,3 +67,24 @@ Die Modellkataloge von Google/Gemini, Anthropic und OpenAI werden direkt mit dem
 Der gemeinsame Kern bleibt auf Alpha 12. Automatische Windows-Tests verwenden simulierte Provider-Antworten ohne echte API-Schlüssel und ohne kostenpflichtige KI-Aufrufe. Der reale Zugriff auf die kontospezifischen Modelle erfolgt mit dem in der App eingetragenen Schlüssel.
 
 Alpha 15: Modellauswahl öffnet sofort. Vorhandene Schlüssel werden wiederverwendet; Sitzungsschlüssel bleiben beim Providerwechsel verfügbar. Schlüsselübernahme schließt den Dialog und lädt die Liste. Fortschritt und Fehler erscheinen direkt in der Modellauswahl. Gespeicherte Modelle bleiben ohne erneute Schlüsseleingabe auswählbar. Windows-Starttest prüft diesen Dialogablauf einschließlich Suche, Auswahl, Abbrechen und HTTP-Fehler.
+
+
+Alpha 16 · Build 4016 · 15.10.2026: Fertige LilyPond-Kompositionen werden lokal
+mit dem mitgelieferten LilyPond 2.26.0 in Originalnoten (SVG) und MIDI übersetzt.
+Kein zweiter KI-Aufruf und kein Internetzugriff für diese Ausgabe. Auftakte,
+Stimmen, Artikulationen und Takte stammen aus dem Original. Zoom, Blättern und
+Drucken arbeiten auch offline. Wiederholtes Öffnen nutzt den Ausgabe-Cache.
+MusicXML bleibt eine vereinfachte, aus MIDI abgeleitete Austauschansicht.
+
+Bereits gespeicherte Stücke behalten ihre bisherige Wiedergabe. Für eine neue,
+originalgetreue Ausgabe: Stück auswählen, dann Komposition → LilyPond-Original
+in freien Slot ausgeben. Die alte Fassung bleibt daneben erhalten. Eine alte
+Diagnose mit LilyPond-Original kann ebenfalls über einen freien Slot geladen
+werden; dafür wird kein API-Schlüssel gebraucht.
+
+LilyPond wird unverändert als separates Programm mitgeliefert. Seine Lizenzen
+und die Lizenzen seiner Abhängigkeiten stehen unter LilyPond/licenses.
+Unverändertes Originalpaket und zugehörige Quellen / Bauanleitungen:
+https://gitlab.com/lilypond/lilypond/-/releases/v2.26.0
+https://lilypond.org/source.html
+https://gitlab.com/lilypond/lilypond/-/tree/v2.26.0/release/binaries

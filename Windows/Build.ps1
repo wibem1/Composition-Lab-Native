@@ -34,6 +34,16 @@ foreach ($package in @('microsoft.web.webview2','microsoft.netcore.app.runtime.w
         }
     }
 }
+# Keep the verified, unmodified portable engraver with the app: no user install
+# and no network calls during MIDI conversion or notation rendering.
+$lilyArchive = Join-Path $env:TEMP 'lilypond-2.26.0-mingw-x86_64.zip'
+Invoke-WebRequest 'https://gitlab.com/lilypond/lilypond/-/releases/v2.26.0/downloads/lilypond-2.26.0-mingw-x86_64.zip' -OutFile $lilyArchive
+if ((Get-FileHash $lilyArchive -Algorithm SHA256).Hash -ne '14DDDDC233B469EF60D4FFC1C7F35520F15AC6B58E38CAB458C60BDCC3AF650C') { throw 'LilyPond archive checksum mismatch' }
+$lilyExtract = Join-Path $env:TEMP ('clab-lily-' + [guid]::NewGuid().ToString('N'))
+Expand-Archive $lilyArchive $lilyExtract
+Copy-Item (Join-Path $lilyExtract 'lilypond-2.26.0') (Join-Path $destination 'LilyPond') -Recurse
+& (Join-Path $destination 'LilyPond/bin/lilypond.exe') --version
+if ($LASTEXITCODE -ne 0) { throw 'Bundled LilyPond cannot start' }
 Copy-Item 'Windows/README-Windows.md' (Join-Path $destination 'LIESMICH.md')
 # A normal user must not need the Swift compiler/toolchain on PATH.
 $oldPath = $env:Path
@@ -64,6 +74,6 @@ if ($process.ExitCode -ne 0) {
 $report = Get-Content (Join-Path $tests 'result.json') -Raw | ConvertFrom-Json
 if (-not $report.passed) { throw 'Windows test result is not green' }
 Get-Content (Join-Path $tests 'result.json')
-$zip = Join-Path $PWD 'Composition-Lab-4.0-alpha.15-Windows-x64.zip'
+$zip = Join-Path $PWD 'Composition-Lab-4.0-alpha.16-Windows-x64.zip'
 Compress-Archive -Path $destination -DestinationPath $zip -Force
 Write-Output "Windows test package: $zip"

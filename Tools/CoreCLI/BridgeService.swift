@@ -36,7 +36,7 @@ enum BridgeService {
         case "validate-document":
             try CoreServices.validateDocument(data("document"))
             send(["ok": true])
-        case "compose", "chat", "translate-existing":
+        case "compose", "compose-source", "chat", "translate-existing":
             let semaphore = DispatchSemaphore(value: 0)
             let key = obj["apiKey"] as? String ?? ""
             let completion: (Result<Data, Error>) -> Void = { result in
@@ -59,7 +59,7 @@ enum BridgeService {
                     progress: { send(["event": "progress", "stage": $0]) }, completion: completion)
             } else if operation == "translate-existing" {
                 CoreServices.translateExisting(requestJSON: try data("request"), apiKey: key, progress: { send(["event": "progress", "stage": $0]) }, completion: completion)
-            } else { CoreServices.chat(requestJSON: try data("request"), apiKey: key, completion: completion) }
+            } else { CoreServices.chat(requestJSON: try data("request"), apiKey: key, compositionOnly: operation == "compose-source", completion: completion) }
             if semaphore.wait(timeout: .now() + 1900) == .timedOut {
                 throw NSError(domain: "BridgeService", code: 4,
                               userInfo: [NSLocalizedDescriptionKey: "Zeitlimit der KI-Anfrage erreicht."])
