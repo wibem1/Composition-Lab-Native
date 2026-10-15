@@ -10,6 +10,7 @@ internal sealed partial class MainForm
 {
     LilyPondCompiler? lilyCompiler;
     LilyPondOutput? currentLilyPond;
+    string? currentLilyPondPreviewUri;
     LilyPondCompiler Engraver => lilyCompiler ??= new(Path.Combine(dataDirectory, "LilyPondCache"));
 
     static string AppliedLilyPondText(JsonObject document) => document["lilyPondSource"]?.GetValue<string>() ?? document["concept"]?.GetValue<string>() ?? "";
@@ -123,8 +124,14 @@ internal sealed partial class MainForm
             render();
             </script></body></html>
             """;
-        string path = Path.Combine(dataDirectory, "LilyPondPreview.html");
-        AtomicFile.WriteText(path, html.Replace("PAGES_VALUE", pages));
-        web.CoreWebView2.Navigate(new Uri(path).AbsoluteUri);
+        string content = html.Replace("PAGES_VALUE", pages);
+        string folder = Path.Combine(dataDirectory, "LilyPondPreviews"); Directory.CreateDirectory(folder);
+        string hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(content)));
+        string path = Path.Combine(folder, hash + ".html");
+        // Immutable preview files cannot be overwritten while WebView2 is reading
+        // an earlier navigation. The revision distinguishes repeated requests.
+        if (!File.Exists(path)) AtomicFile.WriteText(path, content);
+        currentLilyPondPreviewUri = new Uri(path).AbsoluteUri + "?view=" + Guid.NewGuid().ToString("N");
+        web.CoreWebView2.Navigate(currentLilyPondPreviewUri);
     }
 }

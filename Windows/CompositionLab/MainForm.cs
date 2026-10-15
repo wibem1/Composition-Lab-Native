@@ -472,7 +472,7 @@ internal sealed partial class MainForm : Form
         string source = ExtractLilyPond(EditableLilyPondText(Current));
         using var dialog = new SaveFileDialog { Filter = "LilyPond|*.ly", FileName = SafeName(pieceTitle.Text) + ".ly", OverwritePrompt = true };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        await File.WriteAllTextAsync(dialog.FileName, source, new UTF8Encoding(false));
+        await WriteMusicExportAsync(dialog.FileName, "ly");
         SetStatus("LilyPond-Quelltext gespeichert.");
     }
     void OpenHacklily()
@@ -499,14 +499,31 @@ internal sealed partial class MainForm : Form
     {
         if (Score == null) throw new InvalidOperationException("Kein Stück geladen.");
         using var dialog = new SaveFileDialog { Filter = extension == "mid" ? "MIDI|*.mid" : "MusicXML|*.musicxml",
+            Title = extension == "musicxml" ? "MusicXML sichern – vereinfachte Austauschfassung" : "MIDI sichern",
             FileName = SafeName(pieceTitle.Text) + "." + extension, OverwritePrompt = true };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        if (extension == "mid" && currentMidi != null)
-        { AtomicFile.WriteBytes(dialog.FileName, currentMidi); SetStatus("MIDI gespeichert."); return; }
-        var result = await core.RunAsync(new JsonObject { ["operation"] = extension == "mid" ? "midi" : "musicxml", ["score"] = Score.DeepClone(), ["options"] = extension == "mid" ? null : notationOptions?.DeepClone() });
-        AtomicFile.WriteBytes(dialog.FileName, Convert.FromBase64String(result["data"]!.GetValue<string>()));
-        SetStatus("Export gespeichert.");
+        await WriteMusicExportAsync(dialog.FileName, extension);
+        SetStatus(extension == "musicxml" && currentLilyPond != null ? "MusicXML als vereinfachte Austauschfassung gespeichert." : "Export gespeichert.");
     }
+    async Task WriteMusicExportAsync(string path, string extension)
+    {
+        var document = Current ?? throw new InvalidOperationException("Kein Stück geladen.");
+        if (extension == "ly")
+        {
+            AtomicFile.WriteText(path, ExtractLilyPond(EditableLilyPondText(document))); return;
+        }
+        string requestedSource = EditableLilyPondText(document);
+        if (requestedSource != AppliedLilyPondText(document))
+        {
+            if (busy) throw new InvalidOperationException("Bitte die laufende Anfrage abwarten und dann speichern.");
+            await ApplyLilyPondEditsAsync();
+            if (!ReferenceEquals(Current, document) || AppliedLilyPondText(document) != requestedSource) throw new InvalidOperationException("Der bearbeitete Quelltext wurde noch nicht übernommen. Bitte erneut aktualisieren und speichern.");
+        }
+        if (extension == "mid" && currentMidi != null) { AtomicFile.WriteBytes(path, currentMidi); return; }
+        var result = await core.RunAsync(new JsonObject { ["operation"] = extension == "mid" ? "midi" : "musicxml", ["score"] = document["score"]!.DeepClone(), ["options"] = extension == "mid" ? null : notationOptions?.DeepClone() });
+        AtomicFile.WriteBytes(path, Convert.FromBase64String(result["data"]!.GetValue<string>()));
+    }
+
     void SaveDiagnostic()
     {
         if (lastDiagnostic == null) throw new InvalidOperationException("Noch keine Diagnose vorhanden.");

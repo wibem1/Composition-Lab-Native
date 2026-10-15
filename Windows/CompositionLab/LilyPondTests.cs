@@ -63,15 +63,21 @@ internal sealed partial class MainForm
             await core.RunAsync(new JsonObject { ["operation"] = "validate-document", ["document"] = Current!.DeepClone() });
             if (ToHistory(Current!)["sourceMidiData"]?.GetValue<string>() != result["sourceMidiData"]?.GetValue<string>()) throw new Exception("Projekt und Verlauf verlieren das Original-MIDI.");
             var navigation = new TaskCompletionSource<bool>();
+            ulong expectedNavigation = 0;
+            void Starting(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationStartingEventArgs e)
+            {
+                if (currentLilyPondPreviewUri != null && new Uri(e.Uri).Query == new Uri(currentLilyPondPreviewUri).Query) expectedNavigation = e.NavigationId;
+            }
             void Loaded(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
             {
-                if (e.WebErrorStatus == Microsoft.Web.WebView2.Core.CoreWebView2WebErrorStatus.OperationCanceled) return;
+                if (expectedNavigation == 0 || e.NavigationId != expectedNavigation) return;
                 if (e.IsSuccess) navigation.TrySetResult(true);
                 else navigation.TrySetException(new Exception("Originalvorschau: " + e.WebErrorStatus));
             }
+            web.CoreWebView2.NavigationStarting += Starting;
             web.CoreWebView2.NavigationCompleted += Loaded;
             try { RenderLilyPond(); if (!await navigation.Task.WaitAsync(TimeSpan.FromSeconds(20))) throw new Exception("Originalvorschau lädt nicht."); }
-            finally { web.CoreWebView2.NavigationCompleted -= Loaded; }
+            finally { web.CoreWebView2.NavigationStarting -= Starting; web.CoreWebView2.NavigationCompleted -= Loaded; }
             await Task.Delay(150);
             string state = JsonSerializer.Deserialize<string>(await web.ExecuteScriptAsync("JSON.stringify({count:document.images.length,loaded:Array.from(document.images).every(i=>i.complete&&i.naturalWidth>0),page:currentPage,scale:scale})"))!;
             var preview = JsonNode.Parse(state)!;
@@ -115,6 +121,12 @@ internal sealed partial class MainForm
             AtomicFile.WriteText(Path.Combine(output, "Edited-LilyPond.clab"), Current!.ToJsonString());
             var saved = JsonNode.Parse(File.ReadAllText(Path.Combine(output, "Edited-LilyPond.clab")))!.AsObject();
             if (AppliedLilyPondText(saved) != edited || saved["sourceMidiData"]?.GetValue<string>() != Convert.ToBase64String(currentMidi!)) throw new Exception("CLAB verliert die erfolgreiche Bearbeitung.");
+            await WriteMusicExportAsync(Path.Combine(output, "Bearbeitet.ly"), "ly");
+            await WriteMusicExportAsync(Path.Combine(output, "Bearbeitet.musicxml"), "musicxml");
+            await WriteMusicExportAsync(Path.Combine(output, "Bearbeitet.mid"), "mid");
+            if (File.ReadAllText(Path.Combine(output, "Bearbeitet.ly")) != ExtractLilyPond(edited) || !File.ReadAllBytes(Path.Combine(output, "Bearbeitet.mid")).SequenceEqual(currentMidi!)) throw new Exception("Dateiexporte verwenden die alte Fassung.");
+            var xmlCheck = await core.RunAsync(new JsonObject { ["operation"] = "import-musicxml", ["data"] = Convert.ToBase64String(File.ReadAllBytes(Path.Combine(output, "Bearbeitet.musicxml"))), ["title"] = "Exportprüfung" });
+            if (!xmlCheck["score"]!["tr"]!.AsArray().OfType<JsonObject>().SelectMany(t => t["nt"]!.AsArray()).OfType<JsonArray>().Any(n => n[2]!.GetValue<double>() == 67)) throw new Exception("MusicXML enthält die bearbeitete Tonhöhe nicht.");
             AtomicFile.WriteBytes(Path.Combine(output, "LilyPond-Original.mid"), generated.Midi);
             AtomicFile.WriteText(Path.Combine(output, "LilyPond-Messung.json"), new JsonObject { ["compileMilliseconds"] = generated.Milliseconds, ["pageCount"] = generated.Pages.Length, ["cached"] = cached.Cached, ["aiCalls"] = 0 }.ToJsonString());
         }

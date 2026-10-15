@@ -14,6 +14,11 @@ Stück. Dafür wird keine KI angefragt. Erfolgreiche Änderungen bleiben beim
 Wechseln der Slots, in CLAB-Dateien und in Projektdateien erhalten. LilyPond-Export
 und Hacklily-Übergabe verwenden den aktuellen Quelltext.
 
+Speichern: **Datei → LilyPond sichern …** und **Datei → MusicXML sichern …**.
+Beide Formate sind auch unten im Notenbereich erreichbar. MusicXML ist eine
+vereinfachte Austauschfassung; LilyPond-spezifische Bögen und Oktavlinien sind
+darin nicht vollständig enthalten.
+
 Bei einem Syntaxfehler bleiben die letzte gültige Notation und Wiedergabe
 erhalten. Der fehlerhafte Entwurf bleibt im Editor zur Korrektur stehen; die
 Fehlermeldung erscheint in der Statusleiste und in der Diagnose.
