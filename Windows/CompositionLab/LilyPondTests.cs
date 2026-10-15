@@ -90,7 +90,7 @@ internal sealed partial class MainForm
             using (var capture = File.Create(Path.Combine(output, "LilyPond-Original-Preview.png"))) await web.CoreWebView2.CapturePreviewAsync(Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, capture);
             // Reproduce the user flow: edit the visible composition, then click
             // the actual Noten-tab button rather than calling the compiler only.
-            string edited = music.Replace("Auftakt – Originalprüfung", "Bearbeitet – G statt C").Replace("c8\\mf", "g8\\mf").Replace("4 = 104", "4 = 116");
+            string edited = music.Replace("Auftakt – Originalprüfung", "Bearbeitet – G statt C").Replace("c8\\mf", "g'8\\mf").Replace("4 = 104", "4 = 116");
             var previousPages = currentLilyPond!.Pages.ToArray();
             composition.Text = edited;
             edited = composition.Text; // RichTextBox owns the visible newline representation.
@@ -104,7 +104,7 @@ internal sealed partial class MainForm
             if (Current["concept"]?.GetValue<string>() != music || Current["title"]?.GetValue<string>() != "Bearbeitet – G statt C") throw new Exception("Bearbeitung überschreibt Original oder aktualisiert Titel nicht.");
             var editedNotes = Score!["tr"]!.AsArray().OfType<JsonObject>().SelectMany(t => t["nt"]!.AsArray()).OfType<JsonArray>();
             if (!editedNotes.Any(n => n[0]!.GetValue<double>() == 0 && n[2]!.GetValue<double>() == 67)) throw new Exception("Bearbeitete Tonhöhe fehlt im neuen MIDI/Score.");
-            if (!ExtractLilyPond(EditableLilyPondText(Current)).Contains("g8\\mf")) throw new Exception("LilyPond-Export verwendet den alten Quelltext.");
+            if (!ExtractLilyPond(EditableLilyPondText(Current)).Contains("g'8\\mf")) throw new Exception("LilyPond-Export verwendet den alten Quelltext.");
             if (ToHistory(Current)["lilyPondSource"]?.GetValue<string>() != edited) throw new Exception("Projekt/Verlauf verliert die bearbeitete Quelle.");
             var validMidi = currentMidi.ToArray(); var validScore = Score.ToJsonString(); var validPages = currentLilyPond.Pages.ToArray();
             composition.Text = edited.Replace("\\upper", "\\unbekannteStimme");
