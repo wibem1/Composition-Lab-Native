@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.13 · Build 4013";
+    const string Version = "4.0.0-alpha.14 · Build 4014";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -19,6 +19,7 @@ internal sealed partial class MainForm : Form
     readonly Dictionary<string, string> models = new()
     { ["anthropic"] = "claude-sonnet-5", ["openai"] = "gpt-5.6-sol", ["gemini"] = "gemini-3.7-flash" };
     readonly JsonObject?[] documents = new JsonObject?[10];
+    readonly Dictionary<int, string> slotDrafts = [];
     readonly ListBox slots = new() { Dock = DockStyle.Fill, IntegralHeight = false };
     readonly ComboBox provider = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 155 };
     readonly ComboBox model = new() { Width = 250, DropDownStyle = ComboBoxStyle.DropDownList, DropDownWidth = 190 };
@@ -96,6 +97,7 @@ internal sealed partial class MainForm : Form
                 Size = new Size(Math.Min(Width, area.Width - 40), Math.Min(Height, area.Height - 40));
                 Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + (area.Height - Height) / 2);
                 await InitializeNotationAsync();
+                _ = RefreshModelsAsync(false);
             }
             try
             {
@@ -156,9 +158,9 @@ internal sealed partial class MainForm : Form
         if (loadingSettings) return;
         models[activeProvider] = SelectedModelId;
         activeProvider = provider.SelectedIndex switch { 1 => "anthropic", 2 => "openai", _ => "gemini" };
-        SelectModel();
         apiKey.Text = keys.GetValueOrDefault(activeProvider, ""); remember.Checked = keys.ContainsKey(activeProvider);
-        SaveLocalState();
+        SelectModel(); SaveLocalState();
+        if (!testMode) _ = RefreshModelsAsync(false);
     }
 
     void StoreKey()
@@ -166,6 +168,7 @@ internal sealed partial class MainForm : Form
         if (remember.Checked) keys[activeProvider] = apiKey.Text.Trim();
         else keys.Remove(activeProvider);
         secrets.Save(keys);
+        if (!testMode) _ = RefreshModelsAsync();
         SetStatus(remember.Checked ? "Schlüssel verschlüsselt gespeichert." : "Schlüssel wird nur in dieser Sitzung verwendet.");
     }
 
@@ -300,6 +303,7 @@ internal sealed partial class MainForm : Form
     void SetBusy(bool value)
     {
         busy = value; compose.Enabled = !value; send.Enabled = !value; cancel.Enabled = value;
+        if (modelsButton != null) modelsButton.Enabled = !value;
         provider.Enabled = !value; model.Enabled = !value; effort.Enabled = !value; apiKey.Enabled = !value;
     }
 
@@ -308,7 +312,7 @@ internal sealed partial class MainForm : Form
         ["format"] = "composition-lab-document", ["version"] = 1,
         ["savedAt"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 978307200,
         ["title"] = score["ti"]?.GetValue<string>() ?? "Komposition", ["score"] = score,
-        ["concept"] = concept, ["measures"] = measures.Text, ["meter"] = meter.Text,
+        ["concept"] = concept, ["description"] = concept, ["measures"] = measures.Text, ["meter"] = meter.Text,
         ["tempo"] = tempo.Text, ["musicalKey"] = musicalKey.Text, ["ensemble"] = ensemble.Text,
         ["assignment"] = userAssignment
     };
@@ -318,6 +322,13 @@ internal sealed partial class MainForm : Form
         int generation = ++displayGeneration;
         player.Close(); currentMidi = null; currentXML = null; currentPath = null;
         var document = Current;
+        loadingIdea = true;
+        try
+        {
+            editableIdea = document?["description"]?.GetValue<string>() ?? document?["concept"]?.GetValue<string>() ?? document?["assignment"]?.GetValue<string>() ?? slotDrafts.GetValueOrDefault(slots.SelectedIndex, "");
+            composition.Text = editableIdea; composition.ClearUndo(); assignment.Text = editableIdea;
+        }
+        finally { loadingIdea = false; }
         playback.Text = "00:00 / 00:00";
         if (document == null) { cost.Text = "Kosten: –"; pieceInfo.Text = "Wähle links ein Stück oder komponiere etwas Neues."; pieceTitle.Text = "Raum für deine nächste Idee"; scoreJSON.Clear(); validation.Clear(); notationCurrent.Text = "Aktuelles Stück: –"; if (webReady) web.NavigateToString("<html><body>Kein Stück geladen.</body></html>"); return; }
         pieceTitle.Text = document["title"]?.GetValue<string>() ?? "Komposition"; notationCurrent.Text = "Aktuelles Stück: " + pieceTitle.Text;
@@ -533,7 +544,7 @@ internal sealed partial class MainForm : Form
         loadingSettings = true;
         try
         {
-            keys = secrets.Load();
+            keys = secrets.Load(); LoadModelCatalogs();
             string path = Path.Combine(dataDirectory, "workspace.json");
             if (File.Exists(path))
             {
@@ -546,7 +557,9 @@ internal sealed partial class MainForm : Form
                     foreach (var pair in savedModels) if (models.ContainsKey(pair.Key)) models[pair.Key] = pair.Value?.GetValue<string>() ?? models[pair.Key];
                 activeProvider = state["provider"]?.GetValue<string>() ?? "anthropic";
                 if (!models.ContainsKey(activeProvider)) activeProvider = "anthropic";
+                if (state["slotDrafts"] is JsonObject drafts) foreach (var item in drafts) if (int.TryParse(item.Key, out int slot) && slot is >= 0 and < 10) slotDrafts[slot] = item.Value?.GetValue<string>() ?? "";
                 editableIdea = state["editableIdea"]?.GetValue<string>() ?? ""; loadingIdea = true; composition.Text = editableIdea; loadingIdea = false;
+                if (state["slotDrafts"] == null && !string.IsNullOrEmpty(editableIdea)) { int free = Array.FindIndex(documents, d => d == null); if (free >= 0) slotDrafts[free] = editableIdea; }
                 mainSplitRatio = Math.Clamp(state["mainSplitRatio"]?.GetValue<double>() ?? .5, .15, .85); ArrangeMainSplit();
                 meter.Text = state["meter"]?.GetValue<string>() ?? "";
                 if (state["history"] is JsonArray savedHistory) foreach (var item in savedHistory.OfType<JsonObject>()) pieceHistory.Add(item.DeepClone().AsObject()); RefreshHistory();
@@ -577,7 +590,7 @@ internal sealed partial class MainForm : Form
                 ["slots"] = new JsonArray(documents.Select(d => d?.DeepClone()).ToArray()), ["chat"] = chat.Text,
                 ["diagnostic"] = lastDiagnostic?.DeepClone(), ["provider"] = activeProvider,
                 ["models"] = JsonSerializer.SerializeToNode(models), ["assignment"] = assignment.Text,
-                ["mainSplitRatio"] = mainSplitRatio, ["editableIdea"] = editableIdea, ["meter"] = meter.Text, ["projectName"] = projectName, ["history"] = new JsonArray(pieceHistory.Select(d => d.DeepClone()).ToArray()), ["notation"] = new JsonArray(notationSettings.Select(c => (JsonNode?)JsonValue.Create(c.SelectedIndex)).ToArray()), ["splitBeats"] = splitBeats.Checked,
+                ["slotDrafts"] = JsonSerializer.SerializeToNode(slotDrafts), ["mainSplitRatio"] = mainSplitRatio, ["editableIdea"] = editableIdea, ["meter"] = meter.Text, ["projectName"] = projectName, ["history"] = new JsonArray(pieceHistory.Select(d => d.DeepClone()).ToArray()), ["notation"] = new JsonArray(notationSettings.Select(c => (JsonNode?)JsonValue.Create(c.SelectedIndex)).ToArray()), ["splitBeats"] = splitBeats.Checked,
                 ["measures"] = measures.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text, ["ensemble"] = ensemble.Text };
             AtomicFile.WriteText(Path.Combine(dataDirectory, "workspace.json"), state.ToJsonString());
         }
@@ -601,6 +614,15 @@ internal sealed partial class MainForm : Form
     public async Task<string> RunSelfTestAsync(string output)
     {
         Directory.CreateDirectory(output);
+        await ModelCatalogTests.RunAsync();
+        modelCatalogs["anthropic"] = new ModelSnapshot(DateTimeOffset.UtcNow, Enumerable.Range(0, 235).Select(i => new CatalogModel("future-" + i, "Future " + i, "Test-Katalog")).ToList());
+        SelectModel();
+        if (model.Items.Count != 236) throw new Exception("Vollständiger Modellkatalog fehlt in der Auswahl.");
+        models["anthropic"] = "future-234"; SelectModel();
+        if (SelectedModelId != "future-234") throw new Exception("Dynamisches Modell nicht auswählbar.");
+        AtomicFile.WriteText(CatalogPath, JsonSerializer.Serialize(modelCatalogs)); modelCatalogs.Clear(); LoadModelCatalogs();
+        if (modelCatalogs["anthropic"].Models.Count != 235 || File.ReadAllText(CatalogPath).Contains("catalog-test-key")) throw new Exception("Modellcache beschädigt oder enthält Schlüssel.");
+        modelCatalogs.Clear(); models["anthropic"] = "claude-sonnet-5"; SelectModel();
         const string probe = "ÄÖÜ äöü ß – musikalischer Dialog";
         var version = await core.RunAsync(new JsonObject { ["operation"] = "version", ["title"] = probe });
         if (version["titleEcho"]?.GetValue<string>() != probe) throw new Exception("UTF-8-Prozesskommunikation beschädigt.");
@@ -670,7 +692,18 @@ internal sealed partial class MainForm : Form
         chat.Text = "Du: Ein ruhiges Klavierstück mit einer klaren musikalischen Idee.\n\nKI: Stück fertig: Elegie im Abendlicht\n\nDu: Die Melodie soll beim nächsten Abschnitt etwas mehr Raum bekommen.";
         SetStatus("Bereit · alle Windows-Prüfungen bestanden.");
         composition.Text = "Eine ruhige, gesangliche Melodie mit Raum zum Atmen.\n\nDie Begleitung trägt die Linie und entwickelt sich mit ihr. Ein kurzer Kontrast führt zum ursprünglichen Gedanken zurück.";
-        string unchangedIdea = composition.Text; slots.SelectedIndex = 2; await DisplayCurrentAsync(); if (composition.Text != unchangedIdea) throw new Exception("Stückwahl verändert die Kompositionsidee."); slots.SelectedIndex = 0; await DisplayCurrentAsync();
+        const string firstDescription = "Eigenständige Beschreibung der Elegie";
+        composition.Text = firstDescription;
+        string originalSource = documents[0]!["concept"]!.GetValue<string>();
+        slots.SelectedIndex = 2; await DisplayCurrentAsync();
+        if (composition.Text != documents[2]!["description"]!.GetValue<string>()) throw new Exception("Stückbeschreibung wird nicht geladen.");
+        composition.Text = "Eigene Beschreibung der Fuge";
+        slots.SelectedIndex = 0; await DisplayCurrentAsync();
+        if (composition.Text != firstDescription || documents[0]!["concept"]!.GetValue<string>() != originalSource) throw new Exception("Stückbeschreibung geht verloren oder überschreibt Musikquelle.");
+        SaveLocalState();
+        var savedDescriptions = JsonNode.Parse(File.ReadAllText(Path.Combine(dataDirectory, "workspace.json")))!;
+        if (savedDescriptions["slots"]![0]!["description"]!.GetValue<string>() != firstDescription) throw new Exception("Stückbeschreibung nicht gespeichert.");
+        composition.Text = "Ein ruhiges Klavierstück mit einer klaren musikalischen Idee.";
         var decimalTempo = fixture.DeepClone().AsObject(); decimalTempo["bpm"] = 81.25; documents[9] = CreateDocument(decimalTempo, "Tempo-Rückprüfung"); RefreshSlots(); slots.SelectedIndex = 9; await DisplayCurrentAsync(); if (currentMidi == null || playerBpm != 81) throw new Exception("Dezimaltempo nicht lesbar.");
         slots.SelectedIndex = 0; await DisplayCurrentAsync();
         var midiBefore = currentMidi!.ToArray(); notationSettings[0].SelectedIndex = 1; await NotationChangedAsync(0);
@@ -724,21 +757,27 @@ internal sealed partial class MainForm : Form
             var workspace = mainSplit!.Parent!.Parent as WorkspacePanel ?? throw new Exception("Hauptansicht ohne stabilen Scroll-Container.");
             workspace.AutoScrollPosition = Point.Empty;
             await Task.Delay(20);
-            var initialPosition = provider.RectangleToScreen(provider.ClientRectangle).Location;
+            workspace.AutoScrollPosition = new Point(0, 180);
+            await Task.Delay(20);
             int layoutCount = 0; LayoutEventHandler countLayout = (_, _) => layoutCount++;
             mainSplit.Parent.Layout += countLayout;
             var watch = System.Diagnostics.Stopwatch.StartNew();
             for (int cycle = 0; cycle < 6; cycle++)
             {
-                // The user previously focused a low button, then switched pages.
-                // WinForms must not restore that focus by scrolling the page off the top.
                 compose.Focus(); await Task.Delay(5);
+                chat.Select(chat.TextLength, 0); chat.ScrollToCaret();
+                int expectedChatTop = chat.GetCharIndexFromPosition(new Point(1, 1));
+                var expectedScroll = workspace.AutoScrollPosition;
+                var expectedPosition = provider.RectangleToScreen(provider.ClientRectangle).Location;
+                double expectedSplit = mainSplitRatio;
                 tabs.SelectedIndex = 1; await Task.Delay(5);
                 tabs.SelectedIndex = 2; await Task.Delay(5);
                 tabs.SelectedIndex = 0; await Task.Delay(10);
-                if (workspace.AutoScrollPosition != Point.Empty) throw new Exception($"Tabwechsel scrollt die Hauptansicht weg bei {scale * 100}%: {workspace.AutoScrollPosition}");
+                if (workspace.AutoScrollPosition != expectedScroll) throw new Exception($"Tabzustand verloren bei {scale * 100}%: erwartet {expectedScroll}, erhalten {workspace.AutoScrollPosition}");
+                if (chat.GetCharIndexFromPosition(new Point(1, 1)) != expectedChatTop) throw new Exception("Tabwechsel verliert den Textausschnitt im Chat.");
+                if (mainSplitRatio != expectedSplit) throw new Exception("Tabwechsel verändert die Fensteraufteilung.");
                 if (!provider.Visible || !chat.Visible || !composition.Visible || !compose.Visible || slotCards.Any(c => !c.Visible)) throw new Exception("Element nach Tabwechsel verschwunden.");
-                if (provider.RectangleToScreen(provider.ClientRectangle).Location != initialPosition) throw new Exception("Instabile Parameterposition nach Tabwechsel.");
+                if (provider.RectangleToScreen(provider.ClientRectangle).Location != expectedPosition) throw new Exception("Instabile Parameterposition nach Tabwechsel.");
             }
             watch.Stop(); mainSplit.Parent.Layout -= countLayout;
             await Task.Delay(40);
@@ -814,6 +853,13 @@ internal sealed partial class MainForm : Form
                             throw new Exception("Notenoption horizontal abgeschnitten.");
                     }
                 }
+                if (page == 1)
+                {
+                    var settingsViewport = (ScrollableControl)notationSettings[0].Parent!.Parent!;
+                    var expectedSettingsScroll = settingsViewport.AutoScrollPosition;
+                    tabs.SelectedIndex = 2; await Task.Delay(15); tabs.SelectedIndex = 1; await Task.Delay(40);
+                    if (settingsViewport.AutoScrollPosition != expectedSettingsScroll) throw new Exception("Tabwechsel verliert den Ausschnitt der Notenoptionen.");
+                }
                 foreach (var label in Descendants(this).OfType<Label>())
                 {
                     if (!label.Visible || !label.AutoSize || label.AutoEllipsis) continue;
@@ -823,7 +869,7 @@ internal sealed partial class MainForm : Form
                     if (label.Width < required.Width || label.Height < required.Height)
                         throw new Exception($"Beschriftung abgeschnitten bei {scale * 100}%: {label.Text} / {label.Size} / benötigt {required}");
                 }
-                foreach (var choice in new[] { provider, model, effort }.Where(c => c.Visible))
+                foreach (var choice in new[] { provider, effort }.Where(c => c.Visible))
                 {
                     int required = choice.Items.Cast<object>().Select(item => TextRenderer.MeasureText(item.ToString(), choice.Font).Width).DefaultIfEmpty(0).Max();
                     if (choice.ClientSize.Width < required + SystemInformation.VerticalScrollBarWidth + 4)
@@ -857,11 +903,11 @@ internal sealed partial class MainForm : Form
         }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches after low-button focus keep top parameters and all main controls stable", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "complete provider model catalogs with paginated Anthropic and Gemini responses, future and specialized models, safe failure, deduplication and cache persistence", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "piece-specific editable descriptions load on slot selection and save without altering original music", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches restore previous scroll position, splitter and controls at every DPI", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { pending?.Cancel(); playbackTimer.Dispose(); player.Dispose(); web.Dispose(); slotTips.Dispose(); }
+        if (disposing) { pending?.Cancel(); playbackTimer.Dispose(); player.Dispose(); modelsHttp.Dispose(); web.Dispose(); slotTips.Dispose(); }
         base.Dispose(disposing);
     }
 }

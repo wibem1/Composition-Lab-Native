@@ -1,11 +1,11 @@
-# Alpha 13 · Build 4013 · 15.10.2026 – Player und vollständige Beschriftungen
+# Alpha 14 · Build 4014 · 15.10.2026 – Tabzustand, Stückbeschreibungen und Provider-Modelllisten
 
 Maßgeblich ist die GUI aus `main` (Mac 3.5.3, Commit a2aefd7). Die folgenden älteren Abschnitte beschreiben frühere Windows-Stände.
 
 - Main: gleiche Parameterleiste, MusicChat mit eigener Eingabe, editierbare Kompositionsidee, horizontales Deck aus zehn Karten, Player und Funktionsleiste darunter.
 - Noten: linke Parameterseite aus dem Mac-Code, gleiche Presets/Quantisierungswerte, Stück-Auswahl, Player, Seiten-/Zoomsteuerung, Vorschau und MusicXML-Export einschließlich Dateidrag.
 - Technik: API-Schlüssel/MIDI/CLAB/JSON-Aktionen, Technische Prüfung, JSON und Verlauf. Diagnose im Menü.
-- Karten: auswählen, Datei hineinziehen, Rechtsklick zum Laden/Löschen. Die Idee bleibt beim Stückwechsel erhalten.
+- Karten: auswählen, Datei hineinziehen, Rechtsklick zum Laden/Löschen. Jeder Stückplatz lädt seine eigene Beschreibung.
 - Einzelstücke, Verlauf und Einstellungen werden weiter lokal gespeichert. Projektdateien verwenden das Mac-Format `composition-lab-v6-project` und werden im gemeinsamen Kern geprüft.
 - Presets greifen auf den gemeinsamen MusicXML-Exporter zu; MIDI und Score bleiben dabei unverändert.
 
@@ -55,3 +55,13 @@ Alpha 12: Mehrzeiliges Auftragsfeld mit Zeilenumbruch (Enter: neue Zeile, Strg+E
 Der Player im Noten-Tab bleibt auch in niedrigen Fenstern und in der Großen Ansicht sichtbar. Nur die zusätzliche Stückleiste wird bei niedrigen Fenstern ausgeblendet. Die Notenoptionen verwenden eine mitwachsende einspaltige Tabelle; längere Beschriftungen erhalten die benötigte Höhe. KI-/Modell-Auswahlfelder werden an ihren vollständigen Text angepasst. Der gemeinsame Kern bleibt auf Alpha 12.
 
 Automatische Windows-Prüfungen kontrollieren Player-Bedienelemente in normaler und großer Ansicht sowie die horizontale Erreichbarkeit der Notenoptionen bei vier simulierten Skalierungen und zwei Fenstergrößen.
+
+## Alpha 14
+
+Beim Zurückwechseln in einen Tab wird sein vorheriger Ausschnitt wiederhergestellt, einschließlich der Scrollposition von Hauptansicht, Textfeldern und Notenoptionen. Aufteilung, Notenansicht und Browserausschnitt bleiben erhalten.
+
+Die Stückbuttons laden die Beschreibung des gewählten Stücks. Änderungen werden am jeweiligen Stück gespeichert; die ursprüngliche Musikquelle für Export und Diagnose bleibt erhalten. Auch Projektdateien übernehmen die Beschreibungen. Leere Stückplätze behalten ihre eigenen Entwürfe.
+
+Die Modellkataloge von Google/Gemini, Anthropic und OpenAI werden direkt mit dem jeweiligen API-Schlüssel geladen, einschließlich aller Antwortseiten. Neue Modellnamen benötigen kein App-Update. Automatische Abfrage beim Start, Providerwechsel und Übernehmen eines Schlüssels. Über „Modelle …“ kann die vollständige Liste durchsucht, aktualisiert und ein Modell ausgewählt werden. Die letzte vollständige Liste bleibt offline erhalten; fehlgeschlagene oder unvollständige Abfragen ersetzen sie nicht. Der Zeitpunkt der Abfrage wird angezeigt. Alle vom Provider gemeldeten Modelle bleiben sichtbar, einschließlich spezialisierter Modelle; nicht jedes unterstützt Chat oder Komposition.
+
+Der gemeinsame Kern bleibt auf Alpha 12. Automatische Windows-Tests verwenden simulierte Provider-Antworten ohne echte API-Schlüssel und ohne kostenpflichtige KI-Aufrufe. Der reale Zugriff auf die kontospezifischen Modelle erfolgt mit dem in der App eingetragenen Schlüssel.

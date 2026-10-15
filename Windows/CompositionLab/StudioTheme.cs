@@ -121,22 +121,17 @@ internal sealed class WorkspacePanel : Panel
     protected override void OnScroll(ScrollEventArgs e) { base.OnScroll(e); RefreshNativeChildren(); }
     public WorkspacePanel() { DoubleBuffered = true; ResizeRedraw = true; }
     protected override Point ScrollToControl(Control activeControl) => activating ? DisplayRectangle.Location : base.ScrollToControl(activeControl);
-    public void ActivateAtTop()
-    {
-        activating = true; AutoScrollPosition = Point.Empty;
-        if (!IsHandleCreated) { activating = false; return; }
-        BeginInvoke((Action)(() =>
-        {
-            if (!IsDisposed && Visible) AutoScrollPosition = Point.Empty;
-            activating = false; RefreshNativeChildren();
-        }));
-    }
+    public void BeginActivation() => activating = true;
+    public void FinishActivation() { activating = false; RefreshNativeChildren(); }
+
 }
 
 internal sealed class WorkspaceHost : Panel
 {
     public WorkspaceHost() { DoubleBuffered = true; ResizeRedraw = true; }
     readonly List<Control> pages = [];
+    readonly Dictionary<Control, WorkspaceViewState> viewStates = [];
+    int activationGeneration;
     int selected;
     public event EventHandler? SelectedIndexChanged;
     public int SelectedIndex
@@ -148,11 +143,22 @@ internal sealed class WorkspaceHost : Panel
             SuspendLayout();
             try
             {
+                viewStates[pages[selected]] = WorkspaceViewState.Capture(pages[selected]);
                 selected = value;
-                if (pages[selected] is WorkspacePanel workspace) workspace.ActivateAtTop();
+                int generation = ++activationGeneration;
+                var activatedPage = pages[selected];
+                var guards = WorkspaceViewState.ControlsIn(activatedPage).OfType<WorkspacePanel>().ToArray();
+                foreach (var guard in guards) guard.BeginActivation();
                 for (int i = 0; i < pages.Count; i++) pages[i].Visible = i == selected;
                 pages[selected].BringToFront();
                 SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
+                if (viewStates.TryGetValue(activatedPage, out var state)) state.Restore();
+                if (IsHandleCreated) BeginInvoke((Action)(() =>
+                {
+                    if (!IsDisposed && generation == activationGeneration && activatedPage.Visible && viewStates.TryGetValue(activatedPage, out var saved)) saved.Restore();
+                    foreach (var guard in guards) if (!guard.IsDisposed) guard.FinishActivation();
+                }));
+                else foreach (var guard in guards) guard.FinishActivation();
             }
             finally { ResumeLayout(true); }
             pages[selected].Invalidate(true);
@@ -161,4 +167,32 @@ internal sealed class WorkspaceHost : Panel
     }
     public void AddPage(Control page)
     { page.Dock = DockStyle.Fill; pages.Add(page); Controls.Add(page); page.Visible = pages.Count == 1; }
+}
+
+internal sealed class WorkspaceViewState
+{
+    readonly List<(ScrollableControl Control, Point Position)> scrolls = [];
+    readonly List<(RichTextBox Control, Point Position)> texts = [];
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    static extern IntPtr TextScroll(IntPtr handle, uint message, IntPtr unused, ref Point point);
+    public static IEnumerable<Control> ControlsIn(Control root)
+    {
+        yield return root;
+        foreach (Control child in root.Controls) foreach (var control in ControlsIn(child)) yield return control;
+    }
+    public static WorkspaceViewState Capture(Control root)
+    {
+        var state = new WorkspaceViewState();
+        foreach (var control in ControlsIn(root))
+        {
+            if (control is ScrollableControl scroll && scroll.AutoScroll) state.scrolls.Add((scroll, new Point(-scroll.AutoScrollPosition.X, -scroll.AutoScrollPosition.Y)));
+            if (control is RichTextBox text && text.IsHandleCreated) { var point = Point.Empty; TextScroll(text.Handle, 0x04DD, IntPtr.Zero, ref point); state.texts.Add((text, point)); }
+        }
+        return state;
+    }
+    public void Restore()
+    {
+        foreach (var entry in scrolls) if (!entry.Control.IsDisposed) entry.Control.AutoScrollPosition = entry.Position;
+        foreach (var entry in texts) if (!entry.Control.IsDisposed && entry.Control.IsHandleCreated) { var point = entry.Position; TextScroll(entry.Control.Handle, 0x04DE, IntPtr.Zero, ref point); }
+    }
 }

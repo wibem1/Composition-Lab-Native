@@ -13,18 +13,25 @@ internal sealed partial class MainForm
     string SelectedModelId => (model.SelectedItem as ModelChoice)?.Id ?? model.Text;
     void SelectModel()
     {
-        var values = activeProvider switch { "gemini" => new[] { new ModelChoice("gemini-3.7-flash", "Gemini 3.7 Flash") }, "openai" => new[] { new ModelChoice("gpt-5.6-sol", "GPT-5.6 Sol"), new ModelChoice("gpt-5.6-terra", "GPT-5.6 Terra"), new ModelChoice("gpt-5.6-luna", "GPT-5.6 Luna") }, _ => new[] { new ModelChoice("claude-sonnet-5", "Claude Sonnet 5") } };
-        string selected = models[activeProvider]; model.Items.Clear(); model.Items.AddRange(values);
-        var choice = values.FirstOrDefault(v => v.Id == selected); if (choice == null) { choice = new ModelChoice(selected, selected); model.Items.Add(choice); } model.SelectedItem = choice; FitChoices(model);
+        string selected = models[activeProvider];
+        var values = modelCatalogs.TryGetValue(activeProvider, out var snapshot)
+            ? snapshot.Models.Select(m => new ModelChoice(m.Id, m.Name)).ToList() : new List<ModelChoice>();
+        if (values.All(v => v.Id != selected)) values.Insert(0, new ModelChoice(selected, selected + " (bisherige Auswahl)"));
+        bindingModel = true;
+        try { model.Items.Clear(); model.Items.AddRange(values.ToArray()); model.SelectedItem = values.First(v => v.Id == selected); FitChoices(model); }
+        finally { bindingModel = false; }
+        slotTips.SetToolTip(model, selected + (snapshot == null ? " · Modellliste noch nicht geladen" : $" · {snapshot.Models.Count} Provider-Modelle · {snapshot.LoadedAt.ToLocalTime():g}"));
     }
     void FitChoices(ComboBox control)
     {
         int textWidth = control.Items.Cast<object>().Select(item => TextRenderer.MeasureText(item.ToString(), control.Font).Width).DefaultIfEmpty(0).Max();
-        control.Width = Math.Max(control.Width, textWidth + SystemInformation.VerticalScrollBarWidth + LayoutPixels(12));
-        control.DropDownWidth = Math.Max(control.Width, control.DropDownWidth);
+        int needed = textWidth + SystemInformation.VerticalScrollBarWidth + LayoutPixels(12);
+        control.Width = control == model ? Math.Min(LayoutPixels(260), Math.Max(LayoutPixels(148), needed)) : Math.Max(control.Width, needed);
+        control.DropDownWidth = Math.Min(Math.Max(control.Width, needed), Math.Max(control.Width, Screen.FromControl(this).WorkingArea.Width - LayoutPixels(32)));
     }
     readonly TextBox chatInput = new() { PlaceholderText = "Auftrag eingeben · Strg+Enter zum Senden", Multiline = true, WordWrap = true, AcceptsReturn = true, ScrollBars = ScrollBars.Vertical };
     Action? toggleLargePreview;
+    Button? modelsButton;
     Control? notationTransport;
     bool largePreview;
     readonly TextBox meter = new() { Width = 54, PlaceholderText = "4/4" };
@@ -119,7 +126,14 @@ internal sealed partial class MainForm
         compose.Text = "Mit gewählter KI komponieren"; compose.Click += async (_, _) => await RequestAIAsync(true);
         cancel.Click += (_, _) => pending?.Cancel();
         composition.ReadOnly = false; composition.Font = MacFont(13);
-        composition.TextChanged += (_, _) => { if (!loadingIdea) { editableIdea = composition.Text; assignment.Text = editableIdea; SaveLocalState(); } };
+        composition.TextChanged += (_, _) =>
+        {
+            if (loadingIdea) return;
+            editableIdea = composition.Text; assignment.Text = editableIdea;
+            if (Current != null) Current["description"] = editableIdea;
+            else if (slots.SelectedIndex >= 0) slotDrafts[slots.SelectedIndex] = editableIdea;
+            SaveLocalState();
+        };
         chatInput.KeyDown += async (_, e) => { if (e.KeyCode == Keys.Enter && e.Control) { e.SuppressKeyPress = true; await RequestAIAsync(false); } };
         guiChecks.AddRange([chatInput, compose, provider, model, effort, measures, meter, tempo, musicalKey, ensemble]);
         assignment.Text = "Komponiere ein eigenständiges Klavierstück mit einer tragenden musikalischen Idee.";
@@ -159,7 +173,9 @@ internal sealed partial class MainForm
             FitChoices(choice);
         }
         provider.SelectedIndexChanged += (_, _) => ProviderChanged();
-        row.Controls.Add(MacLabel("KI", 12, true)); row.Controls.Add(provider); row.Controls.Add(model); row.Controls.Add(effort);
+        model.SelectedIndexChanged += (_, _) => { if (!bindingModel && !loadingSettings && model.SelectedItem != null) { models[activeProvider] = SelectedModelId; slotTips.SetToolTip(model, SelectedModelId); SaveLocalState(); } };
+        model.AutoCompleteMode = AutoCompleteMode.SuggestAppend; model.AutoCompleteSource = AutoCompleteSource.ListItems;
+        row.Controls.Add(MacLabel("KI", 12, true)); row.Controls.Add(provider); row.Controls.Add(model); row.Controls.Add(effort); modelsButton = AddButton(row, "Modelle …", ShowModelsAsync);
         var rightParameters = MacRow(true); rightParameters.Dock = DockStyle.None;
         rightParameters.Controls.Add(MacLabel("Takte")); measures.Width = 62; measures.Items.AddRange(new object[] { "2", "4", "8", "16", "24", "32", "48", "64" }); measures.HandleCreated += (_, _) => NativeCue.SendMessage(measures.Handle, 0x1703, new IntPtr(1), "24"); rightParameters.Controls.Add(measures); rightParameters.Controls.Add(meter);
         rightParameters.Controls.Add(MacLabel("Tempo")); tempo.Width = 58; tempo.PlaceholderText = "96"; rightParameters.Controls.Add(tempo);
@@ -334,7 +350,7 @@ internal sealed partial class MainForm
     Control BuildMacNotation()
     {
         var page = Grid(2, 1); page.ColumnStyles.Clear(); page.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 301)); page.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var settings = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = StudioTheme.Canvas };
+        var settings = new WorkspacePanel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = StudioTheme.Canvas };
         var settingsContent = new Panel { Dock = DockStyle.Top, Padding = new Padding(16), BackColor = StudioTheme.Canvas };
         void AddSetting(Control control) { control.Dock = DockStyle.None; settingsContent.Controls.Add(control); }
         settings.Controls.Add(settingsContent);
@@ -530,7 +546,7 @@ internal sealed partial class MainForm
         var project = new JsonObject { ["format"] = "composition-lab-v6-project", ["version"] = 1, ["savedAt"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 978307200, ["name"] = projectName, ["settings"] = settings, ["concept"] = composition.Text, ["slots"] = slotsJSON, ["activeSlot"] = slots.SelectedIndex, ["history"] = new JsonArray(pieceHistory.Select(ToHistory).ToArray()), ["chat"] = chat.Text };
         await core.RunAsync(new JsonObject { ["operation"] = "validate-workspace", ["document"] = project.DeepClone() }); AtomicFile.WriteText(dialog.FileName, project.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
-    JsonObject ToHistory(JsonObject document) => new() { ["id"] = Guid.NewGuid().ToString(), ["time"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 978307200, ["title"] = document["title"]!.DeepClone(), ["provider"] = document["provider"]?.DeepClone() ?? JsonValue.Create(activeProvider), ["model"] = document["model"]?.DeepClone() ?? JsonValue.Create(SelectedModelId), ["concept"] = document["concept"]?.DeepClone() ?? JsonValue.Create(""), ["score"] = document["score"]!.DeepClone(), ["costUSD"] = document["costUSD"]?.DeepClone(), ["inputTokens"] = document["inputTokens"]?.DeepClone(), ["outputTokens"] = document["outputTokens"]?.DeepClone() };
+    JsonObject ToHistory(JsonObject document) => new() { ["id"] = Guid.NewGuid().ToString(), ["time"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 978307200, ["title"] = document["title"]!.DeepClone(), ["provider"] = document["provider"]?.DeepClone() ?? JsonValue.Create(activeProvider), ["model"] = document["model"]?.DeepClone() ?? JsonValue.Create(SelectedModelId), ["concept"] = document["concept"]?.DeepClone() ?? JsonValue.Create(""), ["description"] = document["description"]?.DeepClone(), ["score"] = document["score"]!.DeepClone(), ["costUSD"] = document["costUSD"]?.DeepClone(), ["inputTokens"] = document["inputTokens"]?.DeepClone(), ["outputTokens"] = document["outputTokens"]?.DeepClone() };
     async Task LoadProjectAsync()
     {
         if (busy) return; using var dialog = new OpenFileDialog { Filter = "Composition Lab Arbeitsplatz|*.clabproject" }; if (dialog.ShowDialog(this) != DialogResult.OK) return;
@@ -539,13 +555,13 @@ internal sealed partial class MainForm
     async Task LoadProjectPathAsync(string path)
     {
         var project = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject(); await core.RunAsync(new JsonObject { ["operation"] = "validate-workspace", ["document"] = project.DeepClone() }); if (project["slots"] is not JsonArray slotsJSON) throw new InvalidDataException("Diese Datei enthält keine Stück-Plätze.");
-        var imported = new JsonObject?[10]; for (int i = 0; i < Math.Min(10, slotsJSON.Count); i++) if (slotsJSON[i] is JsonObject item) { imported[i] = CreateDocument(item["score"]!.DeepClone().AsObject(), item["concept"]?.GetValue<string>() ?? ""); foreach (var field in new[] { "title", "provider", "model", "costUSD", "inputTokens", "outputTokens" }) if (item[field] != null) imported[i]![field] = item[field]!.DeepClone(); await core.RunAsync(new JsonObject { ["operation"] = "validate-document", ["document"] = imported[i]!.DeepClone() }); }
+        var imported = new JsonObject?[10]; for (int i = 0; i < Math.Min(10, slotsJSON.Count); i++) if (slotsJSON[i] is JsonObject item) { imported[i] = CreateDocument(item["score"]!.DeepClone().AsObject(), item["concept"]?.GetValue<string>() ?? ""); foreach (var field in new[] { "title", "description", "provider", "model", "costUSD", "inputTokens", "outputTokens" }) if (item[field] != null) imported[i]![field] = item[field]!.DeepClone(); await core.RunAsync(new JsonObject { ["operation"] = "validate-document", ["document"] = imported[i]!.DeepClone() }); }
         if (!testMode && MessageBox.Show(this, "Aktuellen Arbeitsplatz ersetzen?", "Projekt laden", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
         var settings = project["settings"]!.AsObject();
         if (settings["models"] is JsonObject savedModels) foreach (var pair in savedModels) if (models.ContainsKey(pair.Key)) models[pair.Key] = pair.Value!.GetValue<string>();
         measures.Text = settings["measures"]?.GetValue<string>() ?? ""; meter.Text = settings["meter"]?.GetValue<string>() ?? ""; tempo.Text = settings["tempo"]?.GetValue<string>() ?? ""; musicalKey.Text = settings["key"]?.GetValue<string>() ?? ""; ensemble.Text = settings["ensemble"]?.GetValue<string>() ?? ""; assignment.Text = settings["prompt"]?.GetValue<string>() ?? "";
         loadingSettings = true; activeProvider = settings["provider"]?.GetValue<string>() ?? activeProvider; if (!models.ContainsKey(activeProvider)) activeProvider = "anthropic"; provider.SelectedIndex = activeProvider switch { "openai" => 2, "gemini" => 0, _ => 1 }; SelectModel(); apiKey.Text = keys.GetValueOrDefault(activeProvider, ""); remember.Checked = keys.ContainsKey(activeProvider); loadingSettings = false;
-        pieceHistory.Clear(); if (project["history"] is JsonArray history) foreach (var item in history.OfType<JsonObject>()) { var doc = CreateDocument(item["score"]!.DeepClone().AsObject(), item["concept"]?.GetValue<string>() ?? ""); foreach (var field in new[] { "title", "provider", "model", "costUSD", "inputTokens", "outputTokens" }) if (item[field] != null) doc[field] = item[field]!.DeepClone(); pieceHistory.Add(doc); } RefreshHistory();
-        Array.Copy(imported, documents, 10); projectName = project["name"]?.GetValue<string>() ?? "Unbenannt"; chat.Text = project["chat"]?.GetValue<string>() ?? ""; composition.Text = project["concept"]?.GetValue<string>() ?? settings["prompt"]?.GetValue<string>() ?? ""; RefreshSlots(); slots.SelectedIndex = Math.Clamp(project["activeSlot"]?.GetValue<int>() ?? 0, 0, 9); await DisplayCurrentAsync(); SaveLocalState();
+        pieceHistory.Clear(); if (project["history"] is JsonArray history) foreach (var item in history.OfType<JsonObject>()) { var doc = CreateDocument(item["score"]!.DeepClone().AsObject(), item["concept"]?.GetValue<string>() ?? ""); foreach (var field in new[] { "title", "description", "provider", "model", "costUSD", "inputTokens", "outputTokens" }) if (item[field] != null) doc[field] = item[field]!.DeepClone(); pieceHistory.Add(doc); } RefreshHistory();
+        Array.Copy(imported, documents, 10); projectName = project["name"]?.GetValue<string>() ?? "Unbenannt"; chat.Text = project["chat"]?.GetValue<string>() ?? ""; loadingIdea = true; try { composition.Text = project["concept"]?.GetValue<string>() ?? settings["prompt"]?.GetValue<string>() ?? ""; } finally { loadingIdea = false; } RefreshSlots(); slots.SelectedIndex = Math.Clamp(project["activeSlot"]?.GetValue<int>() ?? 0, 0, 9); await DisplayCurrentAsync(); SaveLocalState();
     }
 }
