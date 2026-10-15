@@ -253,7 +253,18 @@ internal sealed partial class MainForm : Form
     }
     async Task<JsonObject> TranslateExistingAsync(string music, JsonObject request, JsonObject source, CancellationToken token)
     {
-        return await CompileCompositionAsync(music, source, token);
+        if (ContainsFinishedMusic(music)) return await CompileCompositionAsync(music, source, token);
+        // Preserve the established translation route for other complete notation
+        // formats. LilyPond itself never goes through another AI request.
+        var dto = request.DeepClone().AsObject(); dto["composition"] = music;
+        dto["priorInputTokens"] = source["inputTokens"]?.DeepClone() ?? JsonValue.Create(0);
+        dto["priorOutputTokens"] = source["outputTokens"]?.DeepClone() ?? JsonValue.Create(0);
+        dto["priorCostUSD"] = source["estimatedCostUSD"]?.DeepClone() ?? JsonValue.Create(0d);
+        SetStatus("Fertige Komposition wird technisch in MIDI übertragen …");
+        var response = await core.RunAsync(new JsonObject { ["operation"] = "translate-existing", ["apiKey"] = apiKey.Text.Trim(), ["request"] = dto }, token);
+        var result = response["result"]!.AsObject(); lastDiagnostic = result.DeepClone().AsObject();
+        lastDiagnostic["sourceDiagnostic"] = source.DeepClone(); lastDiagnostic["interfaceVersion"] = Version; UpdateDiagnostic();
+        return result;
     }
     async Task<JsonObject> AcceptCompositionAsync(JsonObject result, int destination, string userText, string selectedProvider, string selectedModel)
     {
