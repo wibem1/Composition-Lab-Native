@@ -1,90 +1,84 @@
-# Alpha 14 · Build 4016 · 15.10.2026 – Tabzustand, Stückbeschreibungen und Provider-Modelllisten
+# Composition Lab Native · Windows · Alpha 16 · Build 4016 · 15.10.2026
 
-Maßgeblich ist die GUI aus `main` (Mac 3.5.3, Commit a2aefd7). Die folgenden älteren Abschnitte beschreiben frühere Windows-Stände.
+Das gesamte ZIP in einen neuen Ordner entpacken und `Composition Lab 4.0.exe`
+starten. Die Unterordner `Core`, `LilyPond` und `Notices` beibehalten. .NET,
+Swift und LilyPond müssen nicht zusätzlich installiert werden. Voraussetzung:
+Windows 10/11 auf Intel/AMD 64 Bit und Microsoft Edge WebView2 Runtime.
 
-- Main: gleiche Parameterleiste, MusicChat mit eigener Eingabe, editierbare Kompositionsidee, horizontales Deck aus zehn Karten, Player und Funktionsleiste darunter.
-- Noten: linke Parameterseite aus dem Mac-Code, gleiche Presets/Quantisierungswerte, Stück-Auswahl, Player, Seiten-/Zoomsteuerung, Vorschau und MusicXML-Export einschließlich Dateidrag.
-- Technik: API-Schlüssel/MIDI/CLAB/JSON-Aktionen, Technische Prüfung, JSON und Verlauf. Diagnose im Menü.
-- Karten: auswählen, Datei hineinziehen, Rechtsklick zum Laden/Löschen. Jeder Stückplatz lädt seine eigene Beschreibung.
-- Einzelstücke, Verlauf und Einstellungen werden weiter lokal gespeichert. Projektdateien verwenden das Mac-Format `composition-lab-v6-project` und werden im gemeinsamen Kern geprüft.
-- Presets greifen auf den gemeinsamen MusicXML-Exporter zu; MIDI und Score bleiben dabei unverändert.
+## MIDI und Originalnoten
 
-Schrift, Menüleisten und System-Steuerelemente werden von Windows gezeichnet. Eine pixel- oder binäridentische Übernahme von Apple-AppKit ist keine Windows-Funktion. Der Aufbau wurde anhand der real ausgeführten Mac-Oberfläche abgeglichen. Bei kleinen Fenstern sind Deck und Arbeitsbereiche scrollbar.
+Fertiger LilyPond-Code wird mit dem mitgelieferten LilyPond 2.26.0 lokal in
+MIDI und Notenseiten (SVG) umgesetzt. Dafür ist keine zweite KI-Anfrage nötig.
+Auftakt, Takte, Stimmen, Tonhöhen und Artikulation stammen aus dem Original.
+Notenvorschau, Blättern, Zoom und Drucken funktionieren für diese Ausgabe ohne
+Internet. Bereits erzeugte Dateien werden beim erneuten Öffnen wiederverwendet.
+Die Diagnose nennt Compiler, Laufzeit, Seitenzahl, Warnungen und KI-Aufrufzahl.
 
-Die vollständige Mac-MusicChat-Aktionssteuerung ist noch nicht portiert; der bisherige Windows-Chat bleibt bestehen. Verschlüsselte Mac-Backups und Soundfont-/direkte MIDI-Ausgangswahl benötigen weitere Windows-Adapter. Die zugehörigen Menüpunkte melden diese Einschränkung. Hörbarer Klang, Druck und tatsächliche WebView2-Noteninteraktion bleiben praktisch zu prüfen; der CI-Testrechner besitzt keinen MIDI-Synthesizer. Automatische Tests erzeugen keine bezahlten KI-Anfragen.
+Bereits gespeicherte Stücke behalten ihre bisherige Wiedergabe. Die frühere
+KI-Übertragung konnte Tonhöhen anders deuten als der LilyPond-Compiler. Eine
+Originalausgabe erzeugt deshalb eine zusätzliche Fassung in einem freien Slot:
 
-Das gesamte ZIP in einen neuen Ordner entpacken und `Composition Lab 4.0.exe` starten. Bestehende Windows-Stücke und Schlüssel bleiben in ihrer bisherigen Arbeitsablage. Die bisherige Mac-Version auf `main` bleibt unverändert.
+1. Das gewünschte Stück auswählen.
+2. Im Menü **Komposition → LilyPond-Original in freien Slot ausgeben** wählen.
+3. Die bisherige Fassung bleibt daneben erhalten.
 
+Alternativ kann eine Diagnose mit vollständigem LilyPond-Original in einen
+freien Slot geladen werden. Die lokale Ausgabe braucht keinen API-Schlüssel.
+Fehlerhafter LilyPond-Code wird mit einer Meldung abgewiesen; eine zusätzliche
+KI-Übersetzung wird dabei nicht stillschweigend gestartet. Externe Includes und
+beliebiger ausführbarer Scheme-Code werden nicht zugelassen. Für andere
+vollständige Notationsformate bleibt der bisherige KI-Übersetzungsweg verfügbar.
 
-## Start und Arbeitsablage
+MIDI sichern exportiert bei einer direkten Ausgabe die originale MIDI-Datei.
+LilyPond sichern erhält die ursprüngliche Notation. MusicXML ist weiterhin eine
+vereinfachte Austauschansicht aus der internen Partitur; es enthält nicht alle
+Informationen des LilyPond-Originals. MusicXML- und MIDI-Importe verwenden die
+bestehende Verovio-Anzeige; dafür wird Verovio über das Internet geladen. Die
+Darstellungsquantisierung betrifft diesen MusicXML-Weg, nicht Originalnoten.
 
-Windows 10/11, Intel/AMD 64 Bit. Das gesamte ZIP entpacken, dann `Composition Lab 4.0.exe` starten. Den Unterordner `Core` mit seinen DLLs beibehalten. .NET und Swift müssen nicht separat installiert werden. Die Notenanzeige benötigt Microsoft Edge WebView2 Runtime und Internet zum Laden von Verovio.
+## Bedienung und Modellwahl
 
-Einstellungen und Stücke liegen unter `%LOCALAPPDATA%/Klangwerke/Composition Lab 4.0`. API-Schlüssel stehen getrennt, mit Windows-DPAPI verschlüsselt, in `keys.dpapi`. Sie lassen sich nur im selben Windows-Benutzerkonto öffnen und stehen nicht in Exporten oder Diagnosen.
+Main, Noten und Technik folgen dem Aufbau der Mac-Oberfläche. Zehn Stückplätze,
+MusicChat, editierbare Stückbeschreibungen, Player, Verlauf, MIDI-/CLAB-Import
+und Export bleiben verfügbar. Beim Tabwechsel wird der vorige Ausschnitt
+wiederhergestellt. Die Trennlinie zwischen MusicChat und Kompositionsidee lässt
+sich verschieben. Längere Aufträge haben Zeilenumbruch; Strg+Enter sendet sie.
 
-## Korrekturen in Alpha 8
+Unter **Modelle …** lassen sich vollständige Providerlisten durchsuchen,
+aktualisieren und auswählen. Vorhandene Schlüssel werden automatisch benutzt.
+Übernehmen schließt den Schlüsseldialog und lädt die Modelle; Fortschritt und
+Fehler erscheinen im Auswahlfenster. Sitzungsschlüssel bleiben beim Wechsel
+des Providers erhalten. Die letzte vollständige Liste bleibt offline verfügbar.
+Nicht jedes vom Provider gelistete Spezialmodell unterstützt Komposition.
 
-DPI-Skalierung wird erst nach dem vollständigen Aufbau angewendet. Scrollflächen berücksichtigen die Skalierung. Titel und Navigation überdecken sich nicht mehr; Überschriften, Erklärungstexte und Parameterzeile erhalten die tatsächlich benötigte Texthöhe. Die Windows-Prüfung prüft Layout und Schriftmetriken bei simulierten 100, 125, 150 und 200 Prozent, jeweils mit kleiner und großer Fenstergröße. Die Simulation ersetzt keinen praktischen Test auf jedem Bildschirm.
+## Speichern und Diagnose
 
-## Anpassbare Hauptansicht in Alpha 8
+Einstellungen und Stücke liegen unter
+`%LOCALAPPDATA%/Klangwerke/Composition Lab 4.0`. Gespeicherte API-Schlüssel sind
+separat mit Windows-DPAPI verschlüsselt und gehören zum Windows-Benutzerkonto.
+Sie stehen nicht in Projekt-, Stück- oder Diagnosedateien. Ohne Speichern gilt
+ein eingegebener Schlüssel bis zum Beenden der App.
 
-MusicChat und Kompositionsidee teilen sich beim ersten Start die sichtbare Fensterbreite gleichmäßig. Die graue Trennlinie lässt sich mit der Maus verschieben; ihre Position bleibt beim nächsten Start erhalten. Die Parameter- und Aktionsleisten brechen bei Bedarf um. Beide Textbereiche bleiben innerhalb der sichtbaren Fensterbreite; die zehn Karten bleiben separat horizontal scrollbar.
+Stücke lassen sich als CLAB und Arbeitsplätze als CLABPROJECT speichern. Diese
+Dateien enthalten bei direkten Ausgaben auch das Original-MIDI. Für eine
+Fehlermeldung kann unter **Technisches → Diagnosedatei sichern …** eine Diagnose
+mit Auftrag, Modell, Musikquelle, Kosten und technischen Ergebnissen gespeichert
+werden. Automatische Tests verwenden keine echten API-Schlüssel und erzeugen
+keine kostenpflichtigen KI-Anfragen.
 
-## Stabile Tabwechsel in Alpha 9
+Die vollständige Mac-MusicChat-Aktionssteuerung, verschlüsselte Mac-Backups
+und Soundfont-/direkte MIDI-Ausgangswahl sind noch nicht vollständig portiert.
+Hörbarer Klang und Druckerausgabe hängen vom jeweiligen Windows-System ab.
+Der gemeinsame Kern bleibt für das bestehende Dateiformat auf Alpha 12. Die
+Mac-Version auf `main` wird durch diesen Windows-Build nicht verändert.
 
-Beim Aktivieren eines Arbeitsbereichs wird seine Scrollposition auf den Anfang gesetzt. Die native Fokuswiederherstellung darf dabei die oberen Elemente nicht wegscrollen; der Fokus bleibt auf dem gewählten Tab. Größenänderungen und Zeilenhöhen werden zusammen angewendet, unveränderte Größen bleiben unangetastet. Die Aufteilung wird nur nach einer tatsächlichen Bewegung der Trennlinie gespeichert. Gepufferte Container reduzieren Zwischenbilder. Die Windows-Prüfung wechselt die Tabs wiederholt nach Fokus auf einem unteren Button bei allen vier simulierten Skalierungen und zwei Fenstergrößen.
+## Mitgelieferte Programme
 
-## Chat-Kompositionen und kleinere Slots in Alpha 10
+LilyPond 2.26.0 wird unverändert als separates Programm mitgeliefert. Seine
+Lizenzen und die Lizenzen der Abhängigkeiten stehen unter `LilyPond/licenses`.
+Weitere Lizenzhinweise stehen unter `Notices` und in der beiliegenden GPL.
+Unverändertes Originalpaket, zugehörige Quellen und Bauanleitungen:
 
-Fertige LilyPond-Kompositionen aus dem Chat werden einmal technisch in die interne Partitur übertragen, anschließend in einem freien Slot gespeichert, ausgewählt und für MIDI-Abspielen vorbereitet. Eine neue Komposition wird dabei nicht angefordert. Die Diagnose enthält Quelltext, technische Antwort und Gesamtkosten. Bei Fehlern bleibt die fertige Musik erhalten.
-
-Zum Übernehmen einer früheren Chat-Komposition: Komposition → Fertige Komposition übernehmen. Alternativ ihre Diagnose-JSON öffnen/importieren. Diese technische Übertragung benötigt den eingetragenen KI-Schlüssel und verursacht die Kosten einer Übersetzungsanfrage; die ursprüngliche Komposition wird nicht neu erzeugt.
-
-Die Karten sind 104 × 100 statt 116 × 164 logische Pixel groß; die Slot-Leiste ist entsprechend flacher.
-
-## Slot-Leiste und Streicherschlüssel in Alpha 11
-
-Alle zehn Slot-Buttons teilen sich die sichtbare Breite ohne eigene horizontale oder vertikale Scrollfläche. Lange Titel werden gekürzt; der vollständige Titel bleibt als Tooltip verfügbar.
-
-Die Zuordnung der Solo-Streicher im MusicXML-Export ist korrigiert: Violine G2, Viola C3, Cello/Kontrabass F4. Tonhöhen und MIDI bleiben erhalten. Vorhandene Stücke brauchen keine neue KI-Anfrage: neu laden oder unter Noten aktualisieren.
-
-Alpha 12: Mehrzeiliges Auftragsfeld mit Zeilenumbruch (Enter: neue Zeile, Strg+Enter: senden). Noten passen ins Fenster; Große Ansicht blendet Zusatzbereiche aus. Native Neuzeichnung nach Scrollen und Tabwechsel.
-
-## Alpha 13: Player und Beschriftungen
-
-Der Player im Noten-Tab bleibt auch in niedrigen Fenstern und in der Großen Ansicht sichtbar. Nur die zusätzliche Stückleiste wird bei niedrigen Fenstern ausgeblendet. Die Notenoptionen verwenden eine mitwachsende einspaltige Tabelle; längere Beschriftungen erhalten die benötigte Höhe. KI-/Modell-Auswahlfelder werden an ihren vollständigen Text angepasst. Der gemeinsame Kern bleibt auf Alpha 12.
-
-Automatische Windows-Prüfungen kontrollieren Player-Bedienelemente in normaler und großer Ansicht sowie die horizontale Erreichbarkeit der Notenoptionen bei vier simulierten Skalierungen und zwei Fenstergrößen.
-
-## Alpha 14
-
-Beim Zurückwechseln in einen Tab wird sein vorheriger Ausschnitt wiederhergestellt, einschließlich der Scrollposition von Hauptansicht, Textfeldern und Notenoptionen. Aufteilung, Notenansicht und Browserausschnitt bleiben erhalten.
-
-Die Stückbuttons laden die Beschreibung des gewählten Stücks. Änderungen werden am jeweiligen Stück gespeichert; die ursprüngliche Musikquelle für Export und Diagnose bleibt erhalten. Auch Projektdateien übernehmen die Beschreibungen. Leere Stückplätze behalten ihre eigenen Entwürfe.
-
-Die Modellkataloge von Google/Gemini, Anthropic und OpenAI werden direkt mit dem jeweiligen API-Schlüssel geladen, einschließlich aller Antwortseiten. Neue Modellnamen benötigen kein App-Update. Automatische Abfrage beim Start, Providerwechsel und Übernehmen eines Schlüssels. Über „Modelle …“ kann die vollständige Liste durchsucht, aktualisiert und ein Modell ausgewählt werden. Die letzte vollständige Liste bleibt offline erhalten; fehlgeschlagene oder unvollständige Abfragen ersetzen sie nicht. Der Zeitpunkt der Abfrage wird angezeigt. Alle vom Provider gemeldeten Modelle bleiben sichtbar, einschließlich spezialisierter Modelle; nicht jedes unterstützt Chat oder Komposition.
-
-Der gemeinsame Kern bleibt auf Alpha 12. Automatische Windows-Tests verwenden simulierte Provider-Antworten ohne echte API-Schlüssel und ohne kostenpflichtige KI-Aufrufe. Der reale Zugriff auf die kontospezifischen Modelle erfolgt mit dem in der App eingetragenen Schlüssel.
-
-Alpha 15: Modellauswahl öffnet sofort. Vorhandene Schlüssel werden wiederverwendet; Sitzungsschlüssel bleiben beim Providerwechsel verfügbar. Schlüsselübernahme schließt den Dialog und lädt die Liste. Fortschritt und Fehler erscheinen direkt in der Modellauswahl. Gespeicherte Modelle bleiben ohne erneute Schlüsseleingabe auswählbar. Windows-Starttest prüft diesen Dialogablauf einschließlich Suche, Auswahl, Abbrechen und HTTP-Fehler.
-
-
-Alpha 16 · Build 4016 · 15.10.2026: Fertige LilyPond-Kompositionen werden lokal
-mit dem mitgelieferten LilyPond 2.26.0 in Originalnoten (SVG) und MIDI übersetzt.
-Kein zweiter KI-Aufruf und kein Internetzugriff für diese Ausgabe. Auftakte,
-Stimmen, Artikulationen und Takte stammen aus dem Original. Zoom, Blättern und
-Drucken arbeiten auch offline. Wiederholtes Öffnen nutzt den Ausgabe-Cache.
-MusicXML bleibt eine vereinfachte, aus MIDI abgeleitete Austauschansicht.
-
-Bereits gespeicherte Stücke behalten ihre bisherige Wiedergabe. Für eine neue,
-originalgetreue Ausgabe: Stück auswählen, dann Komposition → LilyPond-Original
-in freien Slot ausgeben. Die alte Fassung bleibt daneben erhalten. Eine alte
-Diagnose mit LilyPond-Original kann ebenfalls über einen freien Slot geladen
-werden; dafür wird kein API-Schlüssel gebraucht.
-
-LilyPond wird unverändert als separates Programm mitgeliefert. Seine Lizenzen
-und die Lizenzen seiner Abhängigkeiten stehen unter LilyPond/licenses.
-Unverändertes Originalpaket und zugehörige Quellen / Bauanleitungen:
-https://gitlab.com/lilypond/lilypond/-/releases/v2.26.0
-https://lilypond.org/source.html
-https://gitlab.com/lilypond/lilypond/-/tree/v2.26.0/release/binaries
+- https://gitlab.com/lilypond/lilypond/-/releases/v2.26.0
+- https://lilypond.org/source.html
+- https://gitlab.com/lilypond/lilypond/-/tree/v2.26.0/release/binaries
