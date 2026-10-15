@@ -731,7 +731,7 @@ internal sealed partial class MainForm : Form
         var extracted = ExtractLilyPond("Einleitung\n```lilypond\n" + lily + "\n```\nNachwort");
         if (extracted != lily + "\n") throw new Exception("LilyPond-Code verändert.");
         // Raw music must survive a translation failure and application restart.
-        string broken = "KI: \`\`\`lilypond\n\\version \"2.24.0\"\n\\score { c'4\n\`\`\`";
+        string broken = "KI: ```lilypond\n\\version \"2.24.0\"\n\\score { c'4\n```";
         chat.Text = broken;
         PreservePendingComposition(broken, new JsonObject { ["estimatedCostUSD"] = 0d }, "Testauftrag", "gemini", "test-model");
         var snapshot = JsonNode.Parse(File.ReadAllText(Path.Combine(dataDirectory, "workspace.json")))!.AsObject();
