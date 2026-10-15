@@ -10,12 +10,14 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.14 · Build 4014";
+    const string Version = "4.0.0-alpha.15 · Build 4015";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
     readonly SecretStore secrets;
     Dictionary<string, string> keys = [];
+    readonly Dictionary<string, string> sessionKeys = [];
+    string ProviderKey(string name) => sessionKeys.GetValueOrDefault(name, keys.GetValueOrDefault(name, ""));
     readonly Dictionary<string, string> models = new()
     { ["anthropic"] = "claude-sonnet-5", ["openai"] = "gpt-5.6-sol", ["gemini"] = "gemini-3.7-flash" };
     readonly JsonObject?[] documents = new JsonObject?[10];
@@ -158,17 +160,17 @@ internal sealed partial class MainForm : Form
         if (loadingSettings) return;
         models[activeProvider] = SelectedModelId;
         activeProvider = provider.SelectedIndex switch { 1 => "anthropic", 2 => "openai", _ => "gemini" };
-        apiKey.Text = keys.GetValueOrDefault(activeProvider, ""); remember.Checked = keys.ContainsKey(activeProvider);
+        apiKey.Text = ProviderKey(activeProvider); remember.Checked = keys.ContainsKey(activeProvider);
         SelectModel(); SaveLocalState();
         if (!testMode) _ = RefreshModelsAsync(false);
     }
 
     void StoreKey()
     {
-        if (remember.Checked) keys[activeProvider] = apiKey.Text.Trim();
+        sessionKeys[activeProvider] = apiKey.Text.Trim();
+        if (remember.Checked && apiKey.Text.Trim().Length > 0) keys[activeProvider] = apiKey.Text.Trim();
         else keys.Remove(activeProvider);
         secrets.Save(keys);
-        if (!testMode) _ = RefreshModelsAsync();
         SetStatus(remember.Checked ? "Schlüssel verschlüsselt gespeichert." : "Schlüssel wird nur in dieser Sitzung verwendet.");
     }
 
@@ -577,7 +579,7 @@ internal sealed partial class MainForm : Form
         finally
         {
             provider.SelectedIndex = activeProvider switch { "openai" => 2, "gemini" => 0, _ => 1 };
-            SelectModel(); apiKey.Text = keys.GetValueOrDefault(activeProvider, "");
+            SelectModel(); apiKey.Text = ProviderKey(activeProvider);
             remember.Checked = keys.ContainsKey(activeProvider); loadingSettings = false;
         }
     }
@@ -616,6 +618,7 @@ internal sealed partial class MainForm : Form
     {
         Directory.CreateDirectory(output);
         await ModelCatalogTests.RunAsync();
+        await RunModelDialogTestsAsync(output);
         modelCatalogs["anthropic"] = new ModelSnapshot(DateTimeOffset.UtcNow, Enumerable.Range(0, 235).Select(i => new CatalogModel("future-" + i, "Future " + i, "Test-Katalog")).ToList());
         SelectModel();
         if (model.Items.Count != 236) throw new Exception("Vollständiger Modellkatalog fehlt in der Auswahl.");
@@ -904,7 +907,7 @@ internal sealed partial class MainForm : Form
         }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "complete provider model catalogs with paginated Anthropic and Gemini responses, future and specialized models, safe failure, deduplication and cache persistence", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "piece-specific editable descriptions load on slot selection and save without altering original music", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches restore previous scroll position, splitter and controls at every DPI", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "model picker opens immediately, key acceptance loads models, cached selection without key prompt, session keys survive provider changes, inline HTTP error and cancelled credentials", "complete provider model catalogs with paginated Anthropic and Gemini responses, future and specialized models, safe failure, deduplication and cache persistence", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "piece-specific editable descriptions load on slot selection and save without altering original music", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches restore previous scroll position, splitter and controls at every DPI", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {

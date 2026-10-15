@@ -1,4 +1,4 @@
-# Alpha 14 · Build 4014 · 15.10.2026 – Tabzustand, Stückbeschreibungen und Provider-Modelllisten
+# Alpha 14 · Build 4015 · 15.10.2026 – Tabzustand, Stückbeschreibungen und Provider-Modelllisten
 
 Maßgeblich ist die GUI aus `main` (Mac 3.5.3, Commit a2aefd7). Die folgenden älteren Abschnitte beschreiben frühere Windows-Stände.
 
@@ -65,3 +65,5 @@ Die Stückbuttons laden die Beschreibung des gewählten Stücks. Änderungen wer
 Die Modellkataloge von Google/Gemini, Anthropic und OpenAI werden direkt mit dem jeweiligen API-Schlüssel geladen, einschließlich aller Antwortseiten. Neue Modellnamen benötigen kein App-Update. Automatische Abfrage beim Start, Providerwechsel und Übernehmen eines Schlüssels. Über „Modelle …“ kann die vollständige Liste durchsucht, aktualisiert und ein Modell ausgewählt werden. Die letzte vollständige Liste bleibt offline erhalten; fehlgeschlagene oder unvollständige Abfragen ersetzen sie nicht. Der Zeitpunkt der Abfrage wird angezeigt. Alle vom Provider gemeldeten Modelle bleiben sichtbar, einschließlich spezialisierter Modelle; nicht jedes unterstützt Chat oder Komposition.
 
 Der gemeinsame Kern bleibt auf Alpha 12. Automatische Windows-Tests verwenden simulierte Provider-Antworten ohne echte API-Schlüssel und ohne kostenpflichtige KI-Aufrufe. Der reale Zugriff auf die kontospezifischen Modelle erfolgt mit dem in der App eingetragenen Schlüssel.
+
+Alpha 15: Modellauswahl öffnet sofort. Vorhandene Schlüssel werden wiederverwendet; Sitzungsschlüssel bleiben beim Providerwechsel verfügbar. Schlüsselübernahme schließt den Dialog und lädt die Liste. Fortschritt und Fehler erscheinen direkt in der Modellauswahl. Gespeicherte Modelle bleiben ohne erneute Schlüsseleingabe auswählbar. Windows-Starttest prüft diesen Dialogablauf einschließlich Suche, Auswahl, Abbrechen und HTTP-Fehler.
