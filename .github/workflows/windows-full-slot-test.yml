@@ -1,0 +1,43 @@
+name: Windows full build and self-test
+on:
+  push:
+    branches: [fix/windows-slot-recovery-20261015]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-package:
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Confirm Swift compiler
+        shell: pwsh
+        run: swift --version
+      - name: Build and test shared core
+        shell: pwsh
+        run: |
+          swift build -c release --product composition-lab-core
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          swift test -c release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package Windows app and run GUI self-test
+        shell: pwsh
+        run: ./Windows/Build.ps1
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: composition-lab-windows-test-results
+          path: Windows/TestResults/
+          if-no-files-found: ignore
+      - name: Upload verified Windows package
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: composition-lab-windows-slot-recovery
+          path: Composition-Lab-4.0-alpha.18-Windows-x64.zip
+          if-no-files-found: error
