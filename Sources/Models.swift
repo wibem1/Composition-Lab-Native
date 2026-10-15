@@ -12,6 +12,11 @@ enum Provider: String, CaseIterable, Codable {
     }
 
     var models: [(String, String)] {
+        if let cached = ProviderModelCatalog.cached(for: self), !cached.isEmpty { return cached }
+        return fallbackModels
+    }
+
+    var fallbackModels: [(String, String)] {
         switch self {
         case .gemini:
             return [("gemini-3.7-flash", "Gemini 3.7 Flash")]
@@ -24,6 +29,83 @@ enum Provider: String, CaseIterable, Codable {
                 ("gpt-5.6-luna", "GPT-5.6 Luna")
             ]
         }
+    }
+}
+
+
+private struct CatalogModel: Codable {
+    let id: String
+    let label: String
+}
+
+/// Persisted provider catalog. Existing defaults remain when offline or unauthorized.
+enum ProviderModelCatalog {
+    static func cached(for provider: Provider) -> [(String,String)]? {
+        guard let data = UserDefaults.standard.data(forKey: "CompositionLab.Models.\\(provider.rawValue).v1"),
+              let models = try? JSONDecoder().decode([CatalogModel].self, from: data),
+              !models.isEmpty else { return nil }
+        return models.map { ($0.id, $0.label) }
+    }
+
+    static func refresh(_ provider: Provider, key: String, completion: @escaping (Result<Int, Error>) -> Void) {
+        let token = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else {
+            completion(.failure(NSError(domain: "ModelCatalog", code: 401,
+                userInfo: [NSLocalizedDescriptionKey: "Kein API-Schlüssel hinterlegt."])))
+            return
+        }
+        let urlString: String
+        switch provider {
+        case .gemini: urlString = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000"
+        case .anthropic: urlString = "https://api.anthropic.com/v1/models?limit=100"
+        case .openai: urlString = "https://api.openai.com/v1/models"
+        }
+        guard let url = URL(string: urlString) else { return }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        switch provider {
+        case .gemini: request.setValue(token, forHTTPHeaderField: "x-goog-api-key")
+        case .anthropic:
+            request.setValue(token, forHTTPHeaderField: "x-api-key")
+            request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        case .openai: request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        }
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error { DispatchQueue.main.async { completion(.failure(error)) }; return }
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200...299).contains(status), let data,
+                  let object = (try? JSONSerialization.jsonObject(with: data)) as? [String:Any] else {
+                let e = NSError(domain: "ModelCatalog", code: status,
+                    userInfo: [NSLocalizedDescriptionKey: "Modellabfrage HTTP \\(status)"])
+                DispatchQueue.main.async { completion(.failure(e)) }
+                return
+            }
+            let entries = (object["data"] ?? object["models"]) as? [[String:Any]] ?? []
+            let values: [CatalogModel] = entries.compactMap { item in
+                let raw = (item["id"] ?? item["name"]) as? String ?? ""
+                let id = raw.hasPrefix("models/") ? String(raw.dropFirst(7)) : raw
+                guard !id.isEmpty else { return nil }
+                if provider == .gemini {
+                    let methods = item["supportedGenerationMethods"] as? [String] ?? []
+                    guard methods.contains("generateContent") else { return nil }
+                }
+                if provider == .openai && !(id.hasPrefix("gpt-") || id.hasPrefix("o1") ||
+                    id.hasPrefix("o3") || id.hasPrefix("o4") || id.hasPrefix("chatgpt-")) { return nil }
+                let label = (item["displayName"] ?? item["display_name"]) as? String ?? id
+                return CatalogModel(id: id, label: label)
+            }
+            let unique = Dictionary(values.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+                .values.sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
+            guard !unique.isEmpty, let stored = try? JSONEncoder().encode(unique) else {
+                DispatchQueue.main.async {
+                    completion(.failure(NSError(domain: "ModelCatalog", code: 0,
+                        userInfo: [NSLocalizedDescriptionKey: "Keine passenden Modelle gefunden."])))
+                }
+                return
+            }
+            UserDefaults.standard.set(stored, forKey: "CompositionLab.Models.\\(provider.rawValue).v1")
+            DispatchQueue.main.async { completion(.success(unique.count)) }
+        }.resume()
     }
 }
 
