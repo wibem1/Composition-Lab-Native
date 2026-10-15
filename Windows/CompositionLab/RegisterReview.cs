@@ -103,7 +103,15 @@ internal sealed partial class MainForm
             {
                 review["status"] = "rejected"; original["stage"] = "octave-review-failed"; original["error"] = e.Message;
                 lastDiagnostic = original.DeepClone().AsObject(); UpdateDiagnostic();
-                throw new RegisterRepairException("Oktavprüfung: " + e.Message + " Die bisherige Fassung bleibt erhalten; Original und Befund stehen in der Diagnose.", original);
+                if (forceRegisterReview)
+                    throw new RegisterRepairException("Oktavprüfung: " + e.Message + " Die bisherige Fassung bleibt erhalten; Original und Befund stehen in der Diagnose.", original);
+                // Automatic octave repair is best-effort: a valid LilyPond/MIDI
+                // output must remain usable even when the optional AI repair fails.
+                review["status"] = "warning";
+                review["message"] = "Oktavkorrektur fehlgeschlagen; unverändertes Original ausgegeben: " + e.Message;
+                original["stage"] = "completed-with-register-warning";
+                original["error"] = e.Message;
+                SetStatus("Originalausgabe bleibt erhalten; Oktavlagen müssen geprüft werden.", true);
             }
         }
         if (updateDiagnostic) { lastDiagnostic = original.DeepClone().AsObject(); UpdateDiagnostic(); }
