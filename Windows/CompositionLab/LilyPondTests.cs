@@ -80,6 +80,41 @@ internal sealed partial class MainForm
             if (await web.ExecuteScriptAsync("currentPage===2 && scale===110") != "true") throw new Exception("Seitenauswahl oder Zoom im Originalnotensatz funktioniert nicht.");
             await PreviewCommand("page(-1)");
             using (var capture = File.Create(Path.Combine(output, "LilyPond-Original-Preview.png"))) await web.CoreWebView2.CapturePreviewAsync(Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, capture);
+            // Reproduce the user flow: edit the visible composition, then click
+            // the actual Noten-tab button rather than calling the compiler only.
+            string edited = music.Replace("Auftakt – Originalprüfung", "Bearbeitet – G statt C").Replace("c8\\mf", "g8\\mf").Replace("4 = 104", "4 = 116");
+            var previousPages = currentLilyPond!.Pages.ToArray();
+            composition.Text = edited;
+            var refreshButton = WorkspaceViewState.ControlsIn(this).OfType<Button>().Single(b => b.Text == "Aktualisieren");
+            refreshButton.PerformClick();
+            for (int i = 0; busy && i < 1200; i++) await Task.Delay(50);
+            if (busy || Current!["lilyPondSource"]?.GetValue<string>() != edited || currentLilyPond!.Pages.SequenceEqual(previousPages) || currentMidi!.SequenceEqual(generated.Midi)) throw new Exception("Aktualisieren ignoriert den bearbeiteten LilyPond-Code.");
+            if (Current["concept"]?.GetValue<string>() != music || Current["title"]?.GetValue<string>() != "Bearbeitet – G statt C") throw new Exception("Bearbeitung überschreibt Original oder aktualisiert Titel nicht.");
+            var editedNotes = Score!["tr"]!.AsArray().OfType<JsonObject>().SelectMany(t => t["nt"]!.AsArray()).OfType<JsonArray>();
+            if (!editedNotes.Any(n => n[0]!.GetValue<double>() == 0 && n[2]!.GetValue<double>() == 67)) throw new Exception("Bearbeitete Tonhöhe fehlt im neuen MIDI/Score.");
+            if (!ExtractLilyPond(EditableLilyPondText(Current)).Contains("g8\\mf")) throw new Exception("LilyPond-Export verwendet den alten Quelltext.");
+            if (ToHistory(Current)["lilyPondSource"]?.GetValue<string>() != edited) throw new Exception("Projekt/Verlauf verliert die bearbeitete Quelle.");
+            var validMidi = currentMidi.ToArray(); var validScore = Score.ToJsonString(); var validPages = currentLilyPond.Pages.ToArray();
+            composition.Text = edited.Replace("\\upper", "\\unbekannteStimme");
+            bool invalidRejected = false;
+            try { await RefreshNotationAsync(); } catch (InvalidDataException) { invalidRejected = true; }
+            if (!invalidRejected || !currentMidi.SequenceEqual(validMidi) || Score.ToJsonString() != validScore || !currentLilyPond.Pages.SequenceEqual(validPages) || Current["lilyPondSource"]?.GetValue<string>() != edited || lastDiagnostic?["stage"]?.GetValue<string>() != "failed") throw new Exception("Fehlerhafte Bearbeitung ersetzt die letzte gültige Ausgabe.");
+            await DisplayCurrentAsync();
+            if (!currentMidi!.SequenceEqual(validMidi) || composition.Text == edited || Current!["lilyPondSource"]?.GetValue<string>() != edited) throw new Exception("Neuladen verliert gültige Ausgabe oder fehlerhaften Entwurf.");
+            composition.Text = edited; await RefreshNotationAsync();
+            string expectedImage = "data:image/svg+xml;base64," + Convert.ToBase64String(Encoding.UTF8.GetBytes(currentLilyPond!.Pages[0]));
+            bool editedVisible = false;
+            for (int i = 0; i < 100; i++)
+            {
+                string displayed = JsonSerializer.Deserialize<string>(await web.ExecuteScriptAsync("document.images[0]?.src || ''")) ?? "";
+                if (displayed == expectedImage && await web.ExecuteScriptAsync("document.images[0].complete && document.images[0].naturalWidth>0") == "true") { editedVisible = true; break; }
+                await Task.Delay(50);
+            }
+            if (!editedVisible) throw new Exception("Der Browser zeigt nach Aktualisieren weiterhin alte Noten.");
+            using (var capture = File.Create(Path.Combine(output, "LilyPond-Edited-Preview.png"))) await web.CoreWebView2.CapturePreviewAsync(Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, capture);
+            AtomicFile.WriteText(Path.Combine(output, "Edited-LilyPond.clab"), Current!.ToJsonString());
+            var saved = JsonNode.Parse(File.ReadAllText(Path.Combine(output, "Edited-LilyPond.clab")))!.AsObject();
+            if (AppliedLilyPondText(saved) != edited || saved["sourceMidiData"]?.GetValue<string>() != Convert.ToBase64String(currentMidi!)) throw new Exception("CLAB verliert die erfolgreiche Bearbeitung.");
             AtomicFile.WriteBytes(Path.Combine(output, "LilyPond-Original.mid"), generated.Midi);
             AtomicFile.WriteText(Path.Combine(output, "LilyPond-Messung.json"), new JsonObject { ["compileMilliseconds"] = generated.Milliseconds, ["pageCount"] = generated.Pages.Length, ["cached"] = cached.Cached, ["aiCalls"] = 0 }.ToJsonString());
         }

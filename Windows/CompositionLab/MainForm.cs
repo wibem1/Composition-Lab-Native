@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.16 · Build 4016";
+    const string Version = "4.0.0-alpha.17 · Build 4017";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -346,9 +346,9 @@ internal sealed partial class MainForm : Form
         playerBpm = double.TryParse(document["score"]?["bpm"]?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double bpmValue) ? (int)Math.Round(bpmValue) : 96; tempoOverride = false; foreach (var transport in transports) transport.Tempo.Text = playerBpm.ToString();
         try
         {
-            if ((document["directLilyPond"]?.GetValue<bool>() == true) && ContainsFinishedMusic(document["concept"]?.GetValue<string>() ?? ""))
+            if ((document["directLilyPond"]?.GetValue<bool>() == true) && ContainsFinishedMusic(AppliedLilyPondText(document)))
             {
-                var compiled = await Engraver.CompileAsync(ExtractLilyPond(document["concept"]!.GetValue<string>()));
+                var compiled = await Engraver.CompileAsync(ExtractLilyPond(AppliedLilyPondText(document)));
                 if (generation != displayGeneration) return;
                 currentLilyPond = compiled; currentMidi = compiled.Midi;
             }
@@ -469,7 +469,7 @@ internal sealed partial class MainForm : Form
     async Task ExportLilyPondAsync()
     {
         if (Current == null) throw new InvalidOperationException("Kein Stück geladen.");
-        string source = ExtractLilyPond(Current["concept"]?.GetValue<string>() ?? "");
+        string source = ExtractLilyPond(EditableLilyPondText(Current));
         using var dialog = new SaveFileDialog { Filter = "LilyPond|*.ly", FileName = SafeName(pieceTitle.Text) + ".ly", OverwritePrompt = true };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         await File.WriteAllTextAsync(dialog.FileName, source, new UTF8Encoding(false));
@@ -478,7 +478,7 @@ internal sealed partial class MainForm : Form
     void OpenHacklily()
     {
         if (Current == null) throw new InvalidOperationException("Kein Stück geladen.");
-        string source = ExtractLilyPond(Current["concept"]?.GetValue<string>() ?? "");
+        string source = ExtractLilyPond(EditableLilyPondText(Current));
         // Clipboard handoff avoids browser/shell length limits for complete compositions.
         Clipboard.SetText(source);
         Process.Start(new ProcessStartInfo("https://www.hacklily.org/wasm") { UseShellExecute = true });
@@ -922,7 +922,7 @@ internal sealed partial class MainForm : Form
         }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "bundled LilyPond compiles original pickup score into MIDI and SVG locally, cache and source preserved, page/zoom and workspace roundtrip", "model picker opens immediately, key acceptance loads models, cached selection without key prompt, session keys survive provider changes, inline HTTP error and cancelled credentials", "complete provider model catalogs with paginated Anthropic and Gemini responses, future and specialized models, safe failure, deduplication and cache persistence", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "piece-specific editable descriptions load on slot selection and save without altering original music", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches restore previous scroll position, splitter and controls at every DPI", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "edited LilyPond refresh updates notation, MIDI, export source and persisted score; syntax errors retain last valid output", "bundled LilyPond compiles original pickup score into MIDI and SVG locally, cache and source preserved, page/zoom and workspace roundtrip", "model picker opens immediately, key acceptance loads models, cached selection without key prompt, session keys survive provider changes, inline HTTP error and cancelled credentials", "complete provider model catalogs with paginated Anthropic and Gemini responses, future and specialized models, safe failure, deduplication and cache persistence", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "piece-specific editable descriptions load on slot selection and save without altering original music", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches restore previous scroll position, splitter and controls at every DPI", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {

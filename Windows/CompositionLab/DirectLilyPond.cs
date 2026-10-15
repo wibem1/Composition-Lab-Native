@@ -12,7 +12,50 @@ internal sealed partial class MainForm
     LilyPondOutput? currentLilyPond;
     LilyPondCompiler Engraver => lilyCompiler ??= new(Path.Combine(dataDirectory, "LilyPondCache"));
 
-    async Task<JsonObject> CompileCompositionAsync(string music, JsonObject source, CancellationToken token)
+    static string AppliedLilyPondText(JsonObject document) => document["lilyPondSource"]?.GetValue<string>() ?? document["concept"]?.GetValue<string>() ?? "";
+    string EditableLilyPondText(JsonObject document) => Regex.IsMatch(composition.Text, @"\\(?:version|score)\b|```(?:lilypond|ly)\b", RegexOptions.IgnoreCase) ? composition.Text : AppliedLilyPondText(document);
+
+    async Task ApplyLilyPondEditsAsync()
+    {
+        if (busy || Current == null) return;
+        var document = Current;
+        int generation = displayGeneration;
+        string editorText = composition.Text;
+        string music = EditableLilyPondText(document);
+        try
+        {
+            pending = new CancellationTokenSource(); SetBusy(true);
+            var source = new JsonObject { ["assignment"] = document["assignment"]?.DeepClone(), ["provider"] = document["provider"]?.DeepClone(),
+                ["model"] = document["model"]?.DeepClone(), ["estimatedCostUSD"] = document["costUSD"]?.DeepClone(),
+                ["inputTokens"] = document["inputTokens"]?.DeepClone(), ["outputTokens"] = document["outputTokens"]?.DeepClone() };
+            var result = await CompileCompositionAsync(music, source, pending.Token, updateDiagnostic: false);
+            // A different slot or a new edit must never receive an older result.
+            if (!ReferenceEquals(Current, document) || generation != displayGeneration || composition.Text != editorText)
+            { SetStatus("Der Quelltext oder das Stück wurde inzwischen geändert. Bitte erneut aktualisieren."); return; }
+            document["lilyPondSource"] = music;
+            document["directLilyPond"] = true;
+            document["sourceMidiData"] = result["sourceMidiData"]!.DeepClone();
+            document["score"] = result["score"]!.DeepClone();
+            document["title"] = result["score"]!["ti"]!.DeepClone();
+            result["entryPoint"] = "edited-lilypond";
+            lastDiagnostic = result.DeepClone().AsObject(); UpdateDiagnostic();
+            RememberPiece(document); RefreshSlots(); SaveLocalState();
+            await DisplayCurrentAsync();
+            SetStatus("Bearbeiteter LilyPond-Code übernommen. Notation und MIDI aktualisiert.");
+        }
+        catch (OperationCanceledException) { SetStatus("Aktualisierung abgebrochen. Die letzte gültige Ausgabe bleibt erhalten."); }
+        catch (Exception e)
+        {
+            lastDiagnostic = new JsonObject { ["format"] = "composition-lab-native-diagnostic", ["interfaceVersion"] = Version,
+                ["entryPoint"] = "edited-lilypond", ["stage"] = "failed", ["composition"] = music, ["error"] = e.Message,
+                ["conversionAICalls"] = 0, ["lastValidSource"] = AppliedLilyPondText(document) };
+            UpdateDiagnostic();
+            throw;
+        }
+        finally { pending?.Dispose(); pending = null; SetBusy(false); }
+    }
+
+    async Task<JsonObject> CompileCompositionAsync(string music, JsonObject source, CancellationToken token, bool updateDiagnostic = true)
     {
         SetStatus("LilyPond erzeugt MIDI und Originalnoten lokal …");
         string notation = ExtractLilyPond(music);
@@ -38,7 +81,7 @@ internal sealed partial class MainForm
             ["estimatedCostUSD"] = source["estimatedCostUSD"]?.DeepClone() ?? JsonValue.Create(0d),
             ["sourceDiagnostic"] = source.DeepClone()
         };
-        lastDiagnostic = result.DeepClone().AsObject(); UpdateDiagnostic();
+        if (updateDiagnostic) { lastDiagnostic = result.DeepClone().AsObject(); UpdateDiagnostic(); }
         return result;
     }
 

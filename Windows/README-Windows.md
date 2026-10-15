@@ -1,9 +1,22 @@
-# Composition Lab Native · Windows · Alpha 16 · Build 4016 · 15.10.2026
+# Composition Lab Native · Windows · Alpha 17 · Build 4017 · 15.10.2026
 
 Das gesamte ZIP in einen neuen Ordner entpacken und `Composition Lab 4.0.exe`
 starten. Die Unterordner `Core`, `LilyPond` und `Notices` beibehalten. .NET,
 Swift und LilyPond müssen nicht zusätzlich installiert werden. Voraussetzung:
 Windows 10/11 auf Intel/AMD 64 Bit und Microsoft Edge WebView2 Runtime.
+
+## LilyPond bearbeiten und aktualisieren
+
+Den LilyPond-Code im Textfeld der geladenen Komposition bearbeiten und im
+Noten-Tab **Aktualisieren** drücken. Die App kompiliert den aktuellen Editorinhalt
+und übernimmt Notation, MIDI, Titel und interne Partitur gemeinsam in dasselbe
+Stück. Dafür wird keine KI angefragt. Erfolgreiche Änderungen bleiben beim
+Wechseln der Slots, in CLAB-Dateien und in Projektdateien erhalten. LilyPond-Export
+und Hacklily-Übergabe verwenden den aktuellen Quelltext.
+
+Bei einem Syntaxfehler bleiben die letzte gültige Notation und Wiedergabe
+erhalten. Der fehlerhafte Entwurf bleibt im Editor zur Korrektur stehen; die
+Fehlermeldung erscheint in der Statusleiste und in der Diagnose.
 
 ## MIDI und Originalnoten
 
