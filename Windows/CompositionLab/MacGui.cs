@@ -240,23 +240,43 @@ internal sealed partial class MainForm
         var play = AddButton(row, "▶", PlayAsync); play.AutoSize = false; play.Size = new Size(36, 26);
         var stop = AddButton(row, "■", () => { player.Stop(); return Task.CompletedTask; }); stop.AutoSize = false; stop.Size = new Size(36, 26); row.Controls.Add(transport.Loop); row.Controls.Add(transport.Time); row.Controls.Add(transport.Position);
         row.Controls.Add(MacLabel("Tempo")); row.Controls.Add(transport.Tempo); row.Controls.Add(MacLabel("Lautstärke")); row.Controls.Add(transport.Volume);
-        if (notation)
-        {
-            void FitTransport()
-            {
-                int width = row.ClientSize.Width;
-                if (width <= 0) return;
-                transport.Position.Width = Math.Clamp(width / 4, LayoutPixels(90), LayoutPixels(220));
-                transport.Volume.Width = Math.Clamp(width / 6, LayoutPixels(70), LayoutPixels(130));
-            }
-            row.SizeChanged += (_, _) => FitTransport();
-            row.DpiChangedAfterParent += (_, _) => FitTransport();
-        }
         transport.Loop.CheckedChanged += (_, _) => { loopPlaying = transport.Loop.Checked; foreach (var other in transports) if (other != transport) other.Loop.Checked = loopPlaying; };
         transport.Position.Scroll += (_, _) => { if (player.Loaded && !seekUpdating) { player.Seek(transport.Position.Value / 1000d); UpdateTransport(); } };
         transport.Tempo.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter && int.TryParse(transport.Tempo.Text, out int bpm) && bpm is >= 20 and <= 400) { playerBpm = bpm; tempoOverride = true; if (player.Loaded) player.SetTempo(bpm); foreach (var other in transports) other.Tempo.Text = bpm.ToString(); e.SuppressKeyPress = true; } };
         transport.Volume.Scroll += (_, _) => { playerVolume = transport.Volume.Value; foreach (var other in transports) other.Volume.Value = playerVolume; if (player.Loaded && !player.SetVolume(playerVolume)) SetStatus("Dieser Windows-MIDI-Treiber unterstützt keine Lautstärkeregelung.", true); };
-        return row;
+        if (!notation) return row;
+        // Native playback controls use three explicit rows. A wrapping FlowLayoutPanel
+        // can report only its first row while its last slider is already on row two.
+        var tempoLabel = row.Controls.Cast<Control>().OfType<Label>().First(c => c.Text == "Tempo");
+        var volumeLabel = row.Controls.Cast<Control>().OfType<Label>().First(c => c.Text == "Lautstärke");
+        row.Controls.Clear(); row.Dispose();
+        var fixedPlayer = Grid(1, 3);
+        for (int i = 0; i < 3; i++) fixedPlayer.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        var buttons = Grid(4, 1); buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        buttons.ColumnStyles.Clear(); foreach (int width in new[] { 42, 42, 68 }) buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, width));
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        Control[] first = [play, stop, transport.Loop, transport.Time];
+        for (int i = 0; i < first.Length; i++) { first[i].Dock = DockStyle.Fill; first[i].AutoSize = false; buttons.Controls.Add(first[i], i, 0); }
+        transport.Time.TextAlign = ContentAlignment.MiddleLeft;
+        var levels = Grid(4, 1); levels.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        levels.ColumnStyles.Clear(); foreach (int width in new[] { 60, 64, 94 }) levels.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, width));
+        levels.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        Control[] last = [tempoLabel, transport.Tempo, volumeLabel, transport.Volume];
+        for (int i = 0; i < last.Length; i++) { last[i].Dock = DockStyle.Fill; last[i].AutoSize = false; levels.Controls.Add(last[i], i, 0); }
+        tempoLabel.TextAlign = volumeLabel.TextAlign = ContentAlignment.MiddleLeft;
+        transport.Position.Dock = DockStyle.Fill;
+        fixedPlayer.Controls.Add(buttons, 0, 0); fixedPlayer.Controls.Add(transport.Position, 0, 1); fixedPlayer.Controls.Add(levels, 0, 2);
+        void SizeFixedPlayer()
+        {
+            int height = Math.Max(LayoutPixels(34), first.Concat(last).Append(transport.Position).Max(c => c.Font.Height + c.Margin.Vertical + LayoutPixels(8)));
+            foreach (RowStyle style in fixedPlayer.RowStyles) style.Height = height;
+            fixedPlayer.MinimumSize = new Size(0, 3 * height);
+            int[] buttonWidths = [42, 42, 68], levelWidths = [60, 64, 94];
+            for (int i = 0; i < 3; i++) { buttons.ColumnStyles[i].Width = LayoutPixels(buttonWidths[i]); levels.ColumnStyles[i].Width = LayoutPixels(levelWidths[i]); }
+        }
+        foreach (var control in first.Concat(last).Append(transport.Position)) control.FontChanged += (_, _) => SizeFixedPlayer();
+        fixedPlayer.DpiChangedAfterParent += (_, _) => SizeFixedPlayer();
+        SizeFixedPlayer(); return fixedPlayer;
     }
     async Task PlayAsync()
     {
