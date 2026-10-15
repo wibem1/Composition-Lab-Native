@@ -141,6 +141,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         view = NSView(frame: NSRect(x:0,y:0,width:1260,height:800))
         buildUI()
         restoreSettings()
+        refreshAvailableModels()
         restoreCurrentPlayerState()
         v309RestoreSessionMemory()
         NotificationCenter.default.addObserver(self, selector: #selector(v309ApplicationWillTerminate(_:)), name: NSApplication.willTerminateNotification, object: nil)
@@ -2196,17 +2197,42 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
     private var provider: Provider { Provider.allCases[max(0,providerPop.indexOfSelectedItem)] }
     private var model: String {
-        let list = provider.models
+        let list = selectableModels(for: provider)
         guard !list.isEmpty else { return "" }
         return list[max(0,min(modelPop.indexOfSelectedItem,list.count-1))].0
     }
     private var effort: Effort { Effort.allCases[max(0,effortPop.indexOfSelectedItem)] }
 
-    private func refillModels() {
+    private func selectableModels(for provider: Provider) -> [(String, String)] {
+        var list = provider.models
+        if let stored = settings.models[provider.rawValue], !stored.isEmpty,
+           !list.contains(where: { $0.0 == stored }) {
+            list.insert((stored, stored + " (gespeichert)"), at: 0)
+        }
+        return list
+    }
+
+    private func refreshAvailableModels() {
+        for candidate in Provider.allCases {
+            let key = SessionSecrets.shared.key(for: candidate)
+            guard !key.isEmpty else { continue }
+            ProviderModelCatalog.refresh(candidate, key: key) { [weak self] result in
+                guard let self else { return }
+                if case .success(let count) = result, self.provider == candidate {
+                    let current = self.model
+                    self.refillModels(preferred: current)
+                    self.status("\(count) Modelle für \(candidate.displayName) geladen.", good: true)
+                }
+            }
+        }
+    }
+
+    private func refillModels(preferred: String? = nil) {
+        let list = selectableModels(for: provider)
         modelPop.removeAllItems()
-        modelPop.addItems(withTitles: provider.models.map{$0.1})
-        let stored = settings.models[provider.rawValue]
-        if let stored, let idx = provider.models.firstIndex(where:{$0.0 == stored}) {
+        modelPop.addItems(withTitles: list.map{$0.1})
+        let stored = preferred ?? settings.models[provider.rawValue]
+        if let stored, let idx = list.firstIndex(where:{$0.0 == stored}) {
             modelPop.selectItem(at:idx)
         } else { modelPop.selectItem(at:0) }
         keyLabel.stringValue = "API-Key für \(provider.displayName)"
@@ -2217,6 +2243,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         saveSettingsFromUI()
         refillModels()
         keyField.stringValue = SessionSecrets.shared.key(for: provider)
+        refreshAvailableModels()
     }
 
     private func saveSettingsFromUI() {
@@ -2236,6 +2263,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     @objc private func saveKeyPressed() {
         SessionSecrets.shared.set(keyField.stringValue, for:provider)
         status("API-Key für \(provider.displayName) dauerhaft lokal gespeichert.", good:true)
+        refreshAvailableModels()
     }
 
     @objc private func deleteKeyPressed() {
