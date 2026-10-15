@@ -1,9 +1,31 @@
-# Composition Lab Native · Windows · Alpha 17 · Build 4017 · 15.10.2026
+# Composition Lab Native · Windows · Alpha 18 · Build 4018 · 15.10.2026
 
 Das gesamte ZIP in einen neuen Ordner entpacken und `Composition Lab 4.0.exe`
 starten. Die Unterordner `Core`, `LilyPond` und `Notices` beibehalten. .NET,
 Swift und LilyPond müssen nicht zusätzlich installiert werden. Voraussetzung:
 Windows 10/11 auf Intel/AMD 64 Bit und Microsoft Edge WebView2 Runtime.
+
+## Automatische Oktavprüfung
+
+Neue LilyPond-Kompositionen und **Aktualisieren** prüfen die tatsächlichen
+MIDI-Tonhöhen. Klaviertöne außerhalb A0–C8 sowie anhaltend extreme Höhen nach
+zentralem Beginn in relativer Notation lösen höchstens einen KI-Korrekturversuch
+aus. Unauffällige Stücke benötigen keine weitere Anfrage. Der Korrekturversuch
+nutzt den Provider und das Modell der Komposition; dessen Schlüssel muss
+verfügbar sein. Zusätzliche Tokens und Kosten erscheinen in der Diagnose.
+
+Die Korrektur wird lokal erneut kompiliert und nur übernommen, wenn alle
+Tonklassen, Einsätze, Dauern, Dynamikwerte, Stimmen, Instrumente, Tonart,
+Taktart und das Grundtempo erhalten bleiben und die Prüfung danach besteht.
+Bei einem Fehler bleibt ein vorhandenes Stück unverändert; die neue
+Komposition mit Befund und Korrekturantwort steht in der Diagnose.
+
+Für bereits gespeicherte Stücke: **Komposition → Oktavlagen prüfen und
+korrigieren**. **Oktavlagen automatisch prüfen** ist standardmäßig eingeschaltet
+und für bewusst extreme Kompositionen abschaltbar. Die Prüfung erkennt keine
+beliebigen musikalischen Fehler und beurteilt bisher nur Klavierstimmen.
+Neue Anfragen erhalten zusätzlich einen Hinweis auf absolute Oktavangaben,
+um schleichende Fehler durch durchlaufendes `\relative` zu vermeiden.
 
 ## LilyPond bearbeiten und aktualisieren
 

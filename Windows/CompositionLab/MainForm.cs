@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.17 · Build 4017";
+    const string Version = "4.0.0-alpha.18 · Build 4018";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -200,6 +200,7 @@ internal sealed partial class MainForm : Form
         else if (!string.IsNullOrEmpty(chat.Text)) instruction = "Bisheriger musikalischer Dialog:\n" +
                 (chat.Text.Length > 16000 ? chat.Text[^16000..] : chat.Text) + "\n\nAktuelle Nachricht:\n" + instruction;
         if (useSource.Checked && Score != null) instruction += "\nBewusst gewählte musikalische Vorlage:\n" + Score.ToJsonString();
+        instruction += "\n\nNotationskorrektheit: " + PitchEncodingHint;
         var request = new JsonObject { ["assignment"] = instruction, ["provider"] = activeProvider,
             ["model"] = SelectedModelId, ["effort"] = effort.SelectedIndex switch { 0 => "low", 2 => "high", _ => "medium" } };
         string selectedProvider = activeProvider, selectedModel = SelectedModelId;
@@ -253,7 +254,7 @@ internal sealed partial class MainForm : Form
     }
     async Task<JsonObject> TranslateExistingAsync(string music, JsonObject request, JsonObject source, CancellationToken token)
     {
-        if (ContainsFinishedMusic(music)) return await CompileCompositionAsync(music, source, token);
+        if (ContainsFinishedMusic(music)) return await CompileCheckedCompositionAsync(music, source, token);
         // Preserve the established translation route for other complete notation
         // formats. LilyPond itself never goes through another AI request.
         var dto = request.DeepClone().AsObject(); dto["composition"] = music;
@@ -270,7 +271,7 @@ internal sealed partial class MainForm : Form
     {
         if (destination < 0 || destination >= documents.Length || documents[destination] != null) throw new InvalidOperationException("Der Ziel-Slot ist nicht mehr frei; die fertige Komposition bleibt in der Diagnose erhalten.");
         var document = CreateDocument(result["score"]!.DeepClone().AsObject(), result["composition"]!.GetValue<string>(), userText);
-        foreach (string field in new[] { "directLilyPond", "sourceMidiData" }) if (result[field] != null) document[field] = result[field]!.DeepClone();
+        foreach (string field in new[] { "directLilyPond", "sourceMidiData", "octaveReview", "originalLilyPond" }) if (result[field] != null) document[field] = result[field]!.DeepClone();
         // Validate playback before replacing state; an invalid translation never occupies a slot.
         await core.RunAsync(new JsonObject { ["operation"] = "midi", ["score"] = document["score"]!.DeepClone() });
         document["provider"] = selectedProvider; document["model"] = selectedModel;
@@ -528,7 +529,8 @@ internal sealed partial class MainForm : Form
         {
             if (busy) throw new InvalidOperationException("Bitte die laufende Anfrage abwarten und dann speichern.");
             await ApplyLilyPondEditsAsync();
-            if (!ReferenceEquals(Current, document) || AppliedLilyPondText(document) != requestedSource) throw new InvalidOperationException("Der bearbeitete Quelltext wurde noch nicht übernommen. Bitte erneut aktualisieren und speichern.");
+            bool correctedRequest = document["octaveReview"]?["status"]?.GetValue<string>() == "corrected" && document["originalLilyPond"]?.GetValue<string>() == requestedSource;
+            if (!ReferenceEquals(Current, document) || (AppliedLilyPondText(document) != requestedSource && !correctedRequest)) throw new InvalidOperationException("Der bearbeitete Quelltext wurde noch nicht übernommen. Bitte erneut aktualisieren und speichern.");
         }
         if (extension == "mid" && currentMidi != null) { AtomicFile.WriteBytes(path, currentMidi); return; }
         var result = await core.RunAsync(new JsonObject { ["operation"] = extension == "mid" ? "midi" : "musicxml", ["score"] = document["score"]!.DeepClone(), ["options"] = extension == "mid" ? null : notationOptions?.DeepClone() });
@@ -596,6 +598,7 @@ internal sealed partial class MainForm : Form
                 var state = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
                 if (state["slots"] is JsonArray list)
                     for (int i = 0; i < Math.Min(10, list.Count); i++) documents[i] = list[i]?.DeepClone().AsObject();
+                automaticRegisterReview = state["automaticRegisterReview"]?.GetValue<bool>() ?? true;
                 chat.Text = state["chat"]?.GetValue<string>() ?? "";
                 lastDiagnostic = state["diagnostic"]?.DeepClone().AsObject(); UpdateDiagnostic();
                 if (state["models"] is JsonObject savedModels)
@@ -635,7 +638,7 @@ internal sealed partial class MainForm : Form
                 ["slots"] = new JsonArray(documents.Select(d => d?.DeepClone()).ToArray()), ["chat"] = chat.Text,
                 ["diagnostic"] = lastDiagnostic?.DeepClone(), ["provider"] = activeProvider,
                 ["models"] = JsonSerializer.SerializeToNode(models), ["assignment"] = assignment.Text,
-                ["slotDrafts"] = JsonSerializer.SerializeToNode(slotDrafts), ["mainSplitRatio"] = mainSplitRatio, ["editableIdea"] = editableIdea, ["meter"] = meter.Text, ["projectName"] = projectName, ["history"] = new JsonArray(pieceHistory.Select(d => d.DeepClone()).ToArray()), ["notation"] = new JsonArray(notationSettings.Select(c => (JsonNode?)JsonValue.Create(c.SelectedIndex)).ToArray()), ["splitBeats"] = splitBeats.Checked,
+                ["slotDrafts"] = JsonSerializer.SerializeToNode(slotDrafts), ["mainSplitRatio"] = mainSplitRatio, ["editableIdea"] = editableIdea, ["meter"] = meter.Text, ["projectName"] = projectName, ["history"] = new JsonArray(pieceHistory.Select(d => d.DeepClone()).ToArray()), ["notation"] = new JsonArray(notationSettings.Select(c => (JsonNode?)JsonValue.Create(c.SelectedIndex)).ToArray()), ["automaticRegisterReview"] = automaticRegisterReview, ["splitBeats"] = splitBeats.Checked,
                 ["measures"] = measures.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text, ["ensemble"] = ensemble.Text };
             AtomicFile.WriteText(Path.Combine(dataDirectory, "workspace.json"), state.ToJsonString());
         }
@@ -767,6 +770,7 @@ internal sealed partial class MainForm : Form
         tabs.SelectedIndex = 1; await InitializeNotationAsync();
         if (!webReady) throw new Exception("Native WebView2-Testumgebung fehlt.");
         await RunLilyPondTestsAsync(output);
+        await RunRegisterReviewTestsAsync(output);
         var navigationReady = new TaskCompletionSource<bool>();
         web.CoreWebView2.NavigationCompleted += (_, e) => navigationReady.TrySetResult(e.IsSuccess);
         web.NavigateToString("<!doctype html><html><body style='margin:0'><div style='height:2400px;background:linear-gradient(white,#8ac)'>Native Notenvorschau · Scrolltest</div></body></html>");
@@ -954,7 +958,7 @@ internal sealed partial class MainForm : Form
         }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "edited LilyPond refresh updates notation, MIDI, export source and persisted score; syntax errors retain last valid output", "bundled LilyPond compiles original pickup score into MIDI and SVG locally, cache and source preserved, page/zoom and workspace roundtrip", "model picker opens immediately, key acceptance loads models, cached selection without key prompt, session keys survive provider changes, inline HTTP error and cancelled credentials", "complete provider model catalogs with paginated Anthropic and Gemini responses, future and specialized models, safe failure, deduplication and cache persistence", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily direct source handoff, long source and Unicode roundtrip without clipboard", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "piece-specific editable descriptions load on slot selection and save without altering original music", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches restore previous scroll position, splitter and controls at every DPI", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "automatic register detection, one bounded octave repair, unchanged music validation, costs, rejection and cancellation", "edited LilyPond refresh updates notation, MIDI, export source and persisted score; syntax errors retain last valid output", "bundled LilyPond compiles original pickup score into MIDI and SVG locally, cache and source preserved, page/zoom and workspace roundtrip", "model picker opens immediately, key acceptance loads models, cached selection without key prompt, session keys survive provider changes, inline HTTP error and cancelled credentials", "complete provider model catalogs with paginated Anthropic and Gemini responses, future and specialized models, safe failure, deduplication and cache persistence", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily direct source handoff, long source and Unicode roundtrip without clipboard", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "piece-specific editable descriptions load on slot selection and save without altering original music", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches restore previous scroll position, splitter and controls at every DPI", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {

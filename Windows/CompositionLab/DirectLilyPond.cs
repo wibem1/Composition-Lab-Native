@@ -29,11 +29,15 @@ internal sealed partial class MainForm
             var source = new JsonObject { ["assignment"] = document["assignment"]?.DeepClone(), ["provider"] = document["provider"]?.DeepClone(),
                 ["model"] = document["model"]?.DeepClone(), ["estimatedCostUSD"] = document["costUSD"]?.DeepClone(),
                 ["inputTokens"] = document["inputTokens"]?.DeepClone(), ["outputTokens"] = document["outputTokens"]?.DeepClone() };
-            var result = await CompileCompositionAsync(music, source, pending.Token, updateDiagnostic: false);
+            var result = await CompileCheckedCompositionAsync(music, source, pending.Token, updateDiagnostic: false);
             // A different slot or a new edit must never receive an older result.
             if (!ReferenceEquals(Current, document) || generation != displayGeneration || composition.Text != editorText)
             { SetStatus("Der Quelltext oder das Stück wurde inzwischen geändert. Bitte erneut aktualisieren."); return; }
-            document["lilyPondSource"] = music;
+            document["lilyPondSource"] = result["composition"]!.DeepClone();
+            document["description"] = result["composition"]!.DeepClone();
+            foreach (string field in new[] { "octaveReview", "originalLilyPond" }) if (result[field] != null) document[field] = result[field]!.DeepClone();
+            document["costUSD"] = result["estimatedCostUSD"]?.DeepClone();
+            document["inputTokens"] = result["inputTokens"]?.DeepClone(); document["outputTokens"] = result["outputTokens"]?.DeepClone();
             document["directLilyPond"] = true;
             document["sourceMidiData"] = result["sourceMidiData"]!.DeepClone();
             document["score"] = result["score"]!.DeepClone();
@@ -42,12 +46,13 @@ internal sealed partial class MainForm
             lastDiagnostic = result.DeepClone().AsObject(); UpdateDiagnostic();
             RememberPiece(document); RefreshSlots(); SaveLocalState();
             await DisplayCurrentAsync();
-            SetStatus("Bearbeiteter LilyPond-Code übernommen. Notation und MIDI aktualisiert.");
+            SetStatus(result["octaveReview"]?["status"]?.GetValue<string>() == "corrected" ? "Oktavlagen korrigiert und geprüft. Notation und MIDI aktualisiert." : "Bearbeiteter LilyPond-Code übernommen. Notation und MIDI aktualisiert.");
         }
         catch (OperationCanceledException) { SetStatus("Aktualisierung abgebrochen. Die letzte gültige Ausgabe bleibt erhalten."); }
         catch (Exception e)
         {
-            lastDiagnostic = new JsonObject { ["format"] = "composition-lab-native-diagnostic", ["interfaceVersion"] = Version,
+            if (e is RegisterRepairException failure) lastDiagnostic = failure.Report.DeepClone().AsObject();
+            else lastDiagnostic = new JsonObject { ["format"] = "composition-lab-native-diagnostic", ["interfaceVersion"] = Version,
                 ["entryPoint"] = "edited-lilypond", ["stage"] = "failed", ["composition"] = music, ["error"] = e.Message,
                 ["conversionAICalls"] = 0, ["lastValidSource"] = AppliedLilyPondText(document) };
             UpdateDiagnostic();
@@ -99,7 +104,7 @@ internal sealed partial class MainForm
             pending = new CancellationTokenSource(); SetBusy(true);
             var input = new JsonObject { ["assignment"] = document["assignment"]?.DeepClone(), ["provider"] = document["provider"]?.DeepClone(), ["model"] = document["model"]?.DeepClone(),
                 ["estimatedCostUSD"] = document["costUSD"]?.DeepClone(), ["inputTokens"] = document["inputTokens"]?.DeepClone(), ["outputTokens"] = document["outputTokens"]?.DeepClone() };
-            var result = await CompileCompositionAsync(music, input, pending.Token);
+            var result = await CompileCheckedCompositionAsync(music, input, pending.Token);
             await AcceptCompositionAsync(result, destination, document["assignment"]?.GetValue<string>() ?? "", document["provider"]?.GetValue<string>() ?? activeProvider, document["model"]?.GetValue<string>() ?? SelectedModelId);
             SetStatus("Originalnoten und Original-MIDI in Slot " + (destination + 1) + ". Die bisherige Fassung bleibt erhalten.");
         }
