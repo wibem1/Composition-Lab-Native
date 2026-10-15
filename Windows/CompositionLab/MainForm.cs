@@ -794,8 +794,10 @@ internal sealed partial class MainForm : Form
                     var settingControls = notationSettings[0].Parent!.Controls.Cast<Control>().ToArray();
                     foreach (var setting in settingControls)
                     {
-                        if (setting is ComboBox combo && combo.Height < combo.PreferredHeight)
-                            throw new Exception($"Noten-Auswahlfeld zu flach: {combo.Text}, Höhe {combo.Height}, benötigt {combo.PreferredHeight}, Minimum {combo.MinimumSize}, Bounds {combo.Bounds}, DPI {scale}, Fenster {size}.");
+                        // Native dropdown height may differ from WinForms PreferredHeight
+                        // by its theme border. Check the usable glyph area itself.
+                        if (setting is ComboBox combo && combo.ClientSize.Height < combo.Font.Height + 4)
+                            throw new Exception($"Noten-Auswahltext abgeschnitten: {combo.Text}, Innenhöhe {combo.ClientSize.Height}, Schrift {combo.Font.Height}, DPI {scale}, Fenster {size}.");
                         foreach (var other in settingControls.Where(c => c != setting))
                             if (setting.Bounds.IntersectsWith(other.Bounds)) throw new Exception($"Notenoptionen überlappen: {setting.Text} / {other.Text}.");
                     }

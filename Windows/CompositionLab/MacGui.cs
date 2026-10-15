@@ -366,7 +366,6 @@ internal sealed partial class MainForm
                     if (!control.AutoSize) control.Width = available;
                     if (control is ComboBox sizedCombo)
                     {
-                        sizedCombo.MinimumSize = new Size(0, sizedCombo.PreferredHeight);
                         sizedCombo.Height = sizedCombo.PreferredHeight;
                     }
                     // A native ComboBox enforces PreferredHeight even when the table's
