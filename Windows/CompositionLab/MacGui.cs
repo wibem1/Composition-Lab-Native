@@ -364,6 +364,11 @@ internal sealed partial class MainForm
                     control.MaximumSize = new Size(available, 0);
                     if (control is Label label) { label.AutoSize = true; label.AutoEllipsis = false; }
                     if (!control.AutoSize) control.Width = available;
+                    if (control is ComboBox sizedCombo)
+                    {
+                        sizedCombo.MinimumSize = new Size(0, sizedCombo.PreferredHeight);
+                        sizedCombo.Height = sizedCombo.PreferredHeight;
+                    }
                     // A native ComboBox enforces PreferredHeight even when the table's
                     // AutoSize calculation uses its old DPI height. Reserve the actual
                     // text/control height explicitly so adjacent rows cannot overlap.

@@ -795,7 +795,7 @@ internal sealed partial class MainForm : Form
                     foreach (var setting in settingControls)
                     {
                         if (setting is ComboBox combo && combo.Height < combo.PreferredHeight)
-                            throw new Exception("Noten-Auswahlfeld zu flach.");
+                            throw new Exception($"Noten-Auswahlfeld zu flach: {combo.Text}, Höhe {combo.Height}, benötigt {combo.PreferredHeight}, Minimum {combo.MinimumSize}, Bounds {combo.Bounds}, DPI {scale}, Fenster {size}.");
                         foreach (var other in settingControls.Where(c => c != setting))
                             if (setting.Bounds.IntersectsWith(other.Bounds)) throw new Exception($"Notenoptionen überlappen: {setting.Text} / {other.Text}.");
                     }
