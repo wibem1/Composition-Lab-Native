@@ -324,7 +324,7 @@ internal sealed partial class MainForm
             arranging = true; page.SuspendLayout(); right.SuspendLayout(); preview.SuspendLayout();
             try
             {
-                int sidebar = compact ? 0 : Math.Min(LayoutPixels(280), Math.Max(0, page.ClientSize.Width / 4));
+                int sidebar = compact ? 0 : Math.Min(LayoutPixels(280), Math.Max(0, page.ClientSize.Width * 2 / 5));
                 page.ColumnStyles[0].Width = sidebar;
                 settings.Visible = !compact;
                 deck.Visible = !compact && !shortWindow;
@@ -336,14 +336,22 @@ internal sealed partial class MainForm
                 right.RowStyles[5].Height = compact || shortWindow ? 0 : exports.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
                 preview.RowStyles[0].Height = previewTools.GetPreferredSize(new Size(Math.Max(1, right.ClientSize.Width - right.Padding.Horizontal), 0)).Height;
                 int settingWidth = Math.Max(1, settingsContent.ClientSize.Width - settingsContent.Padding.Horizontal);
+                splitBeats.Height = Math.Max(LayoutPixels(50), TextRenderer.MeasureText(splitBeats.Text, splitBeats.Font,
+                    new Size(Math.Max(1, settingWidth - splitBeats.Margin.Horizontal - LayoutPixels(24)), 0), TextFormatFlags.WordBreak).Height + LayoutPixels(12));
                 foreach (Control control in settingsContent.Controls)
                 {
                     int available = Math.Max(1, settingWidth - control.Margin.Horizontal);
                     control.MaximumSize = new Size(available, 0);
                     if (control is Label label) { label.AutoSize = true; label.AutoEllipsis = false; }
                     if (!control.AutoSize) control.Width = available;
+                    // A native ComboBox enforces PreferredHeight even when the table's
+                    // AutoSize calculation uses its old DPI height. Reserve the actual
+                    // text/control height explicitly so adjacent rows cannot overlap.
+                    int height = control is ComboBox combo ? combo.PreferredHeight : control is Label
+                        ? control.GetPreferredSize(new Size(available, 0)).Height : control.Height;
+                    var style = settingsContent.RowStyles[settingsContent.GetRow(control)];
+                    style.SizeType = SizeType.Absolute; style.Height = height + control.Margin.Vertical;
                 }
-                splitBeats.Height = Math.Max(LayoutPixels(50), TextRenderer.MeasureText(splitBeats.Text, splitBeats.Font, new Size(Math.Max(1, settingWidth - splitBeats.Margin.Horizontal - LayoutPixels(24)), 0), TextFormatFlags.WordBreak).Height + 12);
             }
             finally { preview.ResumeLayout(true); right.ResumeLayout(true); page.ResumeLayout(true); arranging = false; FitFlowRow(previewTools, preview.RowStyles[0]); FitFlowRow(notationPlayer, right.RowStyles[1], transport.Padding.Vertical); if (!compact) FitFlowRow(exports, right.RowStyles[5]); }
         }

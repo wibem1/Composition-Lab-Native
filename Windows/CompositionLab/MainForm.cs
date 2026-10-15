@@ -787,6 +787,14 @@ internal sealed partial class MainForm : Form
                     CheckNotationPlayer();
                     toggleLargePreview?.Invoke(); await Task.Delay(30); CheckNotationPlayer();
                     toggleLargePreview?.Invoke(); await Task.Delay(30); CheckNotationPlayer();
+                    var settingControls = notationSettings[0].Parent!.Controls.Cast<Control>().ToArray();
+                    foreach (var setting in settingControls)
+                    {
+                        if (setting is ComboBox combo && combo.Height < combo.PreferredHeight)
+                            throw new Exception("Noten-Auswahlfeld zu flach.");
+                        foreach (var other in settingControls.Where(c => c != setting))
+                            if (setting.Bounds.IntersectsWith(other.Bounds)) throw new Exception($"Notenoptionen überlappen: {setting.Text} / {other.Text}.");
+                    }
                     foreach (var choice in notationSettings)
                     {
                         if (!choice.Visible || choice.Width < 50) throw new Exception("Notenoption fehlt.");
