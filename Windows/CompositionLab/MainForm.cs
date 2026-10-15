@@ -63,6 +63,7 @@ internal sealed partial class MainForm : Form
     string? currentXML;
     string? currentPath;
     JsonObject? lastDiagnostic;
+    JsonObject? pendingComposition;
     bool busy;
     int displayGeneration;
     bool refreshingSlots;
@@ -218,6 +219,7 @@ internal sealed partial class MainForm : Form
             UpdateDiagnostic();
             if (makeMusic)
             {
+                PreservePendingComposition(result["composition"]!.GetValue<string>(), result, userText, selectedProvider, selectedModel);
                 result = await TranslateExistingAsync(result["composition"]!.GetValue<string>(), request, result, pending.Token);
                 var document = await AcceptCompositionAsync(result, destination, userText, selectedProvider, selectedModel);
                 chat.AppendText("KI: Stück fertig: " + document["title"]?.GetValue<string>() + "\n\n");
@@ -225,10 +227,12 @@ internal sealed partial class MainForm : Form
             else
             {
                 string answer = result["text"]!.GetValue<string>(); chat.AppendText("KI: " + answer + "\n\n"); chatInput.Clear();
+                SaveLocalState(); // Keep the full answer before any translation or slot validation can fail.
                 if (ContainsFinishedMusic(answer))
                 {
                     destination = Array.FindIndex(documents, d => d == null);
                     if (destination < 0) throw new InvalidOperationException("Komposition erhalten, aber alle Slots sind belegt. Einen Slot leeren und unter Komposition → Fertige Komposition übernehmen fortsetzen.");
+                    PreservePendingComposition(answer, result, userText, selectedProvider, selectedModel);
                     var translated = await TranslateExistingAsync(answer, request, result, pending.Token);
                     result = translated;
                     var document = await AcceptCompositionAsync(result, destination, userText, selectedProvider, selectedModel);
@@ -279,11 +283,31 @@ internal sealed partial class MainForm : Form
         document["inputTokens"] = result["inputTokens"]?.DeepClone(); document["outputTokens"] = result["outputTokens"]?.DeepClone();
         documents[destination] = document; RememberPiece(document); RefreshSlots();
         refreshingSlots = true; try { slots.SelectedIndex = destination; } finally { refreshingSlots = false; }
+        pendingComposition = null;
         SaveLocalState(); await DisplayCurrentAsync(); return document;
     }
+    void PreservePendingComposition(string music, JsonObject source, string assignmentText, string selectedProvider, string selectedModel)
+    {
+        pendingComposition = source.DeepClone().AsObject();
+        pendingComposition["composition"] = music;
+        pendingComposition["assignment"] = assignmentText;
+        pendingComposition["provider"] = selectedProvider;
+        pendingComposition["model"] = selectedModel;
+        SaveLocalState(); // Commit the raw LilyPond before potentially failing compilation.
+    }
+
     async Task RecoverDisplayedMusicAsync()
     {
-        var source = lastDiagnostic?.DeepClone().AsObject() ?? throw new InvalidOperationException("Keine fertige Komposition vorhanden.");
+        var source = pendingComposition?.DeepClone().AsObject();
+        if (source == null || !ContainsFinishedMusic(source["composition"]?.GetValue<string>() ?? ""))
+        {
+            // Restore older conversations too: the diagnostic can have been overwritten by a later error.
+            var matches = Regex.Matches(chat.Text, @"```(?:lilypond|ly)?[^\S\r\n]*\r?\n[\s\S]*?```", RegexOptions.IgnoreCase);
+            for (int i = matches.Count - 1; i >= 0; i--)
+                if (ContainsFinishedMusic(matches[i].Value)) { source = new JsonObject { ["composition"] = matches[i].Value, ["assignment"] = "Aus dem Chatverlauf wiederhergestellt", ["estimatedCostUSD"] = 0d }; break; }
+        }
+        source ??= lastDiagnostic?.DeepClone().AsObject();
+        if (source == null) throw new InvalidOperationException("Keine fertige Komposition im Chatverlauf oder der Diagnose vorhanden.");
         int destination = Array.FindIndex(documents, d => d == null);
         if (destination < 0) throw new InvalidOperationException("Bitte zuerst einen Slot freimachen.");
         await TranslateStoredDiagnosticAsync(source, destination);
@@ -294,6 +318,7 @@ internal sealed partial class MainForm : Form
         string music = source["composition"]?.GetValue<string>() ?? source["text"]?.GetValue<string>() ?? "";
         if (!ContainsFinishedMusic(music)) throw new InvalidOperationException("Diese Antwort enthält keine fertige LilyPond-Komposition.");
         string assignmentText = source["assignment"]?.GetValue<string>() ?? "Die vorhandene fertige Komposition unverändert technisch übertragen.";
+        PreservePendingComposition(music, source, assignmentText, source["provider"]?.GetValue<string>() ?? activeProvider, source["model"]?.GetValue<string>() ?? SelectedModelId);
         try
         {
             pending = new CancellationTokenSource(); SetBusy(true);
@@ -600,7 +625,8 @@ internal sealed partial class MainForm : Form
                     for (int i = 0; i < Math.Min(10, list.Count); i++) documents[i] = list[i]?.DeepClone().AsObject();
                 automaticRegisterReview = state["automaticRegisterReview"]?.GetValue<bool>() ?? true;
                 chat.Text = state["chat"]?.GetValue<string>() ?? "";
-                lastDiagnostic = state["diagnostic"]?.DeepClone().AsObject(); UpdateDiagnostic();
+                lastDiagnostic = state["diagnostic"]?.DeepClone().AsObject();
+                pendingComposition = state["pendingComposition"]?.DeepClone().AsObject(); UpdateDiagnostic();
                 if (state["models"] is JsonObject savedModels)
                     foreach (var pair in savedModels) if (models.ContainsKey(pair.Key)) models[pair.Key] = pair.Value?.GetValue<string>() ?? models[pair.Key];
                 activeProvider = state["provider"]?.GetValue<string>() ?? "anthropic";
@@ -636,7 +662,7 @@ internal sealed partial class MainForm : Form
             models[activeProvider] = SelectedModelId;
             var state = new JsonObject { ["format"] = "composition-lab-windows-workspace", ["version"] = 1,
                 ["slots"] = new JsonArray(documents.Select(d => d?.DeepClone()).ToArray()), ["chat"] = chat.Text,
-                ["diagnostic"] = lastDiagnostic?.DeepClone(), ["provider"] = activeProvider,
+                ["diagnostic"] = lastDiagnostic?.DeepClone(), ["pendingComposition"] = pendingComposition?.DeepClone(), ["provider"] = activeProvider,
                 ["models"] = JsonSerializer.SerializeToNode(models), ["assignment"] = assignment.Text,
                 ["slotDrafts"] = JsonSerializer.SerializeToNode(slotDrafts), ["mainSplitRatio"] = mainSplitRatio, ["editableIdea"] = editableIdea, ["meter"] = meter.Text, ["projectName"] = projectName, ["history"] = new JsonArray(pieceHistory.Select(d => d.DeepClone()).ToArray()), ["notation"] = new JsonArray(notationSettings.Select(c => (JsonNode?)JsonValue.Create(c.SelectedIndex)).ToArray()), ["automaticRegisterReview"] = automaticRegisterReview, ["splitBeats"] = splitBeats.Checked,
                 ["measures"] = measures.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text, ["ensemble"] = ensemble.Text };
