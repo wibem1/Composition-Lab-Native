@@ -17,7 +17,7 @@ internal sealed class LilyPondCompiler(string cacheRoot)
     {
         // Accept ordinary notation, not arbitrary embedded Scheme or external files.
         string notation = Regex.Replace(source, "(?s)\\%\\{.*?\\%\\}|%[^\\r\\n]*|\"(?:\\\\.|[^\"\\\\])*\"", " ");
-        notation = Regex.Replace(notation, @"##[tf]\b", " ");
+        notation = Regex.Replace(notation, @"##[tf]\b|#\(set-global-staff-size\s+\d+(?:\.\d+)?\s*\)", " ");
         if (Regex.IsMatch(notation, @"\\(?:include|includeSpecial|applyContext|applyOutput|displayScheme|scheme|load)\b|\$|#(?!#[tf]\b|[-+]?\d+(?:\.\d+)?)"))
             throw new InvalidDataException("Die LilyPond-Datei enthält externe Dateien oder ausführbare Scheme-Ausdrücke. Für die direkte Ausgabe bitte reine Notation verwenden.");
         if (!Regex.IsMatch(notation, @"\\score\s*\{")) throw new InvalidDataException("Kein vollständiger LilyPond-Score vorhanden.");
@@ -38,7 +38,7 @@ internal sealed class LilyPondCompiler(string cacheRoot)
             if (c == '{') depth++; else if (c == '}') depth--;
         }
         if (depth != 0) throw new InvalidDataException("Die LilyPond-Score-Klammer ist nicht geschlossen.");
-        string body = source[score.Index..end];
+        string body = notation;
         string directives = (Regex.IsMatch(body, @"\\layout\s*\{") ? "" : "\n\\layout { }\n") +
                             (Regex.IsMatch(body, @"\\midi\s*\{") ? "" : "\n\\midi { }\n");
         return source.Insert(end - 1, directives);
@@ -87,7 +87,7 @@ internal sealed class LilyPondCompiler(string cacheRoot)
     }
     static LilyPondOutput Read(string path, bool cached, double milliseconds)
     {
-        var midis = Directory.GetFiles(path, "score.*").Where(p => Path.GetExtension(p) is ".midi" or ".mid").ToArray();
+        var midis = Directory.GetFiles(path, "score*.mid*").Where(p => Path.GetExtension(p) is ".midi" or ".mid").ToArray();
         if (midis.Length != 1) throw new InvalidDataException("LilyPond muss genau eine vollständige MIDI-Datei erzeugen. Mehrere Score-Ausgaben werden nicht stillschweigend gekürzt.");
         var midi = File.ReadAllBytes(midis[0]);
         if (midi.Length < 14 || Encoding.ASCII.GetString(midi, 0, 4) != "MThd") throw new InvalidDataException("LilyPond hat keine gültige MIDI-Datei erzeugt.");

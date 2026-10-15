@@ -35,6 +35,12 @@ internal sealed partial class MainForm
         if (!cached.Cached || !cached.Midi.SequenceEqual(generated.Midi) || !cached.Pages.SequenceEqual(generated.Pages)) throw new Exception("LilyPond-Cache verändert Musik oder Seiten.");
         var noMidi = await Engraver.CompileAsync("\\version \"2.24.0\"\n\\score { { c'4 d' e' f' } }");
         if (noMidi.Midi.Length < 14 || noMidi.Pages.Length == 0) throw new Exception("LilyPond ohne expliziten MIDI-Block bleibt stumm.");
+        var separate = await Engraver.CompileAsync("\\version \"2.24.0\"\n\\score { { c'4 d' e' f' } \\layout {} }\n\\score { { c'4 d' e' f' } \\midi {} }");
+        if (separate.Pages.Length != 1 || separate.Midi.Length < 14) throw new Exception("Getrennte Layout- und MIDI-Scores werden nicht unterstützt.");
+        bool multipleRejected = false;
+        try { await Engraver.CompileAsync("\\version \"2.24.0\"\n\\score { { c'4 d' e' f' } \\layout {} \\midi {} }\n\\score { { g'4 a' b' c'' } \\layout {} \\midi {} }"); }
+        catch (InvalidDataException) { multipleRejected = true; }
+        if (!multipleRejected) throw new Exception("Mehrere Scores werden unbemerkt auf eine MIDI-Datei gekürzt.");
         using (var cancelled = new CancellationTokenSource())
         {
             cancelled.Cancel(); bool stopped = false;
@@ -57,7 +63,12 @@ internal sealed partial class MainForm
             await core.RunAsync(new JsonObject { ["operation"] = "validate-document", ["document"] = Current!.DeepClone() });
             if (ToHistory(Current!)["sourceMidiData"]?.GetValue<string>() != result["sourceMidiData"]?.GetValue<string>()) throw new Exception("Projekt und Verlauf verlieren das Original-MIDI.");
             var navigation = new TaskCompletionSource<bool>();
-            void Loaded(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e) => navigation.TrySetResult(e.IsSuccess);
+            void Loaded(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+            {
+                if (e.WebErrorStatus == Microsoft.Web.WebView2.Core.CoreWebView2WebErrorStatus.OperationCanceled) return;
+                if (e.IsSuccess) navigation.TrySetResult(true);
+                else navigation.TrySetException(new Exception("Originalvorschau: " + e.WebErrorStatus));
+            }
             web.CoreWebView2.NavigationCompleted += Loaded;
             try { RenderLilyPond(); if (!await navigation.Task.WaitAsync(TimeSpan.FromSeconds(20))) throw new Exception("Originalvorschau lädt nicht."); }
             finally { web.CoreWebView2.NavigationCompleted -= Loaded; }
