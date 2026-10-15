@@ -1,4 +1,4 @@
-# Alpha 11 · Build 4012 · 14.10.2026 – Korrektur der Windows-Skalierung
+# Alpha 13 · Build 4013 · 15.10.2026 – Player und vollständige Beschriftungen
 
 Maßgeblich ist die GUI aus `main` (Mac 3.5.3, Commit a2aefd7). Die folgenden älteren Abschnitte beschreiben frühere Windows-Stände.
 
@@ -49,3 +49,9 @@ Alle zehn Slot-Buttons teilen sich die sichtbare Breite ohne eigene horizontale 
 Die Zuordnung der Solo-Streicher im MusicXML-Export ist korrigiert: Violine G2, Viola C3, Cello/Kontrabass F4. Tonhöhen und MIDI bleiben erhalten. Vorhandene Stücke brauchen keine neue KI-Anfrage: neu laden oder unter Noten aktualisieren.
 
 Alpha 12: Mehrzeiliges Auftragsfeld mit Zeilenumbruch (Enter: neue Zeile, Strg+Enter: senden). Noten passen ins Fenster; Große Ansicht blendet Zusatzbereiche aus. Native Neuzeichnung nach Scrollen und Tabwechsel.
+
+## Alpha 13: Player und Beschriftungen
+
+Der Player im Noten-Tab bleibt auch in niedrigen Fenstern und in der Großen Ansicht sichtbar. Nur die zusätzliche Stückleiste wird bei niedrigen Fenstern ausgeblendet. Die Notenoptionen verwenden eine mitwachsende einspaltige Tabelle; längere Beschriftungen erhalten die benötigte Höhe. KI-/Modell-Auswahlfelder werden an ihren vollständigen Text angepasst. Der gemeinsame Kern bleibt auf Alpha 12.
+
+Automatische Windows-Prüfungen kontrollieren Player-Bedienelemente in normaler und großer Ansicht sowie die horizontale Erreichbarkeit der Notenoptionen bei vier simulierten Skalierungen und zwei Fenstergrößen.

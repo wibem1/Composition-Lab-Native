@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.12 · Build 4012";
+    const string Version = "4.0.0-alpha.13 · Build 4013";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -690,6 +690,7 @@ internal sealed partial class MainForm : Form
         int normalPreviewHeight = web.Height;
         toggleLargePreview?.Invoke(); await Task.Delay(100);
         if (web.Height <= normalPreviewHeight || web.Width <= 0) throw new Exception("Große Notenansicht vergrößert Vorschau nicht.");
+        if (notationTransport == null || !notationTransport.Visible || notationTransport.Height <= 0) throw new Exception("Player fehlt in großer Notenansicht.");
         toggleLargePreview?.Invoke(); await Task.Delay(100);
         var nativeBounds = web.Bounds;
         for (int cycle = 0; cycle < 12; cycle++)
@@ -769,6 +770,34 @@ internal sealed partial class MainForm : Form
                     if (Math.Abs(saved["mainSplitRatio"]!.GetValue<double>() - savedRatio) > .001) throw new Exception("Trennlinie nicht gespeichert.");
                     mainSplitRatio = .5; ArrangeMainSplit();
                 }
+                if (page == 1)
+                {
+                    void CheckNotationPlayer()
+                    {
+                        if (notationTransport == null || !notationTransport.Visible) throw new Exception($"Player fehlt bei {scale * 100}% / {size}.");
+                        var viewportBounds = tabs.RectangleToScreen(tabs.ClientRectangle);
+                        foreach (var control in Descendants(notationTransport).Where(c => c.Visible && !c.HasChildren))
+                        {
+                            var bounds = control.RectangleToScreen(control.ClientRectangle);
+                            if (control.Width <= 0 || control.Height <= 0 || !viewportBounds.Contains(bounds) ||
+                                !notationTransport.RectangleToScreen(notationTransport.ClientRectangle).Contains(bounds))
+                                throw new Exception($"Player abgeschnitten: {control.Text} bei {scale * 100}% / {size}.");
+                        }
+                    }
+                    CheckNotationPlayer();
+                    toggleLargePreview?.Invoke(); await Task.Delay(30); CheckNotationPlayer();
+                    toggleLargePreview?.Invoke(); await Task.Delay(30); CheckNotationPlayer();
+                    foreach (var choice in notationSettings)
+                    {
+                        if (!choice.Visible || choice.Width < 50) throw new Exception("Notenoption fehlt.");
+                        for (Control? parent = choice.Parent; parent != null; parent = parent.Parent)
+                            if (parent is ScrollableControl scroll && scroll.AutoScroll) scroll.ScrollControlIntoView(choice);
+                        var bounds = choice.RectangleToScreen(choice.ClientRectangle);
+                        var host = choice.Parent!.Parent!;
+                        if (bounds.Left < host.PointToScreen(Point.Empty).X || bounds.Right > host.RectangleToScreen(host.ClientRectangle).Right)
+                            throw new Exception("Notenoption horizontal abgeschnitten.");
+                    }
+                }
                 foreach (var label in Descendants(this).OfType<Label>())
                 {
                     if (!label.Visible || !label.AutoSize || label.AutoEllipsis) continue;
@@ -777,6 +806,12 @@ internal sealed partial class MainForm : Form
                     var required = label.GetPreferredSize(new Size(label.Width, 0));
                     if (label.Width < required.Width || label.Height < required.Height)
                         throw new Exception($"Beschriftung abgeschnitten bei {scale * 100}%: {label.Text} / {label.Size} / benötigt {required}");
+                }
+                foreach (var choice in new[] { provider, model, effort }.Where(c => c.Visible))
+                {
+                    int required = choice.Items.Cast<object>().Select(item => TextRenderer.MeasureText(item.ToString(), choice.Font).Width).DefaultIfEmpty(0).Max();
+                    if (choice.ClientSize.Width < required + SystemInformation.VerticalScrollBarWidth + 4)
+                        throw new Exception($"Auswahltext abgeschnitten: {choice.Text} bei {scale * 100}%.");
                 }
                 foreach (var inputControl in new Control[] { provider, model, effort, measures, meter, tempo, musicalKey, ensemble })
                     if (inputControl.Visible && inputControl.Height < inputControl.Font.Height + inputControl.Padding.Vertical + 4)
@@ -806,7 +841,7 @@ internal sealed partial class MainForm : Form
         }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches after low-button focus keep top parameters and all main controls stable", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily clipboard handoff", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "editable idea retained on piece changes", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches after low-button focus keep top parameters and all main controls stable", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {
