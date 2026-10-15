@@ -246,8 +246,24 @@ internal sealed partial class MainForm : Form
         }
         catch (OperationCanceledException) { SetStatus("Anfrage lokal abgebrochen."); }
         catch (CoreRequestException e)
-        { lastDiagnostic = e.Diagnostic; UpdateDiagnostic(); SetStatus(e.Message, true); SaveLocalState(); }
-        catch (Exception e) { SetStatus(e.Message, true); SaveLocalState(); }
+        {
+            var failure = e.Diagnostic.DeepClone().AsObject();
+            if (pendingComposition != null) failure["sourceDiagnostic"] = pendingComposition.DeepClone();
+            failure["stage"] = "post-chat-processing-failed";
+            failure["processingError"] = e.Message;
+            lastDiagnostic = failure; UpdateDiagnostic();
+            SetStatus("KI-Antwort gespeichert, Ausgabe fehlgeschlagen: " + e.Message, true);
+            SaveLocalState();
+        }
+        catch (Exception e)
+        {
+            lastDiagnostic ??= new JsonObject();
+            if (pendingComposition != null) lastDiagnostic["sourceDiagnostic"] = pendingComposition.DeepClone();
+            lastDiagnostic["stage"] = "post-chat-processing-failed";
+            lastDiagnostic["processingError"] = e.ToString();
+            UpdateDiagnostic(); SaveLocalState();
+            SetStatus("KI-Antwort gespeichert, Ausgabe fehlgeschlagen: " + e.Message, true);
+        }
         finally { pending?.Dispose(); pending = null; SetBusy(false); }
     }
 
@@ -418,6 +434,28 @@ internal sealed partial class MainForm : Form
     }
     void SelectFreeSlot()
     { int free = Array.FindIndex(documents, d => d == null); if (free < 0) SetStatus("Alle Slots belegt.", true); else slots.SelectedIndex = free; }
+
+    async Task ImportDiagnosticAsync()
+    {
+        if (busy) { SetStatus("Bitte zuerst die laufende Anfrage abwarten.", true); return; }
+        int free = Array.FindIndex(documents, d => d == null);
+        if (free < 0) { SetStatus("Alle zehn Slots belegt. Bitte einen Slot freimachen.", true); return; }
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Composition-Lab-Diagnose importieren",
+            Filter = "Diagnosedateien (*.json)|*.json|Alle Dateien (*.*)|*.*",
+            FilterIndex = 1,
+            CheckFileExists = true
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        try { await ImportPathAsync(dialog.FileName, free); }
+        catch (Exception e)
+        {
+            SetStatus("Diagnose nicht übernommen: " + e.Message, true);
+            MessageBox.Show(this, "Die Diagnosedatei wurde nicht übernommen. Bestehende Stücke bleiben erhalten.\n\n" +
+                e.Message, "Diagnoseimport", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
 
     async Task OpenAsync(int? destination = null)
     {
