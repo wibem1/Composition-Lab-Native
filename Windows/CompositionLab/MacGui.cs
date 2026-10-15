@@ -253,7 +253,7 @@ internal sealed partial class MainForm
         var fixedPlayer = Grid(1, 3);
         for (int i = 0; i < 3; i++) fixedPlayer.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         var buttons = Grid(4, 1); buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        buttons.ColumnStyles.Clear(); foreach (int width in new[] { 42, 42, 68 }) buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, width));
+        buttons.ColumnStyles.Clear(); foreach (int width in new[] { 36, 36, 64 }) buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, width));
         buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         Control[] first = [play, stop, transport.Loop, transport.Time];
         for (int i = 0; i < first.Length; i++) { first[i].Dock = DockStyle.Fill; first[i].AutoSize = false; buttons.Controls.Add(first[i], i, 0); }
@@ -276,7 +276,7 @@ internal sealed partial class MainForm
                 bool wide = fixedPlayer.ClientSize.Width >= LayoutPixels(410);
                 int height = Math.Max(LayoutPixels(34), first.Concat(last).Append(transport.Position).Max(c => c.Font.Height + c.Margin.Vertical + LayoutPixels(8)));
                 buttons.ColumnCount = wide ? 6 : 4;
-                buttons.ColumnStyles.Clear(); foreach (int width in new[] { 42, 42, 68 }) buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, LayoutPixels(width)));
+                buttons.ColumnStyles.Clear(); foreach (int width in new[] { 36, 36, 64 }) buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, LayoutPixels(width)));
                 buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
                 if (wide)
                 {
