@@ -55,7 +55,7 @@ internal sealed partial class MainForm
     {
         public readonly Label Time = new() { AutoSize = true, Text = "0:00 / 0:00", Padding = new Padding(0, 6, 0, 0) };
         public readonly TrackBar Position = new() { AutoSize = false, Width = 260, Height = 26, Maximum = 1000, TickStyle = TickStyle.None };
-        public readonly CheckBox Loop = new() { Text = "↻ Loop", Appearance = Appearance.Button, AutoSize = false, Width = 62, Height = 26 };
+        public readonly CheckBox Loop = new() { Text = "↻", TextAlign = ContentAlignment.MiddleCenter, Appearance = Appearance.Button, AutoSize = false, Width = 62, Height = 26 };
         public readonly TextBox Tempo = new() { Width = 50 };
         public readonly TrackBar Volume = new() { AutoSize = false, Width = 130, Height = 26, Maximum = 100, Value = 90, TickStyle = TickStyle.None };
     }
@@ -105,6 +105,7 @@ internal sealed partial class MainForm
             navigation.Location = new Point(left, Math.Max(0, (header.ClientSize.Height - navigation.Height) / 2));
             project.Bounds = new Rectangle(LayoutPixels(16), 0, Math.Max(0, left - LayoutPixels(32)), header.ClientSize.Height);
             project.TextAlign = ContentAlignment.MiddleLeft;
+            project.Visible = project.Width >= LayoutPixels(240);
         }
         header.Layout += (_, _) => ArrangeHeader();
         // Keep navigation fixed; long application titles ellipsize without scrolling the header.
@@ -237,6 +238,7 @@ internal sealed partial class MainForm
     Control BuildTransport(bool notation)
     {
         var transport = new Transport(); transports.Add(transport); var row = MacRow(true);
+        slotTips.SetToolTip(transport.Loop, "Wiederholung ein-/ausschalten (Loop)");
         var play = AddButton(row, "▶", PlayAsync); play.AutoSize = false; play.Size = new Size(36, 26);
         var stop = AddButton(row, "■", () => { player.Stop(); return Task.CompletedTask; }); stop.AutoSize = false; stop.Size = new Size(36, 26); row.Controls.Add(transport.Loop); row.Controls.Add(transport.Time); row.Controls.Add(transport.Position);
         row.Controls.Add(MacLabel("Tempo")); row.Controls.Add(transport.Tempo); row.Controls.Add(MacLabel("Lautstärke")); row.Controls.Add(transport.Volume);
