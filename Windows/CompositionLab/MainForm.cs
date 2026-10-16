@@ -65,7 +65,7 @@ internal sealed partial class MainForm : Form
     JsonObject? lastDiagnostic;
     JsonObject? pendingComposition;
     bool busy;
-    int displayGeneration;
+    readonly WorkspaceRevisionGate workspaceRevisions = new();
     bool refreshingSlots;
     JsonObject? Current => slots.SelectedIndex >= 0 ? documents[slots.SelectedIndex] : null;
     JsonObject? Score => Current?["score"]?.AsObject();
