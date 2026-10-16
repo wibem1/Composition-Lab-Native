@@ -129,7 +129,7 @@ internal sealed partial class MainForm
         composition.TextChanged += (_, _) =>
         {
             if (loadingIdea) return;
-            editableIdea = composition.Text; assignment.Text = editableIdea;
+            editableIdea = composition.Text; // Editing LilyPond must not replace the creative assignment.
             if (Current != null) Current["description"] = editableIdea;
             else if (slots.SelectedIndex >= 0) slotDrafts[slots.SelectedIndex] = editableIdea;
             SaveLocalState();
