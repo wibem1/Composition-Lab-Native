@@ -84,3 +84,30 @@ Keine Modultrennung nur zur Kosmetik: `partial MainForm` in mehreren Dateien ist
 - Mac- und Windows-Oberflächen verwenden unterschiedliche Plattformadapter; Parität ist nicht allein durch gemeinsamen Kern bewiesen.
 
 **Pflegepflicht:** Bei jeder relevanten Codeänderung Modulzeile, Vertrag, offenen Punkt, Test und Entwicklungsprotokoll aktualisieren. Keine Freigabe allein aufgrund einer Dokumentationsänderung.
+
+
+## Verbindlicher Änderungsprozess (Beschluss vom 16.10.2026)
+
+**Gilt nach der grundlegenden Architekturstabilisierung für jede funktionale Codeänderung.** Die folgenden Schritte sind ein Freigabegate, keine unverbindliche Checkliste:
+
+1. **Modulzuordnung:** Bestehendes zuständiges Modul bestimmen oder neues Modul samt Verantwortung und Vertragsgrenzen entwerfen.
+2. **Wirkungsanalyse:** Gesamten betroffenen Datenfluss, Aufrufer und Aufgerufene, Slot-/Dokumentrevisionen, Persistenz, UI-Zustand, Parallelität und Fehlerwege erfassen. Schnittstellenänderungen explizit kennzeichnen.
+3. **Vorab-Simulation:** Mit Fixtures, Mocks, Zustandsmodellen und möglichst ausführbaren Vertrags-/Szenariotests Normal-, Grenz-, Abbruch-, Parallelitäts- und Fehlersituationen durchspielen. Rein gedankliche Simulationen sind als solche zu kennzeichnen; sie ersetzen keine Tests.
+4. **Konflikte vor Implementierung klären:** Gefundene Risiken konkret beheben oder den Entwurf ändern. Erkennbare offene Probleme werden nicht stillschweigend in eine Freigabe übernommen.
+5. **Gezielt implementieren:** Nur erforderliche Module ändern; zusätzliche Abhängigkeiten dokumentieren und insbesondere zyklische Abhängigkeiten vermeiden.
+6. **Verifizieren:** Unit-, Schnittstellen-, Integrations-, Regressionstests sowie relevante Plattform-/GUI-Prüfungen ausführen. Testnachweise und verbleibende Einschränkungen festhalten.
+7. **Dokumentieren:** Modulverzeichnis, Ein- und Ausgabeparameter, Datenfluss- und Abhängigkeitsübersicht, Entscheidungsbegründung sowie Entwicklungsprotokoll auf den neuen Stand bringen.
+8. **Versionieren und freigeben:** Erst nach erfolgreichen Prüfungen eine eindeutig neue Version erstellen, Diagnose/Buildnachweis archivieren und freigeben. Keine als erfolgreich dargestellten ungetesteten Pakete.
+
+### Änderungsschein / Pflichtfelder je Codeänderung
+
+- **Anlass, gewünschtes Verhalten und Nicht-Ziele**
+- **Verantwortliches Modul** (oder neues Modul mit Begründung)
+- **Betroffene Module und Abhängigkeitsgraph**; Input-/Output-Verträge vor/nach der Änderung
+- **Datenfluss vom Benutzerereignis bis zum Resultat**; Persistenz und Seiteneffekte
+- **Simulationsszenarien** einschließlich Fehler- und Parallelfällen; erwartete Ergebnisse
+- **Befunde der Vorprüfung und Lösung**
+- **Implementierte Commits, Testfälle, CI-Lauf / Ergebnis**
+- **Dokumentationsänderung, neue Version, Freigabestatus**
+
+**Grundsatz:** Erst Architektur und Datenfluss verstehen, dann simulieren und Probleme klären, danach implementieren, testen, dokumentieren und veröffentlichen. Der musikalische Bestand bleibt durch Referenzstücke und Format-Fixtures geschützt.
