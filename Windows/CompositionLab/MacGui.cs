@@ -514,7 +514,7 @@ internal sealed partial class MainForm
     }
     void RefreshHistory() { historyList.Items.Clear(); foreach (var document in pieceHistory) historyList.Items.Add(document["title"]?.GetValue<string>() ?? "Stück"); }
     void RememberPiece(JsonObject document) { pieceHistory.Insert(0, document.DeepClone().AsObject()); if (pieceHistory.Count > 100) pieceHistory.RemoveAt(100); RefreshHistory(); }
-    async Task LoadHistoryAsync() { if (busy || historyList.SelectedIndex < 0) return; int index = Array.FindIndex(documents, d => d == null); if (index < 0) throw new InvalidOperationException("Alle Stück-Plätze belegt."); documents[index] = pieceHistory[historyList.SelectedIndex].DeepClone().AsObject(); RefreshSlots(); slots.SelectedIndex = index; await DisplayCurrentAsync(); SaveLocalState(); }
+    async Task LoadHistoryAsync() { if (busy || historyList.SelectedIndex < 0) return; int index = documents.FirstFreeIndex(); if (index < 0) throw new InvalidOperationException("Alle Stück-Plätze belegt."); documents[index] = pieceHistory[historyList.SelectedIndex].DeepClone().AsObject(); RefreshSlots(); slots.SelectedIndex = index; await DisplayCurrentAsync(); SaveLocalState(); }
     Task ShowKeys()
     {
         ShowKeyDialog(this);
