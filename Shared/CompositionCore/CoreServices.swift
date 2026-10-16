@@ -117,7 +117,7 @@ public enum CoreServices {
             let dto = try JSONDecoder().decode(RequestDTO.self, from: requestJSON)
             guard !dto.assignment.isEmpty, !apiKey.isEmpty else { throw APIError.emptyResponse }
             APIClient.shared.call(provider: dto.provider, model: dto.model, key: apiKey,
-                effort: dto.effort, purpose: compositionOnly ? "composition" : "music-chat", system: ComposerPrompts.system, user: compositionOnly ? ComposerPrompts.compositionPrompt(dto.assignment) : dto.assignment,
+                effort: dto.effort, purpose: compositionOnly ? "composition" : "music-chat", system: ComposerPrompts.system, user: dto.assignment,
                 wantJSON: false) { result in
                 completion(result.flatMap { response in Result {
                     var diagnostic: [String: Any] = ["text": response.text, "provider": dto.provider.rawValue, "model": dto.model, "assignment": dto.assignment, "reasoning": dto.effort.rawValue, "stage": "chat-completed",
@@ -126,7 +126,7 @@ public enum CoreServices {
                             inputTokens: response.inputTokens, outputTokens: response.outputTokens)]
                     if compositionOnly {
                         diagnostic["composition"] = response.text
-                        diagnostic["compositionPrompt"] = ComposerPrompts.compositionPrompt(dto.assignment)
+                        diagnostic["compositionPrompt"] = dto.assignment
                         diagnostic["engineBuild"] = ComposerPrompts.engineBuild
                         diagnostic["engineVersion"] = ComposerPrompts.referenceVersion
                         diagnostic["stage"] = "composition-completed"
