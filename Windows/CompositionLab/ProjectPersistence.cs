@@ -11,8 +11,7 @@ internal sealed partial class MainForm
     {
         using var dialog = new SaveFileDialog { Filter = "Composition Lab Arbeitsplatz|*.clabproject", FileName = SafeName(projectName) + ".clabproject", OverwritePrompt = true }; if (dialog.ShowDialog(this) != DialogResult.OK) return;
         var settings = new JsonObject { ["provider"] = activeProvider, ["models"] = JsonSerializer.SerializeToNode(models), ["efforts"] = new JsonObject(), ["measures"] = measures.Text, ["meter"] = meter.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text, ["ensemble"] = ensemble.Text, ["prompt"] = assignment.Text, ["zoomPercent"] = 100 };
-        var slotsJSON = new JsonArray(documents.Select(d => d == null ? null : ToHistory(d)).ToArray());
-        var project = new JsonObject { ["format"] = "composition-lab-v6-project", ["version"] = 1, ["savedAt"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 978307200, ["name"] = projectName, ["settings"] = settings, ["concept"] = composition.Text, ["slots"] = slotsJSON, ["activeSlot"] = slots.SelectedIndex, ["history"] = new JsonArray(pieceHistory.Select(ToHistory).ToArray()), ["chat"] = chat.Text };
+        var project = ProjectWorkspaceCodec.Encode(projectName, settings, composition.Text, documents, slots.SelectedIndex, pieceHistory, chat.Text, activeProvider, SelectedModelId);
         await core.RunAsync(new JsonObject { ["operation"] = "validate-workspace", ["document"] = project.DeepClone() }); AtomicFile.WriteText(dialog.FileName, project.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
     JsonObject ToHistory(JsonObject document) => ProjectPieceCodec.ToHistory(document, activeProvider, SelectedModelId);
