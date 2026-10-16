@@ -20,7 +20,7 @@ internal sealed partial class MainForm : Form
     string ProviderKey(string name) => sessionKeys.GetValueOrDefault(name, keys.GetValueOrDefault(name, ""));
     readonly Dictionary<string, string> models = new()
     { ["anthropic"] = "claude-sonnet-5", ["openai"] = "gpt-5.6-sol", ["gemini"] = "gemini-3.7-flash" };
-    readonly JsonObject?[] documents = new JsonObject?[10];
+    readonly SlotDocumentStore documents = new(10);
     readonly Dictionary<int, string> slotDrafts = [];
     readonly ListBox slots = new() { Dock = DockStyle.Fill, IntegralHeight = false };
     readonly ComboBox provider = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 155 };
@@ -263,7 +263,7 @@ internal sealed partial class MainForm : Form
                 if (!models.ContainsKey(activeProvider)) activeProvider = "anthropic";
                 if (state["slotDrafts"] is JsonObject drafts) foreach (var item in drafts) if (int.TryParse(item.Key, out int slot) && slot is >= 0 and < 10) slotDrafts[slot] = item.Value?.GetValue<string>() ?? "";
                 editableIdea = state["editableIdea"]?.GetValue<string>() ?? ""; loadingIdea = true; composition.Text = editableIdea; loadingIdea = false;
-                if (state["slotDrafts"] == null && !string.IsNullOrEmpty(editableIdea)) { int free = Array.FindIndex(documents, d => d == null); if (free >= 0) slotDrafts[free] = editableIdea; }
+                if (state["slotDrafts"] == null && !string.IsNullOrEmpty(editableIdea)) { int free = documents.FirstFreeIndex(); if (free >= 0) slotDrafts[free] = editableIdea; }
                 mainSplitRatio = Math.Clamp(state["mainSplitRatio"]?.GetValue<double>() ?? .5, .15, .85); ArrangeMainSplit();
                 meter.Text = state["meter"]?.GetValue<string>() ?? "";
                 if (state["history"] is JsonArray savedHistory) foreach (var item in savedHistory.OfType<JsonObject>()) pieceHistory.Add(item.DeepClone().AsObject()); RefreshHistory();
@@ -416,7 +416,7 @@ internal sealed partial class MainForm : Form
         catch (Exception e) { playbackInfo = "Runner ohne nutzbaren MIDI-Synthesizer: " + e.Message; }
         const string finishedMusic = "Meine fertige Komposition\n```lilypond\n\\version \"2.24.0\"\n\\score { { c'4 d'4 } }\n```";
         if (!ContainsFinishedMusic(finishedMusic) || ContainsFinishedMusic("Wie schreibt man eine Melodie?")) throw new Exception("Chat-Komposition nicht eindeutig erkannt.");
-        int freeDestination = Array.FindIndex(documents, d => d == null);
+        int freeDestination = documents.FirstFreeIndex();
         var occupiedBefore = documents[0]!.ToJsonString();
         var translatedResult = new JsonObject { ["score"] = fixture.DeepClone(), ["composition"] = finishedMusic,
             ["estimatedCostUSD"] = .1, ["inputTokens"] = 140, ["outputTokens"] = 3850 };
