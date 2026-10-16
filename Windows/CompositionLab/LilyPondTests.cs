@@ -13,6 +13,7 @@ internal sealed partial class MainForm
         WorkspaceRevisionGate.SelfTest();
         ProjectPieceCodec.SelfTest();
         ProjectWorkspaceCodec.SelfTest();
+        SlotDocumentStore.SelfTest();
         var previewDocument = ScorePreviewDocument.Build(new[] { "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>" });
         if (!previewDocument.Contains("Auswahl im Editor öffnen", StringComparison.Ordinal) ||
             !previewDocument.Contains("pointerdown", StringComparison.Ordinal) ||
@@ -91,7 +92,7 @@ internal sealed partial class MainForm
         var notes = result["score"]!["tr"]!.AsArray().OfType<JsonObject>().SelectMany(t => t["nt"]!.AsArray()).OfType<JsonArray>().ToArray();
         if (!notes.Any(n => n[0]!.GetValue<double>() == 0 && n[2]!.GetValue<double>() == 60) || !notes.Any(n => n[0]!.GetValue<double>() == .5 && n[2]!.GetValue<double>() == 65)) throw new Exception("Achtelauftakt oder erste volle Taktposition falsch.");
         int originalTab = tabs.SelectedIndex;
-        int selected = slots.SelectedIndex, free = Array.FindIndex(documents, d => d == null);
+        int selected = slots.SelectedIndex, free = documents.FirstFreeIndex();
         var old = documents[free];
         var savedHistory = pieceHistory.Select(d => d.DeepClone().AsObject()).ToArray();
         try
