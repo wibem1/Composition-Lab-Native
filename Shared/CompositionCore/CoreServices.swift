@@ -120,7 +120,7 @@ public enum CoreServices {
                 effort: dto.effort, purpose: compositionOnly ? "composition" : "music-chat", system: ComposerPrompts.system, user: dto.assignment,
                 wantJSON: false) { result in
                 completion(result.flatMap { response in Result {
-                    var diagnostic: [String: Any] = ["text": response.text, "provider": dto.provider.rawValue, "model": dto.model, "assignment": dto.assignment, "reasoning": dto.effort.rawValue, "stage": "chat-completed",
+                    var diagnostic: [String: Any] = ["text": response.text, "provider": dto.provider.rawValue, "model": dto.model, "assignment": dto.assignment, "sentUserPrompt": dto.assignment, "sentSystemPrompt": ComposerPrompts.system, "automaticTranslation": false, "reasoning": dto.effort.rawValue, "stage": "chat-completed",
                         "inputTokens": response.inputTokens, "outputTokens": response.outputTokens,
                         "estimatedCostUSD": APICost.estimate(provider: dto.provider, model: dto.model,
                             inputTokens: response.inputTokens, outputTokens: response.outputTokens)]
