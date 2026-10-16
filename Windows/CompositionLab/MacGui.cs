@@ -494,9 +494,9 @@ internal sealed partial class MainForm
     {
         if (Score == null) return;
         if (currentLilyPond != null || ContainsFinishedMusic(composition.Text)) { await ApplyLilyPondEditsAsync(); return; }
-        int generation = displayGeneration;
+        int generation = workspaceRevisions.Current;
         var result = await core.RunAsync(new JsonObject { ["operation"] = "musicxml", ["score"] = Score.DeepClone(), ["options"] = notationOptions?.DeepClone() });
-        if (generation != displayGeneration) return; currentXML = Encoding.UTF8.GetString(Convert.FromBase64String(result["data"]!.GetValue<string>())); if (webReady) RenderNotation();
+        if (!workspaceRevisions.IsCurrent(generation)) return; currentXML = Encoding.UTF8.GetString(Convert.FromBase64String(result["data"]!.GetValue<string>())); if (webReady) RenderNotation();
     }
     Control BuildMacTechnology()
     {
