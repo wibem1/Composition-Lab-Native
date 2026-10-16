@@ -18,7 +18,7 @@ internal sealed partial class MainForm
         }
         if (source == null || !ContainsFinishedMusic(source["composition"]?.GetValue<string>() ?? "")) source = lastDiagnostic?.DeepClone().AsObject();
         if (source == null) throw new InvalidOperationException("Keine fertige Komposition im Chatverlauf oder der Diagnose vorhanden.");
-        int destination = Array.FindIndex(documents, d => d == null);
+        int destination = documents.FirstFreeIndex();
         if (destination < 0) throw new InvalidOperationException("Bitte zuerst einen Slot freimachen.");
         await TranslateStoredDiagnosticAsync(source, destination);
     }
@@ -64,7 +64,7 @@ internal sealed partial class MainForm
     async Task ImportDiagnosticAsync()
     {
         if (busy) { SetStatus("Bitte zuerst die laufende Anfrage abwarten.", true); return; }
-        int free = Array.FindIndex(documents, d => d == null);
+        int free = documents.FirstFreeIndex();
         if (free < 0) { SetStatus("Alle zehn Slots belegt. Bitte einen Slot freimachen.", true); return; }
         using var dialog = new OpenFileDialog
         {
