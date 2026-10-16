@@ -108,3 +108,7 @@ CompositionLab bleibt die Referenz für das gemeinsame `.clab`-Projektdokument. 
 Keine neue Funktion, solange eine Änderung nicht gegen den gemeinsamen Core-Vertrag geprüft wurde. Der Referenzbranch `reference-v5.0.11` bleibt unverändert.
 
 Die systemweiten Regeln stehen in `wibem1/Composer-Lab` unter `SYSTEM-ARCHITECTURE.md`, `CORE-CONTRACT.md` und `DEVELOPMENT-RULES.md`.
+
+## Entwicklungsdokumentation und Modulverträge
+
+Die fortlaufende Entwicklungsdokumentation einschließlich Modulverzeichnis, Aufgaben, Ein-/Ausgabeparametern, Architekturregeln, offenen Schwachstellen und Änderungsprotokoll steht in [DEVELOPMENT-MODULES.md](DEVELOPMENT-MODULES.md). Die tatsächliche Modularisierung ist noch nicht abgeschlossen; Zielmodule sind ausdrücklich als Planung gekennzeichnet.
