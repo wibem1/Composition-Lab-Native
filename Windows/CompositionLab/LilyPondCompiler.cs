@@ -47,7 +47,7 @@ internal sealed class LilyPondCompiler(string cacheRoot)
     public async Task<LilyPondOutput> CompileAsync(string source, CancellationToken cancellation = default)
     {
         string prepared = Prepare(source);
-        string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Version + "\n" + prepared)));
+        string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Version + "\npoint-and-click-v1\n" + prepared)));
         string final = Path.Combine(cacheRoot, hash);
         await gate.WaitAsync(cancellation);
         string? temporary = null;
@@ -61,7 +61,7 @@ internal sealed class LilyPondCompiler(string cacheRoot)
             await File.WriteAllTextAsync(Path.Combine(temporary, "source.ly"), prepared, new UTF8Encoding(false), cancellation);
             var start = new ProcessStartInfo(executable) { WorkingDirectory = temporary, UseShellExecute = false, CreateNoWindow = true,
                 RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 };
-            foreach (string argument in new[] { "--svg", "-dno-point-and-click", "--loglevel=WARNING", "--output=score", "source.ly" }) start.ArgumentList.Add(argument);
+            foreach (string argument in new[] { "--svg", "-dpoint-and-click", "--loglevel=WARNING", "--output=score", "source.ly" }) start.ArgumentList.Add(argument);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation); timeout.CancelAfter(TimeSpan.FromMinutes(2));
             using var process = new Process { StartInfo = start };
             var watch = Stopwatch.StartNew(); process.Start();
