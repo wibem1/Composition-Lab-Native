@@ -136,6 +136,25 @@ internal sealed partial class MainForm
             await Task.Delay(200);
             if (tabs.SelectedIndex != 0 || composition.SelectionLength < 1)
                 throw new Exception("SVG-Notenauswahl landet nicht im LilyPond-Editor.");
+            // Regression for mouse click-and-drag: two linked notes must become
+            // a visible multi-selection, not merely receive an invisible click.
+            tabs.SelectedIndex = 1;
+            RenderLilyPond();
+            await Task.Delay(250);
+            string dragResult = await web.ExecuteScriptAsync("""
+                (() => {
+                  const notes=Array.from(document.querySelectorAll('.page:not([hidden]) a'))
+                    .filter(a=>/source\.ly:\d+:\d+:\d+/i.test(a.getAttribute('href')||a.getAttribute('xlink:href')||''));
+                  if(notes.length<2)return 'insufficient-notes';
+                  notes[0].dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1}));
+                  notes[1].dispatchEvent(new PointerEvent('pointermove',{bubbles:true,button:0,buttons:1}));
+                  document.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,button:0,buttons:0}));
+                  return document.querySelectorAll('.page a.selected').length>=2 && !document.getElementById('openSelection').disabled
+                    ? 'drag-ok' : 'drag-failed';
+                })()
+                """);
+            if (dragResult != "\"drag-ok\"")
+                throw new Exception("Klick-und-Ziehen markiert keine Notenpassage: " + dragResult);
             // Reproduce the user flow: edit the visible composition, then click
             // the actual Noten-tab button rather than calling the compiler only.
             string edited = music.Replace("Auftakt – Originalprüfung", "Bearbeitet – G statt C").Replace("c8\\mf", "g'8\\mf").Replace("4 = 104", "4 = 116");
