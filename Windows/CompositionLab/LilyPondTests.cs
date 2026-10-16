@@ -123,7 +123,7 @@ internal sealed partial class MainForm
             string clickResult = await web.ExecuteScriptAsync("""
                 (() => {
                   const a = Array.from(document.querySelectorAll('.page a')).find(n =>
-                    /source\\.ly:\\d+:\\d+:\\d+/i.test(n.getAttribute('href') || n.getAttribute('xlink:href') || ''));
+                    /source\.ly:\d+:\d+:\d+/i.test(n.getAttribute('href') || n.getAttribute('xlink:href') || ''));
                   if (!a) return 'no-note-link';
                   a.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));
                   if (document.getElementById('openSelection').disabled) return 'selection-disabled';
