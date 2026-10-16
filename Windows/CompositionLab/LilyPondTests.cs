@@ -118,6 +118,24 @@ internal sealed partial class MainForm
             if (await web.ExecuteScriptAsync("currentPage===2 && scale===110") != "true") throw new Exception("Seitenauswahl oder Zoom im Originalnotensatz funktioniert nicht.");
             await PreviewCommand("page(-1)");
             using (var capture = File.Create(Path.Combine(output, "LilyPond-Original-Preview.png"))) await web.CoreWebView2.CapturePreviewAsync(Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, capture);
+            // End-to-end UI check: click a real SVG note, mark it, and
+            // hand its LilyPond source location to the editor.
+            string clickResult = await web.ExecuteScriptAsync("""
+                (() => {
+                  const a = Array.from(document.querySelectorAll('.page a')).find(n =>
+                    /source\\.ly:\\d+:\\d+:\\d+/i.test(n.getAttribute('href') || n.getAttribute('xlink:href') || ''));
+                  if (!a) return 'no-note-link';
+                  a.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));
+                  if (document.getElementById('openSelection').disabled) return 'selection-disabled';
+                  document.getElementById('openSelection').click();
+                  return 'sent';
+                })()
+                """);
+            if (clickResult != "\"sent\"")
+                throw new Exception("SVG-Note konnte nicht markiert und an den Editor übergeben werden: " + clickResult);
+            await Task.Delay(200);
+            if (tabs.SelectedIndex != 0 || composition.SelectionLength < 1)
+                throw new Exception("SVG-Notenauswahl landet nicht im LilyPond-Editor.");
             // Reproduce the user flow: edit the visible composition, then click
             // the actual Noten-tab button rather than calling the compiler only.
             string edited = music.Replace("Auftakt – Originalprüfung", "Bearbeitet – G statt C").Replace("c8\\mf", "g'8\\mf").Replace("4 = 104", "4 = 116");
