@@ -17,6 +17,7 @@ flowchart TB
     EDIT["Editor / Bearbeiten\nAKTUELL IN MainForm"]
     DISK["WorkspacePersistence\nDateien, Wiederherstellung\nGEPLANT"]
     CODEC["ProjectPieceCodec\nStück/Verlauf-Metadaten\nEXTRAHIERT"]
+    WSC["ProjectWorkspaceCodec\nArbeitsplatz-Serialisierung\nEXTRAHIERT"]
     GATE["WorkspaceRevisionGate\nAsync-Versionsprüfung\nEXTRAHIERT"]
     GUI --> WC
     WC --> DOC
@@ -30,7 +31,8 @@ flowchart TB
     EDIT --> DOC
     WC --> DISK
     DOC --> CODEC
-    CODEC --> DISK
+    CODEC --> WSC
+    WSC --> DISK
 ```
 
 Die Pfeile zeigen das geplante **Aufruf-/Datenflussmodell**, nicht lauter bereits implementierte unabhängige Klassen. VORHANDEN und EXTRAHIERT sind echte technische Einheiten. GEPLANT ist ausdrücklich **noch nicht implementiert**.
@@ -89,6 +91,15 @@ Pfad: `Windows/CompositionLab/ProjectPieceCodec.cs`. Reine Umwandlung gespeicher
 - Fehler: Fehlender Titel oder fehlende Partitur wird abgelehnt.
 - Tests: Musikquelltext und Providerangaben bleiben beim Roundtrip erhalten.
 - **Noch offen:** Vollständige Projektlade- und Commit-Transaktion ist noch mit `MainForm` verbunden; dieses Modul ist nicht schon die komplette Persistenzschicht.
+
+## Fünfter realer Modulschnitt: ProjectWorkspaceCodec
+
+Pfad: `Windows/CompositionLab/ProjectWorkspaceCodec.cs`. Reines Modul zum Zusammenstellen eines gespeicherten `.clabproject`-Workspace-Dokuments aus ausdrücklich übergebenen Parametern.
+
+- `Encode(name:string, settings:JsonObject, editorText:string, documents:IReadOnlyList<JsonObject?>, activeSlot:int, history:IReadOnlyList<JsonObject>, chatText:string, fallbackProvider:string, fallbackModel:string) -> JsonObject`
+- **Output:** Versioniertes JSON (`composition-lab-v6-project`) mit Slots, aktiver Auswahl, Historie und Einstellungen; bestehendes Dateiformat unverändert.
+- **Grenzfälle:** Ungültige aktive Slotnummer wird abgelehnt; Eingabedaten werden beim Serialisieren geklont, damit spätere Bearbeitung den Export nicht verändert.
+- **Noch ausstehend:** `WorkspacePersistence` für Dateizugriff, Validierung und transaktionales Projektladen; noch im GUI-Adapter.
 
 ## Weiterer Umbau – Reihenfolge
 
