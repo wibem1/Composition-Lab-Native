@@ -121,7 +121,14 @@ internal sealed partial class MainForm
         int endLine = (int?)message["endLine"] ?? line;
         int endColumn = (int?)message["endColumn"] ?? column;
         if (line < 1 || column < 1 || endLine < 1 || endColumn < 1) return;
-        string source = EditableLilyPondText(Current);
+        string source = AppliedLilyPondText(Current);
+        // Source coordinates belong to the score currently rendered, never to
+        // unsaved edits. Refuse to jump to a misleading location.
+        if (composition.Text != source)
+        {
+            SetStatus("Notenansicht und Editor unterscheiden sich. Erst Notation aktualisieren, dann Noten auswählen.", true);
+            return;
+        }
         var lines = source.Split('\n');
         int Index(int l, int c)
         {
