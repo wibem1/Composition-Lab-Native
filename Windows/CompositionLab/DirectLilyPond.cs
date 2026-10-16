@@ -118,16 +118,21 @@ internal sealed partial class MainForm
     {
         if (Current == null || currentLilyPond == null) return;
         int line = (int?)message["line"] ?? 0, column = (int?)message["column"] ?? 0;
-        if (line < 1 || column < 1) return;
+        int endLine = (int?)message["endLine"] ?? line;
+        int endColumn = (int?)message["endColumn"] ?? column;
+        if (line < 1 || column < 1 || endLine < 1 || endColumn < 1) return;
         string source = EditableLilyPondText(Current);
         var lines = source.Split('\n');
-        if (line > lines.Length) return;
-        int start = 0;
-        for (int i = 0; i < line - 1; i++) start += lines[i].Length + 1;
-        start += Math.Min(column - 1, lines[line - 1].Length);
-        if (start > composition.TextLength) return;
-        // The notation is on the second workspace tab and the editable
-        // LilyPond source is on the first. Navigate before selecting.
+        int Index(int l, int c)
+        {
+            if (l > lines.Length) return -1;
+            int offset = 0;
+            for (int i = 0; i < l - 1; i++) offset += lines[i].Length + 1;
+            return offset + Math.Min(c - 1, lines[l - 1].Length);
+        }
+        int start = Index(line, column), end = Index(endLine, endColumn);
+        if (start < 0 || end < 0) return;
+        if (end < start) (start, end) = (end, start);
         tabs.SelectedIndex = 0;
         if (composition.Text != source)
         {
@@ -136,10 +141,11 @@ internal sealed partial class MainForm
             finally { loadingIdea = false; }
         }
         composition.Focus();
-        composition.SelectionStart = start;
-        composition.SelectionLength = Math.Min(1, composition.TextLength - start);
+        composition.SelectionStart = Math.Min(start, composition.TextLength);
+        composition.SelectionLength = Math.Min(Math.Max(1, end - start + 1), composition.TextLength - composition.SelectionStart);
         composition.ScrollToCaret();
-        SetStatus("LilyPond: Zeile " + line + ", Spalte " + column + " ausgewählt. Oktave im Editor bearbeiten und Notation aktualisieren.");
+        SetStatus("LilyPond-Quelltext markiert: Zeile " + line + " bis " + endLine +
+            ". Tonhöhen im Editor korrigieren und anschließend Notation aktualisieren.");
     }
 
     void RenderLilyPond()
@@ -153,8 +159,11 @@ internal sealed partial class MainForm
             <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
             <style>html,body{margin:0;background:#eee}#score{padding:12px}.page{display:block;width:100%;background:white;margin:0 auto 12px}.page svg{display:block;width:100%;height:auto}.page[hidden]{display:none}
             .page a{cursor:crosshair}.page a:hover{outline:1px solid #bd7d00;outline-offset:3px}.page a.selected{outline:2px solid #e99a10;outline-offset:4px}
+            #selection{position:sticky;top:0;z-index:10;padding:8px;background:#fff;border-bottom:1px solid #ccc;display:flex;gap:12px;align-items:center;font:13px Segoe UI,sans-serif}
+            #selection button{padding:6px 12px;cursor:pointer}
+            @media print{#selection{display:none}}
             @media print{html,body{background:white}#score{padding:0}.page,.page[hidden]{display:block!important;width:100%!important;margin:0;break-after:page}.page:last-child{break-after:auto}}</style></head>
-            <body><div id="score"></div><script>
+            <body><div id="selection"><span id="selectionCount">Noten anklicken, um sie zu markieren.</span><button id="openSelection" disabled>Auswahl im Editor öffnen</button><button id="clearSelection">Auswahl aufheben</button></div><div id="score"></div><script>
             const images=PAGES_VALUE; let currentPage=1,scale=100;
             const host=document.getElementById('score');
             images.forEach(source=>{const page=document.createElement('div');page.className='page';
@@ -166,15 +175,28 @@ internal sealed partial class MainForm
             function render(){Array.from(host.children).forEach((page,i)=>{page.hidden=i!==currentPage-1;page.style.width=scale+'%';page.style.maxWidth='none'});window.chrome.webview.postMessage({page:currentPage,count:images.length,zoom:scale})}
             function page(delta){currentPage=Math.max(1,Math.min(images.length,currentPage+delta));render();window.scrollTo(0,0)}
             function zoom(delta){scale=Math.max(40,Math.min(300,scale+delta));render()}
+            const chosen=new Map();
+            const count=document.getElementById('selectionCount');
+            const open=document.getElementById('openSelection');
+            function updateSelection(){count.textContent=chosen.size+' Noten markiert';open.disabled=chosen.size===0}
+            function openEditor(){
+              if(!chosen.size)return;
+              const notes=Array.from(chosen.values()).sort((a,b)=>a.line-b.line||a.column-b.column);
+              const first=notes[0],last=notes[notes.length-1];
+              window.chrome.webview.postMessage({action:'select-source',line:first.line,column:first.column,endLine:last.line,endColumn:last.column});
+            }
+            open.addEventListener('click',openEditor);
+            document.getElementById('clearSelection').addEventListener('click',()=>{
+              chosen.forEach((_,a)=>a.classList.remove('selected'));chosen.clear();updateSelection()});
             host.addEventListener('click',event=>{
               const a=event.target.closest && event.target.closest('a');if(!a)return;
               const href=a.getAttribute('href')||a.getAttribute('xlink:href')||'';
               // LilyPond textedit links: textedit:///.../source.ly:LINE:CHAR:COLUMN
-              const match=href.match(/source\.ly:(\d+):(\d+):(\d+)/i);
+              const match=href.match(/source\\.ly:(\\d+):(\\d+):(\\d+)/i);
               if(!match)return;event.preventDefault();
-              host.querySelectorAll('a.selected').forEach(n=>n.classList.remove('selected'));
-              a.classList.add('selected');
-              window.chrome.webview.postMessage({action:'select-source',line:Number(match[1]),column:Number(match[3])});
+              if(chosen.has(a)){chosen.delete(a);a.classList.remove('selected')}
+              else {chosen.set(a,{line:Number(match[1]),column:Number(match[3])});a.classList.add('selected')}
+              updateSelection();
             });
             render();
             </script></body></html>
