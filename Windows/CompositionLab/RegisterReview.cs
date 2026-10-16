@@ -25,19 +25,28 @@ internal sealed partial class MainForm
         for (int i = 0; i < tracks.Length; i++)
         {
             var track = tracks[i];
-            if ((track["pg"]?.GetValue<int>() ?? -1) != 0) continue;
+            int program = track["pg"]?.GetValue<int>() ?? -1;
+            // GM instrument program 0 is piano; programs 40–51 are bowed strings.
+            // Very high notes in strings can be valid, but a sustained passage
+            // beyond the normal violin range deserves an explicit warning.
+            bool piano = program is >= 0 and <= 7;
+            bool stringInstrument = program is >= 40 and <= 51;
+            if (!piano && !stringInstrument) continue;
             var notes = track["nt"]!.AsArray().OfType<JsonArray>().ToArray();
             if (notes.Length == 0) continue;
-            var outside = notes.Where(n => n[2]!.GetValue<double>() < 21 || n[2]!.GetValue<double>() > 108).ToArray();
+            double low = piano ? 21 : 36;
+            double high = piano ? 108 : 100;
+            var outside = notes.Where(n => n[2]!.GetValue<double>() < low || n[2]!.GetValue<double>() > high).ToArray();
             // A long extreme register reached from a central opening in relative
             // input merits an octave review even if still inside the keyboard.
             var first = notes.Where(n => n[0]!.GetValue<double>() < 4).ToArray();
-            bool drift = relative && first.Length > 0 && first.Max(n => n[2]!.GetValue<double>()) <= 84 &&
-                notes.Count(n => n[2]!.GetValue<double>() > 96) >= 6;
+            bool drift = first.Length > 0 && first.Max(n => n[2]!.GetValue<double>()) <= 84 &&
+                notes.Count(n => n[2]!.GetValue<double>() > (piano ? 96 : 93)) >= 6 &&
+                (relative || stringInstrument);
             if (outside.Length == 0 && !drift) continue;
-            issues.Add(new JsonObject { ["track"] = i + 1, ["instrument"] = "Klavier", ["minimum"] = notes.Min(n => n[2]!.GetValue<double>()),
+            issues.Add(new JsonObject { ["track"] = i + 1, ["instrument"] = track["nm"]?.GetValue<string>() ?? (piano ? "Klavier" : "Streicher"), ["minimum"] = notes.Min(n => n[2]!.GetValue<double>()),
                 ["maximum"] = notes.Max(n => n[2]!.GetValue<double>()), ["outsideKeyboard"] = outside.Length,
-                ["reason"] = outside.Length > 0 ? "Töne außerhalb A0–C8" : "Verdacht auf relative Oktavwanderung in anhaltend extremer Lage",
+                ["reason"] = outside.Length > 0 ? (piano ? "Töne außerhalb A0–C8" : "Auffällige Streicherlage außerhalb C2–E7") : "Verdacht auf anhaltende Oktavwanderung in extremer Lage",
                 ["beats"] = new JsonArray((outside.Length > 0 ? outside : notes.Where(n => n[2]!.GetValue<double>() > 96)).Take(12).Select(n => (JsonNode?)JsonValue.Create(n[0]!.GetValue<double>())).ToArray()) });
         }
         return issues;
@@ -91,7 +100,7 @@ internal sealed partial class MainForm
                 var candidate = await CompileCompositionAsync(corrected, source, token, updateDiagnostic: false);
                 if (!OctaveOnlyChange(original["score"]!.AsObject(), candidate["score"]!.AsObject()))
                     throw new InvalidDataException("Die vorgeschlagene Oktavkorrektur verändert Tonklassen, Rhythmus, Dynamik oder Besetzung und wurde verworfen.");
-                if (Regex.IsMatch(ExtractLilyPond(corrected), @"\\relative\b") || RegisterIssues(candidate["score"]!.AsObject(), music).Count > 0)
+                if (Regex.IsMatch(ExtractLilyPond(corrected), @"\\relative\b") || RegisterIssues(candidate["score"]!.AsObject(), corrected).Count > 0)
                     throw new InvalidDataException("Die Oktavkorrektur ist weiterhin auffällig und wurde nicht übernommen.");
                 review["status"] = "corrected";
                 candidate["octaveReview"] = review.DeepClone(); candidate["originalLilyPond"] = music;
