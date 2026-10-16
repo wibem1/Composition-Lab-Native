@@ -9,6 +9,7 @@ internal sealed partial class MainForm
 {
     async Task RunLilyPondTestsAsync(string output)
     {
+        ScoreSourceMapper.SelfTest();
         const string source = """
             \version "2.24.0"
             \header { title = "Auftakt – Originalprüfung" tagline = ##f }
