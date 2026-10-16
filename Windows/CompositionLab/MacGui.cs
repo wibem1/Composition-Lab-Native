@@ -525,24 +525,86 @@ internal sealed partial class MainForm
     MenuStrip BuildMacMenus()
     {
         var menu = new MenuStrip { BackColor = StudioTheme.Canvas }; MainMenuStrip = menu;
-        void Action(ToolStripMenuItem parent, string label, Func<Task> callback) { var item = new ToolStripMenuItem(label); item.Click += async (_, _) => await GuardAsync(callback); parent.DropDownItems.Add(item); }
+        void Action(ToolStripMenuItem parent, string label, Func<Task> callback)
+        {
+            var item = new ToolStripMenuItem(label);
+            item.Click += async (_, _) => await GuardAsync(callback);
+            parent.DropDownItems.Add(item);
+        }
         var file = new ToolStripMenuItem("Datei"); menu.Items.Add(file);
-        Action(file, "Projekt benennen …", () => { using var dialog = new Form { Text = "Projekt benennen", Size = new Size(420, 135), StartPosition = FormStartPosition.CenterParent }; var text = new TextBox { Text = projectName, Dock = DockStyle.Top }; var save = new Button { Text = "Übernehmen", Dock = DockStyle.Bottom, DialogResult = DialogResult.OK }; dialog.Controls.Add(text); dialog.Controls.Add(save); if (dialog.ShowDialog(this) == DialogResult.OK) projectName = text.Text; SaveLocalState(); return Task.CompletedTask; });
-        Action(file, "Projekt laden …", LoadProjectAsync); Action(file, "Projekt speichern …", SaveProjectAsync); file.DropDownItems.Add(new ToolStripSeparator());
-        Action(file, "Diagnose importieren …", ImportDiagnosticAsync); Action(file, "Musikdatei importieren …", () => OpenAsync()); file.DropDownItems.Add(new ToolStripSeparator());
-        Action(file, "MIDI als Vorlage laden …", () => { useSource.Checked = true; return OpenAsync(); }); Action(file, "MIDI-Vorlage löschen", () => { useSource.Checked = false; return Task.CompletedTask; });
-        file.DropDownItems.Add(new ToolStripSeparator()); Action(file, "MIDI sichern …", () => ExportAsync("mid")); Action(file, "JSON sichern …", SaveScoreJSON); Action(file, "LilyPond sichern …", ExportLilyPondAsync); Action(file, "MusicXML sichern …", () => ExportAsync("musicxml")); Action(file, "An Hacklily übergeben", () => { OpenHacklily(); return Task.CompletedTask; });
+        Action(file, "Projekt öffnen …", LoadProjectAsync);
+        Action(file, "Projekt speichern …", SaveProjectAsync);
+        file.DropDownItems.Add(new ToolStripSeparator());
+        Action(file, "Musikdatei importieren …", () => OpenAsync());
+        Action(file, "Diagnose importieren …", ImportDiagnosticAsync);
+        file.DropDownItems.Add(new ToolStripSeparator());
+        Action(file, "MIDI exportieren …", () => ExportAsync("mid"));
+        Action(file, "LilyPond exportieren …", ExportLilyPondAsync);
+        Action(file, "MusicXML exportieren …", () => ExportAsync("musicxml"));
+        Action(file, "An Hacklily übergeben", () => { OpenHacklily(); return Task.CompletedTask; });
+
         var edit = new ToolStripMenuItem("Bearbeiten"); menu.Items.Add(edit);
-        Action(edit, "Rückgängig", () => { if (ActiveControl is TextBoxBase text) text.Undo(); return Task.CompletedTask; }); Action(edit, "Wiederholen", () => { if (ActiveControl is RichTextBox text && text.CanRedo) text.Redo(); return Task.CompletedTask; }); Action(edit, "Ausschneiden", () => { if (ActiveControl is TextBoxBase text) text.Cut(); return Task.CompletedTask; }); Action(edit, "Kopieren", () => { if (ActiveControl is TextBoxBase text) text.Copy(); return Task.CompletedTask; }); Action(edit, "Einsetzen", () => { if (ActiveControl is TextBoxBase text) text.Paste(); return Task.CompletedTask; }); Action(edit, "Alles auswählen", () => { if (ActiveControl is TextBoxBase text) text.SelectAll(); return Task.CompletedTask; });
-        var compositionMenu = new ToolStripMenuItem("Komposition"); menu.Items.Add(compositionMenu); Action(compositionMenu, "Mit gewählter KI komponieren", () => RequestAIAsync(true)); Action(compositionMenu, "Fertige Komposition übernehmen", RecoverDisplayedMusicAsync); Action(compositionMenu, "LilyPond-Original in freien Slot ausgeben", RebuildOriginalAsync); Action(compositionMenu, "Oktavlagen prüfen und korrigieren", ReviewCurrentRegistersAsync);
+        Action(edit, "Rückgängig", () => { if (ActiveControl is TextBoxBase text) text.Undo(); return Task.CompletedTask; });
+        Action(edit, "Wiederholen", () => { if (ActiveControl is RichTextBox text && text.CanRedo) text.Redo(); return Task.CompletedTask; });
+        edit.DropDownItems.Add(new ToolStripSeparator());
+        Action(edit, "Ausschneiden", () => { if (ActiveControl is TextBoxBase text) text.Cut(); return Task.CompletedTask; });
+        Action(edit, "Kopieren", () => { if (ActiveControl is TextBoxBase text) text.Copy(); return Task.CompletedTask; });
+        Action(edit, "Einfügen", () => { if (ActiveControl is TextBoxBase text) text.Paste(); return Task.CompletedTask; });
+        Action(edit, "Alles auswählen", () => { if (ActiveControl is TextBoxBase text) text.SelectAll(); return Task.CompletedTask; });
+
+        var music = new ToolStripMenuItem("Komposition"); menu.Items.Add(music);
+        Action(music, "Komponieren", () => RequestAIAsync(true));
+        Action(music, "Fertige Komposition übernehmen", RecoverDisplayedMusicAsync);
+        Action(music, "LilyPond-Original in freien Slot", RebuildOriginalAsync);
+        Action(music, "Oktavlagen prüfen und korrigieren", ReviewCurrentRegistersAsync);
         var octaveCheck = new ToolStripMenuItem("Oktavlagen automatisch prüfen") { CheckOnClick = true, Checked = automaticRegisterReview };
-        compositionMenu.DropDownOpening += (_, _) => octaveCheck.Checked = automaticRegisterReview;
+        music.DropDownOpening += (_, _) => octaveCheck.Checked = automaticRegisterReview;
         octaveCheck.CheckedChanged += (_, _) => { automaticRegisterReview = octaveCheck.Checked; SaveLocalState(); };
-        compositionMenu.DropDownItems.Add(octaveCheck); Action(compositionMenu, "Anfrage abbrechen", () => { pending?.Cancel(); return Task.CompletedTask; });
-        var technical = new ToolStripMenuItem("Technisches"); menu.Items.Add(technical); Action(technical, "API-Schlüssel …", ShowKeys); Action(technical, "MIDI-Ausgabe …", ShowMidiOutput); Action(technical, "Backup laden …", () => { MessageBox.Show(this, "Das verschlüsselte Mac-Backup wird unter Windows noch nicht gelesen. Für den Austausch Projekt laden verwenden."); return Task.CompletedTask; }); Action(technical, "Backup sichern …", () => { MessageBox.Show(this, "Das verschlüsselte Mac-Backup ist noch nicht portiert. Projekt speichern sichert alle Stück-Plätze ohne API-Schlüssel."); return Task.CompletedTask; }); Action(technical, "Diagnosedatei sichern …", () => { SaveDiagnostic(); return Task.CompletedTask; });
-        var diagnosis = new ToolStripMenuItem("Diagnose"); menu.Items.Add(diagnosis); Action(diagnosis, "Diagnosedatei sichern …", () => { SaveDiagnostic(); return Task.CompletedTask; });
-        var display = new ToolStripMenuItem("Darstellung"); menu.Items.Add(display); foreach (int percent in new[] { 80, 90, 100, 110, 120, 130, 140, 150 }) Action(display, percent + " %", () => { Scale(new SizeF(percent / (float)guiZoom, percent / (float)guiZoom)); guiZoom = percent; return Task.CompletedTask; });
-        var window = new ToolStripMenuItem("Fenster"); menu.Items.Add(window); Action(window, "Composition Lab zeigen", () => { WindowState = FormWindowState.Normal; Activate(); return Task.CompletedTask; }); return menu;
+        music.DropDownItems.Add(octaveCheck);
+        Action(music, "Anfrage abbrechen", () => { pending?.Cancel(); return Task.CompletedTask; });
+
+        var settings = new ToolStripMenuItem("Einstellungen"); menu.Items.Add(settings);
+        Action(settings, "API-Schlüssel …", ShowKeys);
+        Action(settings, "MIDI-Ausgabe …", ShowMidiOutput);
+        var display = new ToolStripMenuItem("Anzeigegröße"); settings.DropDownItems.Add(display);
+        foreach (int percent in new[] { 80, 90, 100, 110, 125, 150 })
+            Action(display, percent + " %", () => { Scale(new SizeF(percent / (float)guiZoom, percent / (float)guiZoom)); guiZoom = percent; return Task.CompletedTask; });
+
+        var help = new ToolStripMenuItem("Hilfe"); menu.Items.Add(help);
+        Action(help, "Entwicklungsstand / Über Composition Lab …", () => { ShowDevelopmentInfo(); return Task.CompletedTask; });
+        Action(help, "Diagnosedatei sichern …", () => { SaveDiagnostic(); return Task.CompletedTask; });
+        return menu;
+    }
+
+    void ShowDevelopmentInfo()
+    {
+        const string information = "Composition Lab für Windows – V4.1\r\n" +
+            "Entwicklungsstand: 16.10.2026\r\n\r\n" +
+            "FUNKTIONSFÄHIG (automatisiert geprüft)\r\n" +
+            "• KI-Komposition und Chat, dynamische Modellwahl\r\n" +
+            "• 10 Stückplätze, Projekt- und CLAB-Speicherung\r\n" +
+            "• LilyPond-Originalnoten und MIDI-Ausgabe\r\n" +
+            "• Bearbeiten/Aktualisieren, LilyPond- und MusicXML-Export\r\n" +
+            "• Diagnoseimport zur Wiederherstellung fertiger Antworten\r\n\r\n" +
+            "VERHALTEN BEI FEHLERN\r\n" +
+            "• Fehlgeschlagene automatische Oktavkorrektur blockiert die Originalausgabe nicht.\r\n" +
+            "• Warnungen und Originalquelle bleiben in der Diagnose erhalten.\r\n\r\n" +
+            "BEKANNTE GRENZEN\r\n" +
+            "• Praktischer Test auf deinem Windows-Rechner steht noch aus.\r\n" +
+            "• MIDI-Klang hängt vom Windows-Ausgabegerät ab.\r\n" +
+            "• MusicXML bildet LilyPond-Spezialnotation nur teilweise ab.\r\n" +
+            "• Mac-Backup und Soundfont-Auswahl sind noch nicht vollständig portiert.\r\n\r\n" +
+            "Gemeinsamer Entwicklungszweig: v4-cross-platform\r\n" +
+            "Diagnose und Tests: Hilfe → Diagnosedatei sichern.";
+        using var window = new Form { Text = "Composition Lab – Entwicklungsstand V4.1", StartPosition = FormStartPosition.CenterParent,
+            ClientSize = new Size(640, 535), MinimumSize = new Size(490, 370), Font = Font, BackColor = StudioTheme.Canvas };
+        var details = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
+            Dock = DockStyle.Fill, Text = information, BorderStyle = BorderStyle.None, BackColor = Color.White,
+            Font = new Font("Segoe UI", 10.5f), Margin = new Padding(12) };
+        var close = new Button { Text = "Schließen", Dock = DockStyle.Bottom, Height = 39, DialogResult = DialogResult.OK };
+        window.Controls.Add(details); window.Controls.Add(close);
+        window.AcceptButton = close;
+        window.ShowDialog(this);
     }
     int guiZoom = 100;
     async Task SaveProjectAsync()
