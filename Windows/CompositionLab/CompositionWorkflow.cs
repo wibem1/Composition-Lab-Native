@@ -20,19 +20,9 @@ internal sealed partial class MainForm
             if (destination < 0) { SetStatus("Alle zehn Slots sind belegt. Bitte zuerst ein Stück speichern und einen Slot leeren.", true); return; }
         }
         string userText = inputText.Trim();
+        // V4.11: The user's assignment is transmitted verbatim. No hidden
+        // orchestration prompt, prior chat, pitch instructions or form constraints.
         string instruction = userText;
-        if (makeMusic)
-        {
-            if (!string.IsNullOrWhiteSpace(measures.Text)) instruction += "\nTaktanzahl: " + measures.Text;
-            if (!string.IsNullOrWhiteSpace(meter.Text)) instruction += "\nTaktart: " + meter.Text;
-            if (!string.IsNullOrWhiteSpace(tempo.Text)) instruction += "\nTempo (BPM): " + tempo.Text;
-            if (!string.IsNullOrWhiteSpace(musicalKey.Text)) instruction += "\nTonart: " + musicalKey.Text;
-            if (!string.IsNullOrWhiteSpace(ensemble.Text)) instruction += "\nBesetzung: " + ensemble.Text;
-        }
-        else if (!string.IsNullOrEmpty(chat.Text)) instruction = "Bisheriger musikalischer Dialog:\n" +
-                (chat.Text.Length > 16000 ? chat.Text[^16000..] : chat.Text) + "\n\nAktuelle Nachricht:\n" + instruction;
-        if (useSource.Checked && Score != null) instruction += "\nBewusst gewählte musikalische Vorlage:\n" + Score.ToJsonString();
-        instruction += "\n\nNotationskorrektheit: " + PitchEncodingHint;
         var request = new JsonObject { ["assignment"] = instruction, ["provider"] = activeProvider,
             ["model"] = SelectedModelId, ["effort"] = effort.SelectedIndex switch { 0 => "low", 2 => "high", _ => "medium" } };
         string selectedProvider = activeProvider, selectedModel = SelectedModelId;
@@ -51,7 +41,16 @@ internal sealed partial class MainForm
             if (makeMusic)
             {
                 PreservePendingComposition(result["composition"]!.GetValue<string>(), result, userText, selectedProvider, selectedModel);
-                result = await TranslateExistingAsync(result["composition"]!.GetValue<string>(), request, result, pending.Token);
+                if (!ContainsFinishedMusic(result["composition"]!.GetValue<string>()))
+                {
+                    chat.AppendText("KI: Originalantwort gespeichert. Kein LilyPond erkannt; keine automatische KI-Übersetzung.\n\n");
+                    composition.Text = result["composition"]!.GetValue<string>();
+                    cost.Text = "Anfrage ca. $" + result["estimatedCostUSD"]!.GetValue<double>().ToString("0.0000");
+                    SetStatus("Originalkomposition gespeichert. Für ein anderes Notationsformat ist eine ausdrückliche Übertragung erforderlich.");
+                    SaveLocalState();
+                    return;
+                }
+                result = await CompileCheckedCompositionAsync(result["composition"]!.GetValue<string>(), result, pending.Token);
                 var document = await AcceptCompositionAsync(result, destination, userText, selectedProvider, selectedModel);
                 chat.AppendText("KI: Stück fertig: " + document["title"]?.GetValue<string>() + "\n\n");
             }
@@ -64,7 +63,7 @@ internal sealed partial class MainForm
                     destination = Array.FindIndex(documents, d => d == null);
                     if (destination < 0) throw new InvalidOperationException("Komposition erhalten, aber alle Slots sind belegt. Einen Slot leeren und unter Komposition → Fertige Komposition übernehmen fortsetzen.");
                     PreservePendingComposition(answer, result, userText, selectedProvider, selectedModel);
-                    var translated = await TranslateExistingAsync(answer, request, result, pending.Token);
+                    var translated = await CompileCheckedCompositionAsync(answer, result, pending.Token);
                     result = translated;
                     var document = await AcceptCompositionAsync(result, destination, userText, selectedProvider, selectedModel);
                     chat.AppendText("KI: Stück übernommen in Slot " + (destination + 1) + ": " + document["title"] + "\n\n");
