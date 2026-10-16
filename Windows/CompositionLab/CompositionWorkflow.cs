@@ -41,16 +41,18 @@ internal sealed partial class MainForm
             if (makeMusic)
             {
                 PreservePendingComposition(result["composition"]!.GetValue<string>(), result, userText, selectedProvider, selectedModel);
-                if (!ContainsFinishedMusic(result["composition"]!.GetValue<string>()))
+                var locallyImported = await ImportAIResponseLocallyAsync(
+                    result["composition"]!.GetValue<string>(), result, pending.Token);
+                if (locallyImported == null)
                 {
-                    chat.AppendText("KI: Originalantwort gespeichert. Kein LilyPond erkannt; keine automatische KI-Übersetzung.\n\n");
+                    chat.AppendText("KI: Vollständige Originalantwort gesichert. Das Format ist nicht lokal lesbar; keine automatische zweite KI-Anfrage.\n\n");
                     composition.Text = result["composition"]!.GetValue<string>();
                     cost.Text = "Anfrage ca. $" + result["estimatedCostUSD"]!.GetValue<double>().ToString("0.0000");
-                    SetStatus("Originalkomposition gespeichert. Für ein anderes Notationsformat ist eine ausdrückliche Übertragung erforderlich.");
+                    SetStatus("Original gesichert; zur Notendarstellung ist eine ausdrücklich beauftragte Übertragung erforderlich.");
                     SaveLocalState();
                     return;
                 }
-                result = await CompileCheckedCompositionAsync(result["composition"]!.GetValue<string>(), result, pending.Token);
+                result = locallyImported;
                 var document = await AcceptCompositionAsync(result, destination, userText, selectedProvider, selectedModel);
                 chat.AppendText("KI: Stück fertig: " + document["title"]?.GetValue<string>() + "\n\n");
             }
@@ -95,6 +97,58 @@ internal sealed partial class MainForm
             SetStatus("KI-Antwort gespeichert, Ausgabe fehlgeschlagen: " + e.Message, true);
         }
         finally { pending?.Dispose(); pending = null; SetBusy(false); }
+    }
+
+    // Only deterministic, local interpretation is allowed after the creative call.
+    // Unrecognized formats remain available as exact original responses.
+    async Task<JsonObject?> ImportAIResponseLocallyAsync(
+        string original, JsonObject source, CancellationToken token)
+    {
+        if (ContainsFinishedMusic(original))
+            return await CompileCheckedCompositionAsync(original, source, token);
+
+        string trimmed = original.Trim();
+        if (trimmed.StartsWith("```", StringComparison.Ordinal))
+        {
+            int newLine = trimmed.IndexOf('\n');
+            int closing = trimmed.LastIndexOf("```", StringComparison.Ordinal);
+            if (newLine >= 0 && closing > newLine)
+                trimmed = trimmed[(newLine + 1)..closing].Trim();
+        }
+
+        JsonObject? score = null;
+        if (trimmed.StartsWith("{", StringComparison.Ordinal))
+        {
+            try
+            {
+                var imported = await core.RunAsync(new JsonObject {
+                    ["operation"] = "recover-score", ["response"] = trimmed
+                }, token);
+                score = imported["score"]?.DeepClone().AsObject();
+            }
+            catch (Exception) when (!token.IsCancellationRequested) { return null; }
+        }
+        else if (trimmed.StartsWith("<?xml", StringComparison.OrdinalIgnoreCase)
+                 || trimmed.StartsWith("<score-partwise", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var imported = await core.RunAsync(new JsonObject {
+                    ["operation"] = "import-musicxml",
+                    ["data"] = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(trimmed)),
+                    ["title"] = "Komposition"
+                }, token);
+                score = imported["score"]?.DeepClone().AsObject();
+            }
+            catch (Exception) when (!token.IsCancellationRequested) { return null; }
+        }
+        if (score == null) return null;
+        var result = source.DeepClone().AsObject();
+        result["score"] = score;
+        result["composition"] = original;
+        result["stage"] = "locally-imported";
+        result["conversionAICalls"] = 0;
+        return result;
     }
 
     static bool ContainsFinishedMusic(string text)
