@@ -40,14 +40,19 @@ internal sealed partial class MainForm
             // A long extreme register reached from a central opening in relative
             // input merits an octave review even if still inside the keyboard.
             var first = notes.Where(n => n[0]!.GetValue<double>() < 4).ToArray();
+            // Frequent extreme notes deserve review even if the piano still
+            // has physical keys there. This catches whole phrases near C7/C8
+            // that the previous "outside 108" check missed.
+            int extremeCount = notes.Count(n => n[2]!.GetValue<double>() >= (piano ? 96 : 96));
+            bool highPassage = extremeCount >= 3;
             bool drift = first.Length > 0 && first.Max(n => n[2]!.GetValue<double>()) <= 84 &&
-                notes.Count(n => n[2]!.GetValue<double>() > (piano ? 96 : 93)) >= 6 &&
-                (relative || stringInstrument);
-            if (outside.Length == 0 && !drift) continue;
+                extremeCount >= 3 && (relative || stringInstrument);
+            bool suspicious = drift || highPassage;
+            if (outside.Length == 0 && !suspicious) continue;
             issues.Add(new JsonObject { ["track"] = i + 1, ["instrument"] = track["nm"]?.GetValue<string>() ?? (piano ? "Klavier" : "Streicher"), ["minimum"] = notes.Min(n => n[2]!.GetValue<double>()),
                 ["maximum"] = notes.Max(n => n[2]!.GetValue<double>()), ["outsideKeyboard"] = outside.Length,
-                ["reason"] = outside.Length > 0 ? (piano ? "Töne außerhalb A0–C8" : "Auffällige Streicherlage außerhalb C2–E7") : "Verdacht auf anhaltende Oktavwanderung in extremer Lage",
-                ["beats"] = new JsonArray((outside.Length > 0 ? outside : notes.Where(n => n[2]!.GetValue<double>() > 96)).Take(12).Select(n => (JsonNode?)JsonValue.Create(n[0]!.GetValue<double>())).ToArray()) });
+                ["reason"] = outside.Length > 0 ? (piano ? "Töne außerhalb A0–C8" : "Auffällige Streicherlage außerhalb C2–E7") : "Anhaltend extreme hohe Lage (Verdacht auf Oktavfehler)",
+                ["beats"] = new JsonArray((outside.Length > 0 ? outside : notes.Where(n => n[2]!.GetValue<double>() >= 96)).Take(12).Select(n => (JsonNode?)JsonValue.Create(n[0]!.GetValue<double>())).ToArray()) });
         }
         return issues;
     }
