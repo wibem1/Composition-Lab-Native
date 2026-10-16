@@ -38,10 +38,20 @@ internal sealed partial class MainForm
             {
                 int attempts = 0;
                 registerRepairTransport = (_, _) => { attempts++; return Task.FromResult(new JsonObject { ["text"] = refused }); };
+                var preserved = await CompileCheckedCompositionAsync(bad, source, CancellationToken.None);
+                if (preserved["octaveReview"]?["status"]?.GetValue<string>() != "warning" ||
+                    preserved["originalLilyPond"]?.GetValue<string>() != bad ||
+                    preserved["composition"]?.GetValue<string>() != bad ||
+                    string.IsNullOrEmpty(preserved["sourceMidiData"]?.GetValue<string>()) ||
+                    attempts != 1)
+                    throw new Exception("Ungültige automatische Oktavkorrektur muss die vollständige Originalausgabe mit Warnung erhalten.");
+                // An explicitly requested correction must still reject invalid proposals.
+                forceRegisterReview = true;
                 bool rejected = false;
                 try { await CompileCheckedCompositionAsync(bad, source, CancellationToken.None); }
                 catch (RegisterRepairException e) { rejected = e.Report["octaveReview"]?["status"]?.GetValue<string>() == "rejected" && e.Report["originalLilyPond"]?.GetValue<string>() == bad; }
-                if (!rejected || attempts != 1) throw new Exception("Ungültige Oktavkorrektur wird übernommen oder wiederholt angefragt.");
+                finally { forceRegisterReview = false; }
+                if (!rejected || attempts != 2) throw new Exception("Eine ausdrücklich verlangte Oktavkorrektur akzeptiert einen ungültigen Vorschlag.");
             }
             registerRepairTransport = (_, _) => throw new OperationCanceledException();
             bool cancelled = false;
