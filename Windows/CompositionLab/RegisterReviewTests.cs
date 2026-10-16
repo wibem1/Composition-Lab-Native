@@ -24,6 +24,19 @@ internal sealed partial class MainForm
             if (calls != 0 || scanned["octaveReview"]?["status"]?.GetValue<string>() != "issues" ||
                 scanned["composition"]?.GetValue<string>() != bad)
                 throw new Exception("Automatische Oktavprüfung verändert die Komposition oder ruft die KI.");
+            // Previously undetected: concert-pitch high notes remain below C8,
+            // but a sustained phrase from C7 onward is visibly extreme.
+            var highPiano = scanned["score"]!.DeepClone().AsObject();
+            var pianoNotes = highPiano["tr"]!.AsArray().OfType<JsonObject>()
+                .First(t => (t["pg"]?.GetValue<int>() ?? -1) is >= 0 and <= 7)["nt"]!.AsArray();
+            for (int i = 0; i < 5; i++)
+                pianoNotes.Add(new JsonArray(16d + i, 1d, 96d + i, 80d, 0d, 1d));
+            if (RegisterIssues(highPiano, good).Count == 0)
+                throw new Exception("Hohe Klavierpassagen innerhalb C7–E7 wurden übersehen.");
+            var highStrings = highPiano.DeepClone().AsObject();
+            highStrings["tr"]![0]!["pg"] = 40;
+            if (RegisterIssues(highStrings, good).Count == 0)
+                throw new Exception("Auffällige hohe Streicherpassagen wurden übersehen.");
             forceRegisterReview = true;
             var fixedResult = await CompileCheckedCompositionAsync(bad, source, CancellationToken.None);
             forceRegisterReview = false;
