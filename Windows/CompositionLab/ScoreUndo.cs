@@ -11,7 +11,7 @@ internal sealed partial class MainForm
 
     void SaveScoreUndoSnapshot(JsonObject document)
     {
-        int slot = Array.FindIndex(documents, candidate => ReferenceEquals(candidate, document));
+        int slot = documents.IndexOfReference(document);
         if (slot < 0) return;
         scoreUndo.Push((slot, document.DeepClone().AsObject()));
         if (scoreUndo.Count > 25)
