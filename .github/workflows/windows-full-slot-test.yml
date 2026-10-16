@@ -45,5 +45,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: composition-lab-v4.1-windows
-          path: Composition-Lab-V4.13-Windows-x64.zip
+          path: Composition-Lab-V4.14-Windows-x64.zip
           if-no-files-found: error
