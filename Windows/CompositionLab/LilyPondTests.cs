@@ -10,6 +10,11 @@ internal sealed partial class MainForm
     async Task RunLilyPondTestsAsync(string output)
     {
         ScoreSourceMapper.SelfTest();
+        var previewDocument = ScorePreviewDocument.Build(new[] { "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>" });
+        if (!previewDocument.Contains("Auswahl im Editor öffnen", StringComparison.Ordinal) ||
+            !previewDocument.Contains("pointerdown", StringComparison.Ordinal) ||
+            !previewDocument.Contains("source\\.ly:", StringComparison.Ordinal))
+            throw new Exception("Eigenständiges Notenansichtsmodul liefert keine interaktive Quelltextauswahl.");
         const string source = """
             \version "2.24.0"
             \header { title = "Auftakt – Originalprüfung" tagline = ##f }
