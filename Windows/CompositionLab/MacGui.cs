@@ -257,16 +257,16 @@ internal sealed partial class MainForm
         slotTips.SetToolTip(transport.Loop, "Wiederholung ein-/ausschalten (Loop)");
         var play = AddButton(row, "▶", PlayAsync); play.AutoSize = false; play.Size = new Size(36, 26);
         var stop = AddButton(row, "■", () => { player.Stop(); return Task.CompletedTask; }); stop.AutoSize = false; stop.Size = new Size(36, 26); row.Controls.Add(transport.Loop); row.Controls.Add(transport.Time); row.Controls.Add(transport.Position);
-        row.Controls.Add(MacLabel("Tempo")); row.Controls.Add(transport.Tempo); row.Controls.Add(MacLabel("Lautstärke")); row.Controls.Add(transport.Volume);
+        row.Controls.Add(MacLabel("Tempo")); row.Controls.Add(transport.Tempo); row.Controls.Add(MacLabel("Lautstärke (Windows)")); row.Controls.Add(transport.Volume);
         transport.Loop.CheckedChanged += (_, _) => { loopPlaying = transport.Loop.Checked; foreach (var other in transports) if (other != transport) other.Loop.Checked = loopPlaying; };
         transport.Position.Scroll += (_, _) => { if (player.Loaded && !seekUpdating) { player.Seek(transport.Position.Value / 1000d); UpdateTransport(); } };
         transport.Tempo.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter && int.TryParse(transport.Tempo.Text, out int bpm) && bpm is >= 20 and <= 400) { playerBpm = bpm; tempoOverride = true; if (player.Loaded) player.SetTempo(bpm); foreach (var other in transports) other.Tempo.Text = bpm.ToString(); e.SuppressKeyPress = true; } };
-        transport.Volume.Scroll += (_, _) => { playerVolume = transport.Volume.Value; foreach (var other in transports) other.Volume.Value = playerVolume; if (player.Loaded && !player.SetVolume(playerVolume)) SetStatus("Dieser Windows-MIDI-Treiber unterstützt keine Lautstärkeregelung.", true); };
+        // MCI sequencer exposes no reliable per-app volume control. Avoid the blocking\n        // midiOutSetVolume system-driver call on the WinForms UI thread.\n        transport.Volume.Enabled = false;\n        transport.Volume.AccessibleDescription = "Unter Windows vom verwendeten MIDI-Treiber nicht unterstützt; Windows-Lautstärkemixer verwenden.";
         if (!notation) return row;
         // Native playback controls use three explicit rows. A wrapping FlowLayoutPanel
         // can report only its first row while its last slider is already on row two.
         var tempoLabel = row.Controls.Cast<Control>().OfType<Label>().First(c => c.Text == "Tempo");
-        var volumeLabel = row.Controls.Cast<Control>().OfType<Label>().First(c => c.Text == "Lautstärke");
+        var volumeLabel = row.Controls.Cast<Control>().OfType<Label>().First(c => c.Text == "Lautstärke (Windows)");
         row.Controls.Clear(); row.Dispose();
         var fixedPlayer = Grid(1, 3);
         for (int i = 0; i < 3; i++) fixedPlayer.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
@@ -331,7 +331,7 @@ internal sealed partial class MainForm
     async Task PlayAsync()
     {
         if (currentMidi == null) throw new InvalidOperationException("Kein Stück geladen.");
-        if (!player.Loaded) player.Load(currentMidi); if (tempoOverride && playerBpm > 0) player.SetTempo(playerBpm); player.SetVolume(playerVolume); player.Play(); await Task.CompletedTask;
+        if (!player.Loaded) player.Load(currentMidi); if (tempoOverride && playerBpm > 0) player.SetTempo(playerBpm); player.Play(); await Task.CompletedTask;
     }
     void UpdateTransport()
     {
