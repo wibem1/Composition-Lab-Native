@@ -112,21 +112,61 @@ internal sealed partial class MainForm
         finally { pending?.Dispose(); pending = null; SetBusy(false); }
     }
 
+    // LilyPond's point-and-click links contain source.ly:line:column.
+    // Only source locations from the locally generated score are accepted.
+    void SelectLilyPondSource(JsonNode message)
+    {
+        if (Current == null || currentLilyPond == null) return;
+        int line = (int?)message["line"] ?? 0, column = (int?)message["column"] ?? 0;
+        if (line < 1 || column < 1) return;
+        string source = EditableLilyPondText(Current);
+        var lines = source.Split('\n');
+        if (line > lines.Length) return;
+        int start = 0;
+        for (int i = 0; i < line - 1; i++) start += lines[i].Length + 1;
+        start += Math.Min(column - 1, lines[line - 1].Length);
+        if (start > composition.TextLength) return;
+        composition.Focus();
+        composition.SelectionStart = start;
+        composition.SelectionLength = Math.Min(1, composition.TextLength - start);
+        composition.ScrollToCaret();
+        SetStatus("LilyPond: Zeile " + line + ", Spalte " + column + " ausgewählt. Oktave im Editor bearbeiten und Notation aktualisieren.");
+    }
+
     void RenderLilyPond()
     {
         if (!webReady || currentLilyPond == null) return;
-        string pages = JsonSerializer.Serialize(currentLilyPond.Pages.Select(p => "data:image/svg+xml;base64," + Convert.ToBase64String(Encoding.UTF8.GetBytes(p))));
+        // Render SVG inline, not inside <img>: point-and-click anchors need
+        // to be actual DOM nodes to be clickable and selectable.
+        string pages = JsonSerializer.Serialize(currentLilyPond.Pages);
         string html = """
             <!doctype html><html><head><meta charset="utf-8">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
-            <style>html,body{margin:0;background:#eee}#score{padding:12px}img{display:block;width:100%;height:auto;background:white;margin:0 auto 12px}img[hidden]{display:none}
-            @media print{html,body{background:white}#score{padding:0}img,img[hidden]{display:block!important;width:100%!important;margin:0;break-after:page}img:last-child{break-after:auto}}</style></head>
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+            <style>html,body{margin:0;background:#eee}#score{padding:12px}.page{display:block;width:100%;background:white;margin:0 auto 12px}.page svg{display:block;width:100%;height:auto}.page[hidden]{display:none}
+            .page a{cursor:crosshair}.page a:hover{outline:1px solid #bd7d00;outline-offset:3px}.page a.selected{outline:2px solid #e99a10;outline-offset:4px}
+            @media print{html,body{background:white}#score{padding:0}.page,.page[hidden]{display:block!important;width:100%!important;margin:0;break-after:page}.page:last-child{break-after:auto}}</style></head>
             <body><div id="score"></div><script>
             const images=PAGES_VALUE; let currentPage=1,scale=100;
-            const host=document.getElementById('score');images.forEach(src=>{const img=document.createElement('img');img.src=src;host.appendChild(img)});
-            function render(){Array.from(host.children).forEach((img,i)=>{img.hidden=i!==currentPage-1;img.style.width=scale+'%';img.style.maxWidth='none'});window.chrome.webview.postMessage({page:currentPage,count:images.length,zoom:scale})}
+            const host=document.getElementById('score');
+            images.forEach(source=>{const page=document.createElement('div');page.className='page';
+              const parsed=new DOMParser().parseFromString(source,'image/svg+xml');
+              const svg=parsed.documentElement;
+              // LilyPond SVGs are generated locally. Drop active SVG content.
+              svg.querySelectorAll('script,foreignObject').forEach(n=>n.remove());
+              page.appendChild(document.importNode(svg,true));host.appendChild(page)});
+            function render(){Array.from(host.children).forEach((page,i)=>{page.hidden=i!==currentPage-1;page.style.width=scale+'%';page.style.maxWidth='none'});window.chrome.webview.postMessage({page:currentPage,count:images.length,zoom:scale})}
             function page(delta){currentPage=Math.max(1,Math.min(images.length,currentPage+delta));render();window.scrollTo(0,0)}
             function zoom(delta){scale=Math.max(40,Math.min(300,scale+delta));render()}
+            host.addEventListener('click',event=>{
+              const a=event.target.closest && event.target.closest('a');if(!a)return;
+              const href=a.getAttribute('href')||a.getAttribute('xlink:href')||'';
+              // LilyPond textedit links: textedit:///.../source.ly:LINE:COL:CHAR
+              const match=href.match(/source\\.ly:(\\d+):(\\d+)(?::\\d+)?/i);
+              if(!match)return;event.preventDefault();
+              host.querySelectorAll('a.selected').forEach(n=>n.classList.remove('selected'));
+              a.classList.add('selected');
+              window.chrome.webview.postMessage({action:'select-source',line:Number(match[1]),column:Number(match[2])});
+            });
             render();
             </script></body></html>
             """;
@@ -134,8 +174,6 @@ internal sealed partial class MainForm
         string folder = Path.Combine(dataDirectory, "LilyPondPreviews"); Directory.CreateDirectory(folder);
         string hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(content)));
         string path = Path.Combine(folder, hash + ".html");
-        // Immutable preview files cannot be overwritten while WebView2 is reading
-        // an earlier navigation. The revision distinguishes repeated requests.
         if (!File.Exists(path)) AtomicFile.WriteText(path, content);
         currentLilyPondPreviewUri = new Uri(path).AbsoluteUri + "?view=" + Guid.NewGuid().ToString("N");
         web.CoreWebView2.Navigate(currentLilyPondPreviewUri);
