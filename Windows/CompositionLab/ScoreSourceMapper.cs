@@ -58,7 +58,7 @@ internal static class ScoreSourceMapper
             throw new InvalidOperationException("ScoreSourceMapper: stale source accepted.");
         if (Map(music, music, new(20,1), new(20,2)).Failure != Error.InvalidPosition)
             throw new InvalidOperationException("ScoreSourceMapper: invalid source location accepted.");
-        const string wrapped = "Überschrift\\n```lilypond\\n" + music.TrimEnd('\\n') + "\\n```";
+        const string wrapped = "Überschrift\n```lilypond\n" + music.TrimEnd('\n') + "\n```";
         var wrappedResult = Map(wrapped, wrapped, new(1, 1), new(2, 2));
         if (wrappedResult.Failure != Error.None ||
             wrappedResult.Range?.Start != wrapped.IndexOf("c'4", StringComparison.Ordinal))
