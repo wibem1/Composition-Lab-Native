@@ -189,7 +189,24 @@ internal sealed partial class MainForm : Form
         {
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(dataDirectory, "WebView2"));
             await web.EnsureCoreWebView2Async(environment);
-            webReady = true; web.CoreWebView2.WebMessageReceived += (_, e) => { try { var message = JsonNode.Parse(e.WebMessageAsJson)!; previewPage.Text = "Seite " + message["page"] + " / " + message["count"]; previewZoom.Text = message["zoom"] + " %"; } catch (JsonException) { } }; web.CoreWebView2.Settings.AreDevToolsEnabled = false;
+            webReady = true; web.CoreWebView2.WebMessageReceived += (_, e) =>
+            {
+                try
+                {
+                    var message = JsonNode.Parse(e.WebMessageAsJson)!;
+                    if (message["action"]?.GetValue<string>() == "select-source")
+                    {
+                        SelectLilyPondSource(message);
+                        return;
+                    }
+                    if (message["page"] != null) previewPage.Text = "Seite " + message["page"] + " / " + message["count"];
+                    if (message["zoom"] != null) previewZoom.Text = message["zoom"] + " %";
+                }
+                catch (Exception error) when (error is JsonException or InvalidOperationException or FormatException)
+                {
+                    SetStatus("Ungültige Notenauswahl: " + error.Message, true);
+                }
+            }; web.CoreWebView2.Settings.AreDevToolsEnabled = false;
             web.CoreWebView2.Settings.IsStatusBarEnabled = false;
             web.CoreWebView2.NewWindowRequested += (_, e) => e.Handled = true;
             RenderNotation();
