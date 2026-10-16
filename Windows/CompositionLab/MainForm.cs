@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.11";
+    const string Version = "4.12";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -301,12 +301,12 @@ internal sealed partial class MainForm : Form
     public async Task<string> RunSelfTestAsync(string output)
     {
         Directory.CreateDirectory(output);
-        // Guard the intentionally compact V4.11 interface against button/menu duplication.
+        // Guard the intentionally compact V4.12 interface against button/menu duplication.
         var topMenus = MainMenuStrip?.Items.OfType<ToolStripMenuItem>().ToArray()
-            ?? throw new Exception("V4.11-Menüleiste fehlt.");
+            ?? throw new Exception("V4.12-Menüleiste fehlt.");
         if (!topMenus.Select(item => item.Text).SequenceEqual(new[] {
                 "Datei", "Bearbeiten", "Komposition", "Einstellungen", "Hilfe"
-            })) throw new Exception("V4.11-Menüstruktur ist nicht konsolidiert.");
+            })) throw new Exception("V4.12-Menüstruktur ist nicht konsolidiert.");
         var menuLabels = topMenus.SelectMany(item => item.DropDownItems.OfType<ToolStripMenuItem>())
             .Select(item => item.Text).ToHashSet();
         foreach (string essential in new[] {
