@@ -87,7 +87,7 @@ internal sealed partial class MainForm
                 pieceHistory.Add(RestoreProjectPiece(saved));
         RefreshHistory();
 
-        Array.Copy(imported, documents, documents.Length);
+        documents.ReplaceAll(imported);
         projectName = project["name"]?.GetValue<string>() ?? "Unbenannt";
         chat.Text = project["chat"]?.GetValue<string>() ?? "";
         loadingIdea = true;
