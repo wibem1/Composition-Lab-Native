@@ -40,7 +40,7 @@ internal sealed partial class MainForm : Form
     readonly Button compose = new StudioButton() { Text = "Komponieren", AutoSize = true, Primary = true };
     readonly Button send = new StudioButton() { Text = "Chat", AutoSize = true };
     readonly Button cancel = new StudioButton() { Text = "Abbrechen", AutoSize = true, Enabled = false };
-    readonly ToolStripStatusLabel status = new() { Text = "Bereit", Spring = true, TextAlign = ContentAlignment.MiddleLeft };
+    readonly ToolStripStatusLabel status = new() { Text = "Bereit", Spring = true, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 12f, FontStyle.Bold) };
     readonly ToolStripStatusLabel cost = new() { Text = "Kosten: –" };
     readonly Label pieceTitle = new() { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8), Text = "Kein Stück geladen" };
     readonly Label playback = new() { AutoSize = true, Padding = new Padding(10, 7, 0, 0), Text = "00:00 / 00:00" };
@@ -356,7 +356,8 @@ internal sealed partial class MainForm : Form
         busy = value; compose.Enabled = !value; send.Enabled = !value; cancel.Enabled = value;
         if (modelsButton != null) modelsButton.Enabled = !value;
         provider.Enabled = !value; model.Enabled = !value; effort.Enabled = !value; apiKey.Enabled = !value;
-        if (!value) SelectModel();
+        if (value) SetStatus("Bitte warten …");
+        else { status.ForeColor = Color.Black; SelectModel(); }
     }
 
     JsonObject CreateDocument(JsonObject score, string concept, string userAssignment = "") => new()
@@ -725,7 +726,7 @@ internal sealed partial class MainForm : Form
         }
         catch (Exception e) { SetStatus("Speichern fehlgeschlagen: " + e.Message, true); }
     }
-    void SetStatus(string text, bool error = false) { status.Text = text; status.ForeColor = error ? Color.DarkRed : Color.Black; }
+    void SetStatus(string text, bool error = false) { status.Text = busy && !error ? "● KI arbeitet · " + text : text; status.ForeColor = error ? Color.DarkRed : busy ? Color.ForestGreen : Color.Black; }
     static string FormatTime(int ms) => TimeSpan.FromMilliseconds(ms).ToString(@"mm\:ss");
     static string SafeName(string title) => string.Concat(title.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
     static string RepairLegacyText(string text)
