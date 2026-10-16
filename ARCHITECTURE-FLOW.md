@@ -8,7 +8,7 @@ Stand: 16.10.2026 · Branch `v4-cross-platform` · **schrittweiser Umbau, nicht 
 flowchart TB
     GUI["Windows- oder Mac-Oberfläche\nEingaben, Anzeige, Benutzerereignisse"]
     WC["WorkspaceController\nKoordination, Abbruch, Revisionen\nGEPLANT"]
-    DOC["DocumentStore\nSlots, Partiturversionen\nGEPLANT"]
+    DOC["SlotDocumentStore\nSlots, freier Platz, Bulk-Ersatz\nEXTRAHIERT"]
     COMP["CompositionService\nKI-Anfrage, Ergebnisprüfung\nGEPLANT"]
     CORE["CompositionCore\nMusikmodell, MIDI, MusicXML\nVORHANDEN"]
     REND["LilyPondCompiler\nQuelle → SVG + MIDI\nVORHANDEN"]
@@ -101,10 +101,23 @@ Pfad: `Windows/CompositionLab/ProjectWorkspaceCodec.cs`. Reines Modul zum Zusamm
 - **Grenzfälle:** Ungültige aktive Slotnummer wird abgelehnt; Eingabedaten werden beim Serialisieren geklont, damit spätere Bearbeitung den Export nicht verändert.
 - **Noch ausstehend:** `WorkspacePersistence` für Dateizugriff, Validierung und transaktionales Projektladen; noch im GUI-Adapter.
 
+## Sechster realer Modulschnitt: SlotDocumentStore
+
+Pfad: `Windows/CompositionLab/SlotDocumentStore.cs`. Speichert Slots hinter einer eigenen Schnittstelle statt eines von allen Dateien gemeinsam verwalteten Arrays.
+
+- `new SlotDocumentStore(capacity:int)`: positive Kapazität erforderlich.
+- `this[index:int]: JsonObject?` (get/set): prüft Indexgrenzen über Arrayindexer; erlaubt gezielten Slotzugriff und bewusstes Entfernen mit `null`.
+- `FirstFreeIndex() -> int`: erster freier Slot oder `-1`.
+- `IndexOfReference(document:JsonObject) -> int`: eindeutige Referenzposition oder `-1`, für Undo/Redo.
+- `ReplaceAll(next:IReadOnlyList<JsonObject?>) -> void`: vollständige, synchrone Übernahme nach passender Slotanzahl. Bei Abweichung Fehler **ohne Änderung**.
+- `Count`, `Length`, `IEnumerable<JsonObject?>`: lesende Integrationsschnittstellen mit vorhandenen Export-/GUI-Workflows.
+
+**Wichtige Übergangsbeschränkung:** Die enthaltenen `JsonObject`-Partituren bleiben vorerst in-place veränderbar. Ein zukünftiges Modul für immutable Dokumentrevisionen ist nötig, bevor wir vollständige Transaktionssicherheit behaupten können.
+
 ## Weiterer Umbau – Reihenfolge
 
 1. Die jetzt extrahierte Revisionsprüfung in einen vollständigen `WorkspaceController` mit Abbruch- und Commitregeln integrieren; keine Ergebnisse alter Slotwechsel übernehmen.
-2. Slotbesitz und Partiturrevision (`DocumentStore`) von GUI-Feldern trennen.
+2. Das jetzt isolierte `SlotDocumentStore` weiter von direkter `JsonObject`-Mutation entkoppeln; atomare Partiturrevisionen und Besitzerregeln einführen.
 3. Persistenz transaktional auslagern (`WorkspacePersistence`), alte `.clab`-/Projektdateien erhalten.
 4. SVG-Notenauswahl und Editoreingriff als separate Adapter mit klarer Quellrevision.
 5. KI-Kompositionsablauf und Player durch explizite Services/Adapter ersetzen, Regressionen erhalten.
