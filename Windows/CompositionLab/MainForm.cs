@@ -823,6 +823,15 @@ internal sealed partial class MainForm : Form
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         const string recoveredText = "Für Klavier – vollständiges Stück";
         var oldEncodingText = Encoding.GetEncoding(1252).GetString(Encoding.UTF8.GetBytes(recoveredText));
+        // Diagnostics saved after a conversion failure may contain the usable score
+        // only in the nested source snapshot. Empty outer fields must not mask it.
+        const string diagnosticMusic = "\\version \"2.24.0\"\\n\\score { { c'4 d' e' f' } \\layout {} \\midi {} }";
+        var nestedRecovery = new JsonObject {
+            ["text"] = "Antwort ohne Noten",
+            ["sourceDiagnostic"] = new JsonObject { ["composition"] = diagnosticMusic }
+        };
+        if (FinishedMusicFromDiagnostic(nestedRecovery) != diagnosticMusic)
+            throw new Exception("Fertige Komposition in verschachtelter Fehlerdiagnose nicht gefunden.");
         string recoveryFile = Path.Combine(output, "Diagnose-Starttest.json");
         AtomicFile.WriteText(recoveryFile, new JsonObject { ["scoreResponse"] = recoveryScore.ToJsonString(),
             ["composition"] = oldEncodingText, ["assignment"] = "Test", ["estimatedCostUSD"] = 0.1 }.ToJsonString());
