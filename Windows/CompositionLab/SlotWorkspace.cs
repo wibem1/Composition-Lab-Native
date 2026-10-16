@@ -105,7 +105,7 @@ internal sealed partial class MainForm
         for (int i = 0; i < notationCards.Count; i++) { notationCards[i].Text = (documents[i] == null ? "" : "●") + (i + 1); notationCards[i].Selected = i == slots.SelectedIndex; notationCards[i].Invalidate(); }
     }
     void SelectFreeSlot()
-    { int free = Array.FindIndex(documents, d => d == null); if (free < 0) SetStatus("Alle Slots belegt.", true); else slots.SelectedIndex = free; }
+    { int free = documents.FirstFreeIndex(); if (free < 0) SetStatus("Alle Slots belegt.", true); else slots.SelectedIndex = free; }
 
     async Task OpenAsync(int? destination = null)
     {
@@ -117,7 +117,7 @@ internal sealed partial class MainForm
     }
     async Task ImportPathAsync(string path, int? targetSlot = null)
     {
-        int destination = targetSlot ?? (Current == null ? slots.SelectedIndex : Array.FindIndex(documents, d => d == null));
+        int destination = targetSlot ?? (Current == null ? slots.SelectedIndex : documents.FirstFreeIndex());
         if (destination < 0) throw new InvalidOperationException("Alle Slots belegt. Bitte einen Slot freimachen.");
         if (Path.GetExtension(path).Equals(".clabproject", StringComparison.OrdinalIgnoreCase)) { await LoadProjectPathAsync(path); return; }
         var data = await File.ReadAllBytesAsync(path); JsonObject document;
