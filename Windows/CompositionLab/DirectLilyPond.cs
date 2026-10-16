@@ -192,7 +192,7 @@ internal sealed partial class MainForm
               const a=event.target.closest && event.target.closest('a');if(!a)return;
               const href=a.getAttribute('href')||a.getAttribute('xlink:href')||'';
               // LilyPond textedit links: textedit:///.../source.ly:LINE:CHAR:COLUMN
-              const match=href.match(/source\\.ly:(\\d+):(\\d+):(\\d+)/i);
+              const match=href.match(/source\.ly:(\d+):(\d+):(\d+)/i);
               if(!match)return;event.preventDefault();
               if(chosen.has(a)){chosen.delete(a);a.classList.remove('selected')}
               else {chosen.set(a,{line:Number(match[1]),column:Number(match[3])});a.classList.add('selected')}
