@@ -579,9 +579,29 @@ internal sealed partial class MainForm
 
         var help = new ToolStripMenuItem("Hilfe"); menu.Items.Add(help);
         Action(help, "Entwicklungsstand / Über Composition Lab …", () => { ShowDevelopmentInfo(); return Task.CompletedTask; });
+        Action(help, "Tatsächlich gesendeten KI-Auftrag anzeigen …", () => { ShowSentPrompt(); return Task.CompletedTask; });
         Action(help, "Diagnosedatei sichern …", () => { SaveDiagnostic(); return Task.CompletedTask; });
         Action(file, "Noten drucken …", () => { if (webReady) web.CoreWebView2.ShowPrintUI(Microsoft.Web.WebView2.Core.CoreWebView2PrintDialogKind.Browser); return Task.CompletedTask; });
         return menu;
+    }
+
+    void ShowSentPrompt()
+    {
+        string? prompt = lastDiagnostic?["sentUserPrompt"]?.GetValue<string>()
+            ?? lastDiagnostic?["compositionPrompt"]?.GetValue<string>();
+        if (prompt == null)
+        {
+            MessageBox.Show(this, "Noch kein gesendeter Auftrag in der aktuellen Diagnose vorhanden.",
+                "KI-Auftrag", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        using var window = new Form { Text = "Tatsächlich an die KI gesendeter Auftrag",
+            StartPosition = FormStartPosition.CenterParent, Size = new Size(740, 580),
+            MinimumSize = new Size(470, 340) };
+        window.Controls.Add(new TextBox { Dock = DockStyle.Fill, Multiline = true,
+            ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = true,
+            Font = new Font("Consolas", 10), Text = prompt });
+        window.ShowDialog(this);
     }
 
     void ShowDevelopmentInfo()
