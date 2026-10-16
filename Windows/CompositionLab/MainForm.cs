@@ -236,7 +236,7 @@ internal sealed partial class MainForm : Form
                 var state = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
                 if (state["slots"] is JsonArray list)
                     for (int i = 0; i < Math.Min(10, list.Count); i++) documents[i] = list[i]?.DeepClone().AsObject();
-                automaticRegisterReview = state["automaticRegisterReview"]?.GetValue<bool>() ?? true;
+                automaticRegisterReview = state["automaticRegisterReview"]?.GetValue<bool>() ?? false;
                 chat.Text = state["chat"]?.GetValue<string>() ?? "";
                 lastDiagnostic = state["diagnostic"]?.DeepClone().AsObject();
                 pendingComposition = state["pendingComposition"]?.DeepClone().AsObject(); UpdateDiagnostic();
