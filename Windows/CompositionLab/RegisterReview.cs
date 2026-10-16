@@ -11,7 +11,7 @@ internal sealed class RegisterRepairException(string message, JsonObject report)
 
 internal sealed partial class MainForm
 {
-    bool automaticRegisterReview = true, forceRegisterReview;
+    bool automaticRegisterReview = false, forceRegisterReview;
     // Only the repair transport is replaced in offline tests; compilation and
     // validation exercise the same paths as a real composition.
     Func<JsonObject, CancellationToken, Task<JsonObject>>? registerRepairTransport;
@@ -81,7 +81,7 @@ internal sealed partial class MainForm
         var original = await CompileCompositionAsync(music, source, token, updateDiagnostic: false);
         var issues = RegisterIssues(original["score"]!.AsObject(), music);
         original["octaveReview"] = new JsonObject { ["status"] = issues.Count == 0 ? "passed" : "issues", ["issues"] = issues.DeepClone(), ["repairAICalls"] = 0 };
-        if (issues.Count > 0 && (automaticRegisterReview || forceRegisterReview))
+        if (issues.Count > 0 && forceRegisterReview)
         {
             var review = original["octaveReview"]!.AsObject();
             original["originalLilyPond"] = music;
