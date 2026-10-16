@@ -11,6 +11,7 @@ internal sealed partial class MainForm
     {
         ScoreSourceMapper.SelfTest();
         WorkspaceRevisionGate.SelfTest();
+        ProjectPieceCodec.SelfTest();
         var previewDocument = ScorePreviewDocument.Build(new[] { "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>" });
         if (!previewDocument.Contains("Auswahl im Editor öffnen", StringComparison.Ordinal) ||
             !previewDocument.Contains("pointerdown", StringComparison.Ordinal) ||
