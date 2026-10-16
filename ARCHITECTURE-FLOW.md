@@ -16,8 +16,11 @@ flowchart TB
     MAP["ScoreSourceMapper\nQuellkoordinaten → Editorbereich\nEXTRAHIERT"]
     EDIT["Editor / Bearbeiten\nAKTUELL IN MainForm"]
     DISK["WorkspacePersistence\nDateien, Wiederherstellung\nGEPLANT"]
+    CODEC["ProjectPieceCodec\nStück/Verlauf-Metadaten\nEXTRAHIERT"]
+    GATE["WorkspaceRevisionGate\nAsync-Versionsprüfung\nEXTRAHIERT"]
     GUI --> WC
     WC --> DOC
+    WC --> GATE
     WC --> COMP
     COMP --> CORE
     DOC --> REND
@@ -26,7 +29,8 @@ flowchart TB
     MAP --> EDIT
     EDIT --> DOC
     WC --> DISK
-    DOC --> DISK
+    DOC --> CODEC
+    CODEC --> DISK
 ```
 
 Die Pfeile zeigen das geplante **Aufruf-/Datenflussmodell**, nicht lauter bereits implementierte unabhängige Klassen. VORHANDEN und EXTRAHIERT sind echte technische Einheiten. GEPLANT ist ausdrücklich **noch nicht implementiert**.
@@ -66,9 +70,29 @@ flowchart LR
 
 **Vorab-Simulation / Testfälle:** gültige mehrzeilige Auswahl, umgekehrte Auswahl, ungültige Zeile, veralteter Editorinhalt. Die Tests sind in `ScoreSourceMapper.SelfTest` beschrieben und über die Windows-Testreihe verbunden.
 
+## Dritter realer Modulschnitt: WorkspaceRevisionGate
+
+Pfad: `Windows/CompositionLab/WorkspaceRevisionGate.cs`. Zustandseigentümer ausschließlich für die monoton steigende Generation laufender Anzeige-/Ladeoperationen.
+
+- `Begin() -> int`: erhöht die Revision beim Start einer neuen Slotanzeige.
+- `Current -> int`: aktuelle Revision für bereits laufende Arbeit.
+- `IsCurrent(expected:int) -> bool`: alte asynchrone Antworten werden ohne GUI-Abhängigkeit erkannt.
+- Seiteneffekte: Nur interner Revisionszähler; keine Dateizugriffe.
+- Test: Folge zweier Starts muss das ältere Token zuverlässig abweisen.
+
+## Vierter realer Modulschnitt: ProjectPieceCodec
+
+Pfad: `Windows/CompositionLab/ProjectPieceCodec.cs`. Reine Umwandlung gespeicherter Stück-/Verlaufsmetadaten.
+
+- `ToHistory(document:JsonObject, fallbackProvider:string, fallbackModel:string) -> JsonObject`
+- `CopySavedPieceMetadata(source:JsonObject, target:JsonObject) -> void`: überträgt die bekannten optionalen Metadaten mittels DeepClone; die Zielinstanz ist expliziter Output/Seiteneffekt.
+- Fehler: Fehlender Titel oder fehlende Partitur wird abgelehnt.
+- Tests: Musikquelltext und Providerangaben bleiben beim Roundtrip erhalten.
+- **Noch offen:** Vollständige Projektlade- und Commit-Transaktion ist noch mit `MainForm` verbunden; dieses Modul ist nicht schon die komplette Persistenzschicht.
+
 ## Weiterer Umbau – Reihenfolge
 
-1. Koordination und asynchrone Revisionen (`WorkspaceController`) isolieren; keine Ergebnisse alter Slotwechsel übernehmen.
+1. Die jetzt extrahierte Revisionsprüfung in einen vollständigen `WorkspaceController` mit Abbruch- und Commitregeln integrieren; keine Ergebnisse alter Slotwechsel übernehmen.
 2. Slotbesitz und Partiturrevision (`DocumentStore`) von GUI-Feldern trennen.
 3. Persistenz transaktional auslagern (`WorkspacePersistence`), alte `.clab`-/Projektdateien erhalten.
 4. SVG-Notenauswahl und Editoreingriff als separate Adapter mit klarer Quellrevision.
