@@ -22,6 +22,9 @@ internal sealed partial class MainForm
         int generation = ++displayGeneration;
         player.Close(); currentMidi = null; currentXML = null; currentLilyPond = null; currentPath = null;
         var document = Current;
+        // A previous slot's warning must not survive selection of a new slot.
+        SetStatus(document == null ? "Kein Stück geladen." :
+            "Lade Slot " + (slots.SelectedIndex + 1) + ": " + (document["title"]?.GetValue<string>() ?? "Komposition") + " …");
         loadingIdea = true;
         try
         {
@@ -70,7 +73,9 @@ internal sealed partial class MainForm
             }
             cost.Text = document["costUSD"] is JsonValue c && c.TryGetValue<double>(out double n) ? "Stück ca. $" + n.ToString("0.0000") : "Kosten: –";
         }
-        catch (Exception e) { if (generation == displayGeneration) SetStatus(e.Message, true); }
+        catch (Exception e) { if (generation == displayGeneration) SetStatus("Slot " + (slots.SelectedIndex + 1) + ": " + e.Message, true); }
+        if (generation == displayGeneration && document != null && !RegisterNeedsAttention(document))
+            SetStatus("Slot " + (slots.SelectedIndex + 1) + " geladen: " + (document["title"]?.GetValue<string>() ?? "Komposition"));
     }
 
     void RefreshSlots()
