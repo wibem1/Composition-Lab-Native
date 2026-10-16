@@ -58,13 +58,17 @@ internal sealed partial class MainForm
         try
         {
             automaticRegisterReview = true; forceRegisterReview = false;
-            registerRepairTransport = (_, _) => throw new InvalidOperationException("Simulierter Oktavkorrekturfehler");
+            int unwantedAICalls = 0;
+            registerRepairTransport = (_, _) => {
+                unwantedAICalls++;
+                throw new InvalidOperationException("Eine automatische KI-Korrektur darf nicht starten.");
+            };
             var preserved = await CompileCheckedCompositionAsync(extreme,
                 new JsonObject { ["provider"] = "gemini", ["model"] = "offline-test", ["estimatedCostUSD"] = 0d }, CancellationToken.None);
-            if (preserved["octaveReview"]?["status"]?.GetValue<string>() != "warning" ||
+            if (preserved["octaveReview"]?["status"]?.GetValue<string>() != "issues" ||
                 preserved["sourceMidiData"]?.GetValue<string>() is not string midiSource || midiSource.Length < 20 ||
-                preserved["composition"]?.GetValue<string>() != extreme)
-                throw new Exception("Eine fehlgeschlagene automatische Oktavkorrektur verwirft die Originalkomposition.");
+                preserved["composition"]?.GetValue<string>() != extreme || unwantedAICalls != 0)
+                throw new Exception("Die lokale Oktavprüfung muss die Originalkomposition ohne KI-Anfrage erhalten.");
         }
         finally
         {
