@@ -7,16 +7,6 @@ namespace CompositionLab;
 internal sealed partial class MainForm
 {
 
-    // Keep slot and history imports in sync as optional project fields evolve.
-    static void CopySavedPieceMetadata(JsonObject source, JsonObject target)
-    {
-        foreach (string field in new[] {
-            "title", "description", "provider", "model", "costUSD", "inputTokens",
-            "outputTokens", "directLilyPond", "sourceMidiData", "lilyPondSource",
-            "octaveReview", "originalLilyPond"
-        })
-            if (source[field] != null) target[field] = source[field]!.DeepClone();
-    }
     async Task SaveProjectAsync()
     {
         using var dialog = new SaveFileDialog { Filter = "Composition Lab Arbeitsplatz|*.clabproject", FileName = SafeName(projectName) + ".clabproject", OverwritePrompt = true }; if (dialog.ShowDialog(this) != DialogResult.OK) return;
@@ -25,7 +15,7 @@ internal sealed partial class MainForm
         var project = new JsonObject { ["format"] = "composition-lab-v6-project", ["version"] = 1, ["savedAt"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 978307200, ["name"] = projectName, ["settings"] = settings, ["concept"] = composition.Text, ["slots"] = slotsJSON, ["activeSlot"] = slots.SelectedIndex, ["history"] = new JsonArray(pieceHistory.Select(ToHistory).ToArray()), ["chat"] = chat.Text };
         await core.RunAsync(new JsonObject { ["operation"] = "validate-workspace", ["document"] = project.DeepClone() }); AtomicFile.WriteText(dialog.FileName, project.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
-    JsonObject ToHistory(JsonObject document) => new() { ["id"] = Guid.NewGuid().ToString(), ["time"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 978307200, ["title"] = document["title"]!.DeepClone(), ["provider"] = document["provider"]?.DeepClone() ?? JsonValue.Create(activeProvider), ["model"] = document["model"]?.DeepClone() ?? JsonValue.Create(SelectedModelId), ["concept"] = document["concept"]?.DeepClone() ?? JsonValue.Create(""), ["description"] = document["description"]?.DeepClone(), ["score"] = document["score"]!.DeepClone(), ["costUSD"] = document["costUSD"]?.DeepClone(), ["inputTokens"] = document["inputTokens"]?.DeepClone(), ["outputTokens"] = document["outputTokens"]?.DeepClone(), ["directLilyPond"] = document["directLilyPond"]?.DeepClone(), ["sourceMidiData"] = document["sourceMidiData"]?.DeepClone(), ["lilyPondSource"] = document["lilyPondSource"]?.DeepClone(), ["octaveReview"] = document["octaveReview"]?.DeepClone(), ["originalLilyPond"] = document["originalLilyPond"]?.DeepClone() };
+    JsonObject ToHistory(JsonObject document) => ProjectPieceCodec.ToHistory(document, activeProvider, SelectedModelId);
     async Task LoadProjectAsync()
     {
         if (busy) return; using var dialog = new OpenFileDialog { Filter = "Composition Lab Arbeitsplatz|*.clabproject" }; if (dialog.ShowDialog(this) != DialogResult.OK) return;
@@ -36,7 +26,7 @@ internal sealed partial class MainForm
         var restored = CreateDocument(
             saved["score"]!.DeepClone().AsObject(),
             saved["concept"]?.GetValue<string>() ?? "");
-        CopySavedPieceMetadata(saved, restored);
+        ProjectPieceCodec.CopySavedPieceMetadata(saved, restored);
         return restored;
     }
 
