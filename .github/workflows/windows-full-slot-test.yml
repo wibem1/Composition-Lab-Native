@@ -1,7 +1,7 @@
 name: Windows full build and self-test
 on:
   push:
-    branches: [fix/windows-slot-recovery-20261015]
+    branches: [v4-cross-platform]
   workflow_dispatch:
 permissions:
   contents: read
@@ -41,6 +41,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: composition-lab-windows-slot-recovery
-          path: Composition-Lab-4.0-alpha.19-Windows-x64.zip
+          name: composition-lab-v4.1-windows
+          path: Composition-Lab-V4.1-Windows-x64.zip
           if-no-files-found: error
