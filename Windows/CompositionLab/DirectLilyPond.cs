@@ -20,7 +20,7 @@ internal sealed partial class MainForm
     {
         if (busy || Current == null) return;
         var document = Current;
-        int generation = displayGeneration;
+        int generation = workspaceRevisions.Current;
         string editorText = composition.Text;
         string music = EditableLilyPondText(document);
         try
@@ -31,7 +31,7 @@ internal sealed partial class MainForm
                 ["inputTokens"] = document["inputTokens"]?.DeepClone(), ["outputTokens"] = document["outputTokens"]?.DeepClone() };
             var result = await CompileCheckedCompositionAsync(music, source, pending.Token, updateDiagnostic: false);
             // A different slot or a new edit must never receive an older result.
-            if (!ReferenceEquals(Current, document) || generation != displayGeneration || composition.Text != editorText)
+            if (!ReferenceEquals(Current, document) || !workspaceRevisions.IsCurrent(generation) || composition.Text != editorText)
             { SetStatus("Der Quelltext oder das Stück wurde inzwischen geändert. Bitte erneut aktualisieren."); return; }
             SaveScoreUndoSnapshot(document);
             document["lilyPondSource"] = result["composition"]!.DeepClone();
