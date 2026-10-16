@@ -29,7 +29,7 @@ internal sealed partial class MainForm
         control.Width = control == model ? Math.Min(LayoutPixels(260), Math.Max(LayoutPixels(148), needed)) : Math.Max(control.Width, needed);
         control.DropDownWidth = Math.Min(Math.Max(control.Width, needed), Math.Max(control.Width, Screen.FromControl(this).WorkingArea.Width - LayoutPixels(32)));
     }
-    readonly TextBox chatInput = new() { PlaceholderText = "Auftrag eingeben · Strg+Enter zum Senden", Multiline = true, WordWrap = true, AcceptsReturn = true, ScrollBars = ScrollBars.Vertical };
+    readonly TextBox chatInput = new() { PlaceholderText = "Nachricht eingeben", Multiline = true, WordWrap = true, AcceptsReturn = true, ScrollBars = ScrollBars.Vertical };
     Action? toggleLargePreview;
     Button? modelsButton;
     Control? notationTransport;
@@ -101,7 +101,7 @@ internal sealed partial class MainForm
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28)); Controls.Add(root);
         root.Controls.Add(BuildMacMenus(), 0, 0);
         var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(233, 233, 233), Margin = Padding.Empty };
-        var project = MacLabel("Composition Lab · Composition Engine 2.3.1 · Build 231", 15, true); project.AutoSize = false; project.AutoEllipsis = true; header.Controls.Add(project);
+        var project = MacLabel("Composition Lab V4.1", 15, true); project.AutoSize = false; project.AutoEllipsis = true; header.Controls.Add(project);
         var navigation = MacRow(); navigation.Dock = DockStyle.None; navigation.Size = new Size(408, 34); navigation.WrapContents = false;
         foreach (string label in new[] { "Main", "Noten", "Technik" })
         { int index = navButtons.Count; var button = new StudioButton { Text = label, Width = 126, Height = 28, AutoSize = false, Selected = index == 0 }; button.Click += (_, _) => tabs.SelectedIndex = index; navButtons.Add(button); navigation.Controls.Add(button); }
@@ -343,7 +343,7 @@ internal sealed partial class MainForm
     {
         using var dialog = new Form { Text = "Musikalisches Motiv", Size = new Size(440, 180), StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
         var layout = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(14) };
-        layout.Controls.Add(new Label { Text = "Wie lang soll das Motiv sein? Komponieren setzt den vorbereiteten Auftrag anschließend um.", Width = 390, Height = 45 });
+        layout.Controls.Add(new Label { Text = "Motivlänge wählen", Width = 390, Height = 45 });
         foreach (int bars in new[] { 2, 4, 8 }) { var button = new Button { Text = bars + " Takte", AutoSize = true }; button.Click += (_, _) => { measures.Text = bars.ToString(); composition.Text = $"Komponiere ein prägnantes musikalisches Motiv von {bars} Takten als Ausgangspunkt für eine spätere Komposition. Übernimm die aktuell gewählte Besetzung, Tonart, Taktart und das Tempo."; chatInput.Clear(); dialog.Close(); }; layout.Controls.Add(button); }
         dialog.Controls.Add(layout); dialog.ShowDialog(this); return Task.CompletedTask;
     }
@@ -354,7 +354,7 @@ internal sealed partial class MainForm
         var settingsContent = new Panel { Dock = DockStyle.Top, Padding = new Padding(16), BackColor = StudioTheme.Canvas };
         void AddSetting(Control control) { control.Dock = DockStyle.None; settingsContent.Controls.Add(control); }
         settings.Controls.Add(settingsContent);
-        AddSetting(MacLabel("Noten", 17, true)); AddSetting(new Label { Text = "Darstellungsquantisierung für MusicXML. Die MIDI-Daten und die Komposition bleiben unverändert.", AutoSize = true, MaximumSize = new Size(264, 0), ForeColor = StudioTheme.Muted, Font = MacFont(12) });
+        AddSetting(MacLabel("Noten", 17, true)); AddSetting(new Label { Text = "Nur MusicXML-Notenbild; MIDI bleibt unverändert.", AutoSize = true, MaximumSize = new Size(264, 0), ForeColor = StudioTheme.Muted, Font = MacFont(12) });
         var quantizationTitle = MacLabel("Quantisierung", 17, true); quantizationTitle.MaximumSize = new Size(264, 0); AddSetting(quantizationTitle);
         string[] titles = ["Preset", "Rhythmusmodus", "Kleinster gerader Notenwert", "Kleinster triolischer Notenwert", "Kurze Pausen", "Notenlängen glätten", "Mini-Pausen am Taktanfang", "Darstellung", "Splitpunkt"];
         string[][] choices = [["Klavier – lesbar", "MIDI-nah", "Benutzerdefiniert"], ["Auto", "Gerade", "Triolisch"], ["Aus", "Viertel", "Achtel", "16tel", "32tel", "64tel"], ["Aus", "Vierteltriolen", "Achteltriolen", "16teltriolen", "32teltriolen"], ["Alle Pausen zeigen", "bis 32tel glätten", "bis 16tel glätten", "bis Achtel glätten"], ["Aus", "Leicht", "Mittel", "Stark"], ["Aus", "bis 32tel", "bis 16tel", "bis Achtel"], ["Automatisch", "Ein System", "Zwei Systeme"], ["C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"]];
@@ -501,7 +501,7 @@ internal sealed partial class MainForm
     Control BuildMacTechnology()
     {
         var page = Grid(1, 4); page.Padding = new Padding(18, 16, 18, 16); page.RowStyles.Add(new RowStyle(SizeType.Absolute, 32)); page.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); page.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        page.Controls.Add(MacLabel("Technik", 17, true), 0, 0); page.Controls.Add(new Label { Text = "API-Schlüssel, MIDI-Ausgabe, technische Prüfung, JSON, Diagnose und Verlauf. Diese Werkzeuge sind bewusst von der musikalischen Hauptseite getrennt.", Dock = DockStyle.Fill, Font = MacFont(12), ForeColor = StudioTheme.Muted }, 0, 1);
+        page.Controls.Add(MacLabel("Technik", 17, true), 0, 0); page.Controls.Add(new Label { Text = "Einstellungen, Diagnose und Verlauf", Dock = DockStyle.Fill, Font = MacFont(12), ForeColor = StudioTheme.Muted }, 0, 1);
         var actions = MacRow(); AddButton(actions, "API-Schlüssel …", ShowKeys); AddButton(actions, "MIDI-Ausgabe …", ShowMidiOutput); AddButton(actions, "CLAB öffnen …", () => OpenAsync()); AddButton(actions, "CLAB sichern …", SaveDocumentAsync); AddButton(actions, "JSON sichern …", SaveScoreJSON); page.Controls.Add(actions, 0, 2);
         var pages = new TabControl { Dock = DockStyle.Fill }; foreach (var pair in new[] { ("Technische Prüfung", (Control)validation), ("JSON", (Control)scoreJSON), ("Verlauf", BuildHistory()) }) { var tab = new TabPage(pair.Item1); tab.Controls.Add(pair.Item2); pages.TabPages.Add(tab); } page.Controls.Add(pages, 0, 3);
         return ScrollWorkspace(page, 1000, 640);
