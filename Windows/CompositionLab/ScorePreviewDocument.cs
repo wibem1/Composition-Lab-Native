@@ -1,0 +1,110 @@
+using System.Text.Json;
+
+namespace CompositionLab;
+
+/// <summary>
+/// Pure HTML/SVG preview document builder. Does not know about WebView2,
+/// workspace selection, files, MIDI, or the WinForms editor.
+/// Input: immutable page SVGs; output: a self-contained preview HTML string.
+/// </summary>
+internal static class ScorePreviewDocument
+{
+    internal static string Build(string[] svgPages)
+    {
+        if (svgPages == null || svgPages.Length == 0) throw new ArgumentException("A score must contain at least one SVG page.", nameof(svgPages));
+        string pages = JsonSerializer.Serialize(svgPages);
+        string html = """
+            <!doctype html><html><head><meta charset="utf-8">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+            <style>html,body{margin:0;background:#eee}#score{padding:12px}.page{display:block;width:100%;background:white;margin:0 auto 12px}.page svg{display:block;width:100%;height:auto}.page[hidden]{display:none}
+            .page a{cursor:crosshair}.page a:hover{outline:1px solid #bd7d00;outline-offset:3px}.page a.selected{outline:2px solid #e99a10;outline-offset:4px}
+            #selection{position:sticky;top:0;z-index:10;padding:8px;background:#fff;border-bottom:1px solid #ccc;display:flex;gap:12px;align-items:center;font:13px Segoe UI,sans-serif}
+            #selection button{padding:6px 12px;cursor:pointer}
+            @media print{#selection{display:none}}
+            @media print{html,body{background:white}#score{padding:0}.page,.page[hidden]{display:block!important;width:100%!important;margin:0;break-after:page}.page:last-child{break-after:auto}}</style></head>
+            <body><div id="selection"><span id="selectionCount">Note anklicken oder mit gedrückter Maus über die Passage ziehen.</span><button id="openSelection" disabled>Auswahl im Editor öffnen</button><button id="clearSelection">Auswahl aufheben</button></div><div id="score"></div><script>
+            const images=PAGES_VALUE; let currentPage=1,scale=100;
+            const host=document.getElementById('score');
+            images.forEach(source=>{const page=document.createElement('div');page.className='page';
+              const parsed=new DOMParser().parseFromString(source,'image/svg+xml');
+              const svg=parsed.documentElement;
+              // LilyPond SVGs are generated locally. Drop active SVG content.
+              svg.querySelectorAll('script,foreignObject').forEach(n=>n.remove());
+              page.appendChild(document.importNode(svg,true));host.appendChild(page)});
+            function render(){Array.from(host.children).forEach((page,i)=>{page.hidden=i!==currentPage-1;page.style.width=scale+'%';page.style.maxWidth='none'});window.chrome.webview.postMessage({page:currentPage,count:images.length,zoom:scale})}
+            function page(delta){currentPage=Math.max(1,Math.min(images.length,currentPage+delta));render();window.scrollTo(0,0)}
+            function zoom(delta){scale=Math.max(40,Math.min(300,scale+delta));render()}
+            const chosen=new Map();
+            const count=document.getElementById('selectionCount');
+            const open=document.getElementById('openSelection');
+            const linkLocation=a=>{
+              if(!a)return null;
+              const href=a.getAttribute('href')||a.getAttribute('xlink:href')||'';
+              const m=href.match(/source\.ly:(\d+):(\d+):(\d+)/i);
+              return m?{line:Number(m[1]),column:Number(m[3])}:null;
+            };
+            const links=Array.from(host.querySelectorAll('a')).filter(a=>linkLocation(a));
+            const nearestLink=target=>target && target.closest ? target.closest('a') : null;
+            function updateSelection(){count.textContent=chosen.size+' Noten markiert';open.disabled=chosen.size===0}
+            function clear(){chosen.forEach((_,a)=>a.classList.remove('selected'));chosen.clear();updateSelection()}
+            function setNote(a,on){const loc=linkLocation(a);if(!loc)return;
+              if(on){chosen.set(a,loc);a.classList.add('selected')}
+              else {chosen.delete(a);a.classList.remove('selected')}
+              updateSelection();
+            }
+            function markRange(first,last){
+              const a=links.indexOf(first),b=links.indexOf(last);
+              if(a<0||b<0)return;
+              clear();
+              for(let i=Math.min(a,b);i<=Math.max(a,b);i++)setNote(links[i],true);
+            }
+            function openEditor(){
+              if(!chosen.size)return;
+              const notes=Array.from(chosen.values()).sort((a,b)=>a.line-b.line||a.column-b.column);
+              const first=notes[0],last=notes[notes.length-1];
+              window.chrome.webview.postMessage({action:'select-source',line:first.line,column:first.column,endLine:last.line,endColumn:last.column});
+            }
+            open.addEventListener('click',openEditor);
+            document.getElementById('clearSelection').addEventListener('click',clear);
+            // Single click toggles notes. Dragging across anchored notes selects
+            // a contiguous range, including beamed passages and multiple notes.
+            let dragStart=null,dragEnd=null,didDrag=false,suppressClick=false;
+            host.addEventListener('pointerdown',event=>{
+              if(event.button!==0)return;
+              const a=nearestLink(event.target);if(!linkLocation(a))return;
+              dragStart=a;dragEnd=a;didDrag=false;
+              event.preventDefault();
+            });
+            host.addEventListener('pointermove',event=>{
+              if(!dragStart || !(event.buttons&1))return;
+              const at=document.elementFromPoint(event.clientX,event.clientY);
+              const fromPoint=nearestLink(at);
+              const a=linkLocation(fromPoint)?fromPoint:nearestLink(event.target);
+              if(!linkLocation(a)||a===dragEnd)return;
+              dragEnd=a;didDrag=true;markRange(dragStart,dragEnd);
+              event.preventDefault();
+            });
+            document.addEventListener('pointerup',event=>{
+              if(!dragStart)return;
+              const last=dragEnd,first=dragStart,wasDrag=didDrag;
+              dragStart=null;dragEnd=null;didDrag=false;
+              suppressClick=true;
+              if(wasDrag)markRange(first,last);
+              else setNote(first,!chosen.has(first));
+              event.preventDefault();
+            });
+            host.addEventListener('click',event=>{
+              const a=nearestLink(event.target);
+              if(!linkLocation(a))return;
+              event.preventDefault();
+              if(suppressClick){suppressClick=false;return}
+              // Also supports keyboard-activated links and synthetic clicks.
+              setNote(a,!chosen.has(a));
+            });
+            host.addEventListener('dragstart',event=>event.preventDefault());
+            render();
+            </script></body></html>
+            """;
+        return html.Replace("PAGES_VALUE", pages);
+    }
+}

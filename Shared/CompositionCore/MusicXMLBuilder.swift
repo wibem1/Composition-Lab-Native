@@ -1167,12 +1167,13 @@ enum MusicXMLBuilder {
     }
 
     private static func defaultClefSign(_ program: Int) -> String {
-        // Cello/Bass-Familien bekommen Bassschlüssel; ansonsten Violinschlüssel.
-        if (32...43).contains(program) { return "F" }
+        // Zero-based GM: bass 32–39, violin 40, viola 41, cello 42, contrabass 43.
+        if program == 41 { return "C" }
+        if (32...39).contains(program) || program == 42 || program == 43 { return "F" }
         return "G"
     }
     private static func defaultClefLine(_ program: Int) -> Int {
-        defaultClefSign(program) == "F" ? 4 : 2
+        program == 41 ? 3 : (defaultClefSign(program) == "F" ? 4 : 2)
     }
 
     private static func esc(_ s: String) -> String {

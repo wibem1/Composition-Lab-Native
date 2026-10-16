@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 enum KeychainStore {
-    private static let service = "AI MIDI Composer Native Concept"
+    private static let service = "Composition Lab Native V4"
     private static var cache: [Provider:String] = [:]
     private static var attemptedLoads = Set<Provider>()
 

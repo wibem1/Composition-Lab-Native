@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationXML)
+import FoundationXML
+#endif
 
 /// Importiert gebräuchliche MusicXML-Partituren (score-partwise) in das interne
 /// Composition-Lab-Scoreformat. Noten, Stimmen/Backups, Taktart, Tempo, Tonart,

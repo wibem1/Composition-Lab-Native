@@ -141,8 +141,8 @@ struct StudioProBridgeDocument: Codable {
 
 enum StudioProBridge {
     static let fileName = "CompositionLab_StudioPro_Bridge.json"
-    static let returnMIDIFileName = "CompositionLab_Return.mid"
-    static let returnJSONFileName = "CompositionLab_Return.json"
+    static let returnMIDIFileName = "CompositionLab_V4_Return.mid"
+    static let returnJSONFileName = "CompositionLab_V4_Return.json"
 
     /// Studio Pro's $USERCONTENT location is intentionally not assumed.
     /// We search the user's Documents tree for the single bridge filename.

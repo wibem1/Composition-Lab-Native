@@ -1,0 +1,211 @@
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+
+namespace CompositionLab;
+
+// Creative model request, conversion, acceptance, and busy state.
+internal sealed partial class MainForm
+{
+    async Task RequestAIAsync(bool makeMusic)
+    {
+        if (busy) return;
+        if (makeMusic) assignment.Text = composition.Text.Length > 0 ? composition.Text : assignment.Text;
+        string inputText = makeMusic ? assignment.Text : chatInput.Text;
+        if (string.IsNullOrWhiteSpace(inputText)) { SetStatus("Bitte einen Auftrag eingeben.", true); return; }
+        if (string.IsNullOrWhiteSpace(apiKey.Text)) { SetStatus("Bitte API-Schlüssel eingeben.", true); return; }
+        int destination = -1;
+        if (makeMusic)
+        {
+            destination = Current == null ? slots.SelectedIndex : documents.FirstFreeIndex();
+            if (destination < 0) { SetStatus("Alle zehn Slots sind belegt. Bitte zuerst ein Stück speichern und einen Slot leeren.", true); return; }
+        }
+        string userText = inputText.Trim();
+        // V4.11: The user's assignment is transmitted verbatim. No hidden
+        // orchestration prompt, prior chat, pitch instructions or form constraints.
+        string instruction = userText;
+        var request = new JsonObject { ["assignment"] = instruction, ["provider"] = activeProvider,
+            ["model"] = SelectedModelId, ["effort"] = effort.SelectedIndex switch { 0 => "low", 2 => "high", _ => "medium" } };
+        string selectedProvider = activeProvider, selectedModel = SelectedModelId;
+        try
+        {
+            StoreKey(); pending = new CancellationTokenSource(); SetBusy(true);
+            chat.AppendText("Du: " + userText + "\n\n");
+            SetStatus(makeMusic ? "KI komponiert …" : "KI antwortet …");
+            var response = await core.RunAsync(new JsonObject { ["operation"] = makeMusic ? "compose-source" : "chat",
+                ["apiKey"] = apiKey.Text.Trim(), ["request"] = request }, pending.Token,
+                stage => SetStatus(stage == "technical-translation-request" ? "Technische Übertragung der fertigen Komposition …" : "KI komponiert …"));
+            var result = response["result"]!.AsObject();
+            lastDiagnostic = result.DeepClone().AsObject();
+            lastDiagnostic["interface"] = "Windows WinForms"; lastDiagnostic["interfaceVersion"] = Version;
+            UpdateDiagnostic();
+            if (makeMusic)
+            {
+                PreservePendingComposition(result["composition"]!.GetValue<string>(), result, userText, selectedProvider, selectedModel);
+                var locallyImported = await ImportAIResponseLocallyAsync(
+                    result["composition"]!.GetValue<string>(), result, pending.Token);
+                if (locallyImported == null)
+                {
+                    chat.AppendText("KI: Vollständige Originalantwort gesichert. Das Format ist nicht lokal lesbar; keine automatische zweite KI-Anfrage.\n\n");
+                    composition.Text = result["composition"]!.GetValue<string>();
+                    cost.Text = "Anfrage ca. $" + result["estimatedCostUSD"]!.GetValue<double>().ToString("0.0000");
+                    SetStatus("Original gesichert; zur Notendarstellung ist eine ausdrücklich beauftragte Übertragung erforderlich.");
+                    SaveLocalState();
+                    return;
+                }
+                result = locallyImported;
+                var document = await AcceptCompositionAsync(result, destination, userText, selectedProvider, selectedModel);
+                chat.AppendText("KI: Stück fertig: " + document["title"]?.GetValue<string>() + "\n\n");
+            }
+            else
+            {
+                string answer = result["text"]!.GetValue<string>(); chat.AppendText("KI: " + answer + "\n\n"); chatInput.Clear();
+                SaveLocalState(); // Keep the full answer before any translation or slot validation can fail.
+                if (ContainsFinishedMusic(answer))
+                {
+                    destination = documents.FirstFreeIndex();
+                    if (destination < 0) throw new InvalidOperationException("Komposition erhalten, aber alle Slots sind belegt. Einen Slot leeren und unter Komposition → Fertige Komposition übernehmen fortsetzen.");
+                    PreservePendingComposition(answer, result, userText, selectedProvider, selectedModel);
+                    var translated = await CompileCheckedCompositionAsync(answer, result, pending.Token);
+                    result = translated;
+                    var document = await AcceptCompositionAsync(result, destination, userText, selectedProvider, selectedModel);
+                    chat.AppendText("KI: Stück übernommen in Slot " + (destination + 1) + ": " + document["title"] + "\n\n");
+                    makeMusic = true;
+                }
+                else if (string.IsNullOrWhiteSpace(composition.Text)) composition.Text = answer;
+            }
+            cost.Text = "Anfrage ca. $" + result["estimatedCostUSD"]!.GetValue<double>().ToString("0.0000");
+            SetMusicStatus(result, makeMusic ? "Komposition abgeschlossen." : "Antwort erhalten."); SaveLocalState();
+        }
+        catch (OperationCanceledException) { SetStatus("Anfrage lokal abgebrochen."); }
+        catch (CoreRequestException e)
+        {
+            var failure = e.Diagnostic?.DeepClone().AsObject() ?? new JsonObject();
+            if (pendingComposition != null) failure["sourceDiagnostic"] = pendingComposition.DeepClone();
+            failure["stage"] = "post-chat-processing-failed";
+            failure["processingError"] = e.Message;
+            lastDiagnostic = failure; UpdateDiagnostic();
+            SetStatus("KI-Antwort gespeichert, Ausgabe fehlgeschlagen: " + e.Message, true);
+            SaveLocalState();
+        }
+        catch (Exception e)
+        {
+            lastDiagnostic ??= new JsonObject();
+            if (pendingComposition != null) lastDiagnostic["sourceDiagnostic"] = pendingComposition.DeepClone();
+            lastDiagnostic["stage"] = "post-chat-processing-failed";
+            lastDiagnostic["processingError"] = e.ToString();
+            UpdateDiagnostic(); SaveLocalState();
+            SetStatus("KI-Antwort gespeichert, Ausgabe fehlgeschlagen: " + e.Message, true);
+        }
+        finally { pending?.Dispose(); pending = null; SetBusy(false); }
+    }
+
+    // Only deterministic, local interpretation is allowed after the creative call.
+    // Unrecognized formats remain available as exact original responses.
+    async Task<JsonObject?> ImportAIResponseLocallyAsync(
+        string original, JsonObject source, CancellationToken token)
+    {
+        if (ContainsFinishedMusic(original))
+            return await CompileCheckedCompositionAsync(original, source, token);
+
+        string trimmed = original.Trim();
+        if (trimmed.StartsWith("```", StringComparison.Ordinal))
+        {
+            int newLine = trimmed.IndexOf('\n');
+            int closing = trimmed.LastIndexOf("```", StringComparison.Ordinal);
+            if (newLine >= 0 && closing > newLine)
+                trimmed = trimmed[(newLine + 1)..closing].Trim();
+        }
+
+        JsonObject? score = null;
+        if (trimmed.StartsWith("{", StringComparison.Ordinal))
+        {
+            try
+            {
+                var imported = await core.RunAsync(new JsonObject {
+                    ["operation"] = "recover-score", ["response"] = trimmed
+                }, token);
+                score = imported["score"]?.DeepClone().AsObject();
+            }
+            catch (Exception) when (!token.IsCancellationRequested) { return null; }
+        }
+        else if (trimmed.StartsWith("<?xml", StringComparison.OrdinalIgnoreCase)
+                 || trimmed.StartsWith("<score-partwise", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var imported = await core.RunAsync(new JsonObject {
+                    ["operation"] = "import-musicxml",
+                    ["data"] = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(trimmed)),
+                    ["title"] = "Komposition"
+                }, token);
+                score = imported["score"]?.DeepClone().AsObject();
+            }
+            catch (Exception) when (!token.IsCancellationRequested) { return null; }
+        }
+        if (score == null) return null;
+        var result = source.DeepClone().AsObject();
+        result["score"] = score;
+        result["composition"] = original;
+        result["stage"] = "locally-imported";
+        result["conversionAICalls"] = 0;
+        return result;
+    }
+
+    static bool ContainsFinishedMusic(string text)
+    {
+        try { return ExtractLilyPond(text).Contains(@"\score"); }
+        catch (InvalidOperationException) { return false; }
+    }
+    async Task<JsonObject> TranslateExistingAsync(string music, JsonObject request, JsonObject source, CancellationToken token)
+    {
+        if (ContainsFinishedMusic(music)) return await CompileCheckedCompositionAsync(music, source, token);
+        // Preserve the established translation route for other complete notation
+        // formats. LilyPond itself never goes through another AI request.
+        var dto = request.DeepClone().AsObject(); dto["composition"] = music;
+        dto["priorInputTokens"] = source["inputTokens"]?.DeepClone() ?? JsonValue.Create(0);
+        dto["priorOutputTokens"] = source["outputTokens"]?.DeepClone() ?? JsonValue.Create(0);
+        dto["priorCostUSD"] = source["estimatedCostUSD"]?.DeepClone() ?? JsonValue.Create(0d);
+        SetStatus("Fertige Komposition wird technisch in MIDI übertragen …");
+        var response = await core.RunAsync(new JsonObject { ["operation"] = "translate-existing", ["apiKey"] = apiKey.Text.Trim(), ["request"] = dto }, token);
+        var result = response["result"]!.AsObject(); lastDiagnostic = result.DeepClone().AsObject();
+        lastDiagnostic["sourceDiagnostic"] = source.DeepClone(); lastDiagnostic["interfaceVersion"] = Version; UpdateDiagnostic();
+        return result;
+    }
+    async Task<JsonObject> AcceptCompositionAsync(JsonObject result, int destination, string userText, string selectedProvider, string selectedModel)
+    {
+        if (destination < 0 || destination >= documents.Length || documents[destination] != null) throw new InvalidOperationException("Der Ziel-Slot ist nicht mehr frei; die fertige Komposition bleibt in der Diagnose erhalten.");
+        var document = CreateDocument(result["score"]!.DeepClone().AsObject(), result["composition"]!.GetValue<string>(), userText);
+        foreach (string field in new[] { "directLilyPond", "sourceMidiData", "octaveReview", "originalLilyPond" }) if (result[field] != null) document[field] = result[field]!.DeepClone();
+        // Validate playback before replacing state; an invalid translation never occupies a slot.
+        await core.RunAsync(new JsonObject { ["operation"] = "midi", ["score"] = document["score"]!.DeepClone() });
+        document["provider"] = selectedProvider; document["model"] = selectedModel;
+        document["costUSD"] = result["estimatedCostUSD"]?.DeepClone();
+        document["inputTokens"] = result["inputTokens"]?.DeepClone(); document["outputTokens"] = result["outputTokens"]?.DeepClone();
+        documents[destination] = document; RememberPiece(document); RefreshSlots();
+        refreshingSlots = true; try { slots.SelectedIndex = destination; } finally { refreshingSlots = false; }
+        // Commit the accepted slot and clear the recovery draft atomically in the saved workspace.
+        pendingComposition = null;
+        SaveLocalState();
+        await DisplayCurrentAsync();
+        return document;
+    }
+    void PreservePendingComposition(string music, JsonObject source, string assignmentText, string selectedProvider, string selectedModel)
+    {
+        pendingComposition = source.DeepClone().AsObject();
+        pendingComposition["composition"] = music;
+        pendingComposition["assignment"] = assignmentText;
+        pendingComposition["provider"] = selectedProvider;
+        pendingComposition["model"] = selectedModel;
+        SaveLocalState(); // Commit the raw LilyPond before potentially failing compilation.
+    }
+
+    void SetBusy(bool value)
+    {
+        busy = value; compose.Enabled = !value; send.Enabled = !value; cancel.Enabled = value;
+        if (modelsButton != null) modelsButton.Enabled = !value;
+        provider.Enabled = !value; model.Enabled = !value; effort.Enabled = !value; apiKey.Enabled = !value;
+        if (value) SetStatus("Bitte warten …");
+        else { status.ForeColor = Color.Black; SelectModel(); }
+    }
+
+}

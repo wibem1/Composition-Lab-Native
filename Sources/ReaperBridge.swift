@@ -105,7 +105,7 @@ struct ReaperBridgeDocument: Codable {
 enum ReaperBridge {
     static var fileURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/REAPER/Composition Lab/reaper_selected_midi.json")
+            .appendingPathComponent("Library/Application Support/REAPER/Composition Lab 4.0/reaper_selected_midi.json")
     }
     static func modificationDate() -> Date? {
         (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.modificationDate]) as? Date
@@ -196,7 +196,7 @@ struct ReaperBridgeResultDocument: Codable {
 extension ReaperBridge {
     static var resultFileURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/REAPER/Composition Lab/composition_lab_result.json")
+            .appendingPathComponent("Library/Application Support/REAPER/Composition Lab 4.0/composition_lab_result.json")
     }
     static func writeResult(score: Score) throws {
         let dir = resultFileURL.deletingLastPathComponent()

@@ -2351,116 +2351,44 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         }
         pendingCompositionSlot = destinationSlot
 
-        let compositionPrompt = ComposerPrompts.compositionPrompt(assignment)
-        lastDiagnostic = [
-            "format": "composition-lab-native-diagnostic",
-            "engineBuild": ComposerPrompts.engineBuild,
-            "engineVersion": ComposerPrompts.referenceVersion,
-            "interface": "macOS AppKit",
-            "interfaceVersion": "3.5.3",
-            "entryPoint": "compose-button",
-            "stage": "composition-request",
-            "destinationSlot": destinationSlot + 1,
-            "assignment": assignment,
-            "compositionPrompt": compositionPrompt,
-            "provider": p.rawValue,
-            "model": m,
-            "reasoning": e.rawValue
-        ]
-
-        status("KI komponiert …", good: true)
-        APIClient.shared.call(provider: p, model: m, key: key, effort: e,
-                              purpose: "composition",
-                              system: ComposerPrompts.system,
-                              user: compositionPrompt,
-                              wantJSON: false) { [weak self] compositionResult in
-            switch compositionResult {
-            case .failure(let error):
-                DispatchQueue.main.async {
-                    self?.pendingCompositionSlot = nil
-                    self?.status("Fehler: \(error.localizedDescription)", good: false)
-                }
-            case .success(let compositionResponse):
-                let composition = compositionResponse.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !composition.isEmpty else {
-                    DispatchQueue.main.async {
-                        self?.pendingCompositionSlot = nil
-                        self?.status("Fehler: Die Komposition ist leer.", good: false)
-                    }
-                    return
-                }
-
-                let translationPrompt = ComposerPrompts.translationPrompt(composition: composition)
-                DispatchQueue.main.async {
-                    if var d = self?.lastDiagnostic {
-                        d["stage"] = "technical-translation-request"
-                        d["composition"] = composition
-                        d["compositionInputTokens"] = compositionResponse.inputTokens
-                        d["compositionOutputTokens"] = compositionResponse.outputTokens
-                        d["translationPrompt"] = translationPrompt
-                        self?.lastDiagnostic = d
-                    }
-                    self?.status("Technische Übertragung der fertigen Komposition …", good: true)
-                }
-
-                APIClient.shared.call(provider: p, model: m, key: key, effort: e,
-                                      purpose: "composition.technical-translation",
-                                      system: ComposerPrompts.system,
-                                      user: translationPrompt,
-                                      wantJSON: true) { [weak self] scoreResult in
-                    switch scoreResult {
-                    case .failure(let error):
-                        DispatchQueue.main.async {
-                            self?.pendingCompositionSlot = nil
-                            self?.status("Fehler: \(error.localizedDescription)", good: false)
-                        }
-                    case .success(let response):
-                        do {
-                            let data = try APIClient.shared.extractJSON(response.text)
-                            let score = try JSONDecoder().decode(Score.self, from: data)
-                            let totalInput = compositionResponse.inputTokens + response.inputTokens
-                            let totalOutput = compositionResponse.outputTokens + response.outputTokens
-                            let costUSD = APICost.estimate(provider: p, model: m,
-                                                          inputTokens: totalInput,
-                                                          outputTokens: totalOutput)
-                            DispatchQueue.main.async {
-                                guard let self else { return }
-                                if var d = self.lastDiagnostic {
-                                    d["stage"] = "completed"
-                                    d["scoreResponse"] = response.text
-                                    d["translationInputTokens"] = response.inputTokens
-                                    d["translationOutputTokens"] = response.outputTokens
-                                    d["inputTokens"] = totalInput
-                                    d["outputTokens"] = totalOutput
-                                    self.lastDiagnostic = d
-                                }
-                                // In Engine 2.3.1 ist die erste kreative Antwort bereits die fertige Komposition; die zweite Stufe übersetzt nur technisch.
-                                self.lastConcept = composition
-                                self.install(score: score,
-                                             concept: composition,
-                                             provider: p,
-                                             model: m,
-                                             costUSD: costUSD,
-                                             inputTokens: totalInput,
-                                             outputTokens: totalOutput)
-                                self.status("Komposition erfolgreich abgeschlossen! · Engine 2.3.1 · API-Kosten ca. \(APICost.display(costUSD))", good: true)
-                            }
-                        } catch {
-                            DispatchQueue.main.async {
-                                self?.pendingCompositionSlot = nil
-                                if var d = self?.lastDiagnostic {
-                                    d["stage"] = "decode-failed"
-                                    d["rawResponse"] = response.text
-                                    d["error"] = error.localizedDescription
-                                    self?.lastDiagnostic = d
-                                }
-                                self?.status("Fehler: \(error.localizedDescription)", good: false)
-                            }
-                        }
-                    }
+        let request = CompositionRequest(assignment: assignment, provider: p, model: m,
+                                         effort: e, key: key)
+        let annotate: ([String: Any]) -> [String: Any] = { diagnostic in
+            var d = diagnostic
+            d["interface"] = "macOS AppKit"
+            d["interfaceVersion"] = CoreServices.version
+            d["entryPoint"] = "compose-button"
+            d["destinationSlot"] = destinationSlot + 1
+            return d
+        }
+        CompositionWorkflow().compose(request, progress: { [weak self] stage, diagnostic in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.lastDiagnostic = annotate(diagnostic)
+                switch stage {
+                case .composition: self.status("KI komponiert …", good: true)
+                case .translation: self.status("Technische Übertragung der fertigen Komposition …", good: true)
+                case .completed, .failed: break
                 }
             }
-        }
+        }, completion: { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .failure(let failure):
+                    self.pendingCompositionSlot = nil
+                    self.lastDiagnostic = annotate(failure.diagnostic)
+                    self.status("Fehler: \(failure.localizedDescription)", good: false)
+                case .success(let work):
+                    self.lastDiagnostic = annotate(work.diagnostic)
+                    self.lastConcept = work.composition
+                    self.install(score: work.score, concept: work.composition,
+                                 provider: p, model: m, costUSD: work.estimatedCostUSD,
+                                 inputTokens: work.inputTokens, outputTokens: work.outputTokens)
+                    self.status("Komposition erfolgreich abgeschlossen! · Engine 2.3.1 · API-Kosten ca. \(APICost.display(work.estimatedCostUSD))", good: true)
+                }
+            }
+        })
     }
 
     private func install(score:Score, concept:String, provider:Provider, model:String, addHistory:Bool = true,
@@ -2811,7 +2739,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             "format": "composition-lab-native-diagnostic",
             "engineBuild": ComposerPrompts.engineBuild,
             "interface": "macOS AppKit",
-            "interfaceVersion": "3.5.3",
+            "interfaceVersion": "4.0.0-alpha.1",
             "entryPoint": "musicchat-context-revise",
             "stage": "revision-request",
             "targetSlot": oneBased,
@@ -2932,7 +2860,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             "format": "composition-lab-native-diagnostic",
             "engineBuild": ComposerPrompts.engineBuild,
             "interface": "macOS AppKit",
-            "interfaceVersion": "3.5.3",
+            "interfaceVersion": "4.0.0-alpha.1",
             "entryPoint": "musicchat",
             "stage": "dialogue-request",
             "userMessage": msg,
