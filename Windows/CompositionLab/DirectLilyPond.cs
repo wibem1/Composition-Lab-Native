@@ -219,7 +219,8 @@ internal sealed partial class MainForm
             host.addEventListener('pointermove',event=>{
               if(!dragStart || !(event.buttons&1))return;
               const at=document.elementFromPoint(event.clientX,event.clientY);
-              const a=nearestLink(at);
+              const fromPoint=nearestLink(at);
+              const a=linkLocation(fromPoint)?fromPoint:nearestLink(event.target);
               if(!linkLocation(a)||a===dragEnd)return;
               dragEnd=a;didDrag=true;markRange(dragStart,dragEnd);
               event.preventDefault();
