@@ -21,6 +21,7 @@ internal sealed partial class MainForm
     {
         int generation = ++displayGeneration;
         player.Close(); currentMidi = null; currentXML = null; currentLilyPond = null; currentPath = null;
+        if (webReady) web.NavigateToString("<html><body style=\"font:14px Segoe UI;padding:22px\">Noten werden geladen …</body></html>");
         var document = Current;
         // A previous slot's warning must not survive selection of a new slot.
         SetStatus(document == null ? "Kein Stück geladen." :
@@ -77,7 +78,7 @@ internal sealed partial class MainForm
             loadedSuccessfully = true;
             cost.Text = document["costUSD"] is JsonValue c && c.TryGetValue<double>(out double n) ? "Stück ca. $" + n.ToString("0.0000") : "Kosten: –";
         }
-        catch (Exception e) { if (generation == displayGeneration) SetStatus("Slot " + (slots.SelectedIndex + 1) + ": " + e.Message, true); }
+        catch (Exception e) { if (generation == displayGeneration) { currentMidi = null; currentXML = null; currentLilyPond = null; validation.Text = "Fehler beim Laden: " + e.Message; if (webReady) web.NavigateToString("<html><body>Noten konnten nicht geladen werden.</body></html>"); SetStatus("Slot " + (slots.SelectedIndex + 1) + ": " + e.Message, true); } }
         if (loadedSuccessfully && generation == displayGeneration && document != null && !RegisterNeedsAttention(document))
             SetStatus("Slot " + (slots.SelectedIndex + 1) + " geladen: " + (document["title"]?.GetValue<string>() ?? "Komposition"));
     }
