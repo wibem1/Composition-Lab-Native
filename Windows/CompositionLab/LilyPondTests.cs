@@ -109,7 +109,7 @@ internal sealed partial class MainForm
             try { RenderLilyPond(); if (!await navigation.Task.WaitAsync(TimeSpan.FromSeconds(20))) throw new Exception("Originalvorschau lädt nicht."); }
             finally { web.CoreWebView2.NavigationStarting -= Starting; web.CoreWebView2.NavigationCompleted -= Loaded; }
             await Task.Delay(150);
-            string state = JsonSerializer.Deserialize<string>(await web.ExecuteScriptAsync("JSON.stringify({count:document.querySelectorAll('.page svg').length,loaded:Array.from(document.querySelectorAll('.page svg')).every(i=>i.getBoundingClientRect().width>0),links:document.querySelectorAll('.page a').length,page:currentPage,scale:scale})"))!;
+            string state = JsonSerializer.Deserialize<string>(await web.ExecuteScriptAsync("JSON.stringify({count:document.querySelectorAll('.page svg').length,loaded:!!document.querySelector('.page:not([hidden]) svg')&&document.querySelector('.page:not([hidden]) svg').getBoundingClientRect().width>0,links:document.querySelectorAll('.page a').length,page:currentPage,scale:scale})"))!;
             var preview = JsonNode.Parse(state)!;
             if (preview["count"]!.GetValue<int>() != 2 || !preview["loaded"]!.GetValue<bool>() ||
                 preview["links"]!.GetValue<int>() == 0)
