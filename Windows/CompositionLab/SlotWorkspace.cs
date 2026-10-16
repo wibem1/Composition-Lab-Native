@@ -19,7 +19,7 @@ internal sealed partial class MainForm
 
     async Task DisplayCurrentAsync()
     {
-        int generation = ++displayGeneration;
+        int generation = workspaceRevisions.Begin();
         player.Close(); currentMidi = null; currentXML = null; currentLilyPond = null; currentPath = null;
         if (webReady) web.NavigateToString("<html><body style=\"font:14px Segoe UI;padding:22px\">Noten werden geladen …</body></html>");
         var document = Current;
@@ -58,15 +58,15 @@ internal sealed partial class MainForm
             if ((document["directLilyPond"]?.GetValue<bool>() == true) && ContainsFinishedMusic(AppliedLilyPondText(document)))
             {
                 var compiled = await Engraver.CompileAsync(ExtractLilyPond(AppliedLilyPondText(document)));
-                if (generation != displayGeneration) return;
+                if (!workspaceRevisions.IsCurrent(generation)) return;
                 currentLilyPond = compiled; currentMidi = compiled.Midi;
             }
             var score = document["score"]!.DeepClone();
             var midi = await core.RunAsync(new JsonObject { ["operation"] = "midi", ["score"] = score });
-            if (generation != displayGeneration) return;
+            if (!workspaceRevisions.IsCurrent(generation)) return;
             currentMidi ??= Convert.FromBase64String(midi["data"]!.GetValue<string>());
             var xml = await core.RunAsync(new JsonObject { ["operation"] = "musicxml", ["score"] = score.DeepClone(), ["options"] = notationOptions?.DeepClone() });
-            if (generation != displayGeneration) return;
+            if (!workspaceRevisions.IsCurrent(generation)) return;
             currentXML = Encoding.UTF8.GetString(Convert.FromBase64String(xml["data"]!.GetValue<string>()));
             if (webReady) RenderNotation();
             validation.Text = (currentLilyPond != null ? "Originalkomposition mit LilyPond gesetzt. MIDI direkt aus dem Original; keine zusätzliche KI-Anfrage. MusicXML ist eine vereinfachte Austauschansicht.\n\n" : "Technische Partiturprüfung bestanden. MIDI und MusicXML erzeugt.\n\n") + (document["title"]?.GetValue<string>() ?? "");
@@ -78,8 +78,8 @@ internal sealed partial class MainForm
             loadedSuccessfully = true;
             cost.Text = document["costUSD"] is JsonValue c && c.TryGetValue<double>(out double n) ? "Stück ca. $" + n.ToString("0.0000") : "Kosten: –";
         }
-        catch (Exception e) { if (generation == displayGeneration) { currentMidi = null; currentXML = null; currentLilyPond = null; validation.Text = "Fehler beim Laden: " + e.Message; if (webReady) web.NavigateToString("<html><body>Noten konnten nicht geladen werden.</body></html>"); SetStatus("Slot " + (slots.SelectedIndex + 1) + ": " + e.Message, true); } }
-        if (loadedSuccessfully && generation == displayGeneration && document != null && !RegisterNeedsAttention(document))
+        catch (Exception e) { if (workspaceRevisions.IsCurrent(generation)) { currentMidi = null; currentXML = null; currentLilyPond = null; validation.Text = "Fehler beim Laden: " + e.Message; if (webReady) web.NavigateToString("<html><body>Noten konnten nicht geladen werden.</body></html>"); SetStatus("Slot " + (slots.SelectedIndex + 1) + ": " + e.Message, true); } }
+        if (loadedSuccessfully && workspaceRevisions.IsCurrent(generation) && document != null && !RegisterNeedsAttention(document))
             SetStatus("Slot " + (slots.SelectedIndex + 1) + " geladen: " + (document["title"]?.GetValue<string>() ?? "Komposition"));
     }
 
