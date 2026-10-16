@@ -103,6 +103,15 @@ internal sealed partial class MainForm
                 original["estimatedCostUSD"] = Numeric(original["estimatedCostUSD"]) + Numeric(response["estimatedCostUSD"]);
                 string corrected = response["text"]!.GetValue<string>();
                 var candidate = await CompileCompositionAsync(corrected, source, token, updateDiagnostic: false);
+                // A technically valid but unchanged score is NOT a repair.
+                // Compare sounded pitches (not only edited LilyPond text).
+                static string SoundingPitches(JsonObject score) =>
+                    string.Join("|", score["tr"]!.AsArray().OfType<JsonObject>().SelectMany((track, index) =>
+                        track["nt"]!.AsArray().OfType<JsonArray>().Select(note =>
+                            index + ":" + note[0] + ":" + note[1] + ":" + note[2])));
+                if (SoundingPitches(original["score"]!.AsObject()) ==
+                    SoundingPitches(candidate["score"]!.AsObject()))
+                    throw new InvalidDataException("Die KI hat keine klingende Tonhöhe verändert. Keine Oktavkorrektur übernommen.");
                 if (!OctaveOnlyChange(original["score"]!.AsObject(), candidate["score"]!.AsObject()))
                     throw new InvalidDataException("Die vorgeschlagene Oktavkorrektur verändert Tonklassen, Rhythmus, Dynamik oder Besetzung und wurde verworfen.");
                 if (Regex.IsMatch(ExtractLilyPond(corrected), @"\\relative\b") || RegisterIssues(candidate["score"]!.AsObject(), corrected).Count > 0)
