@@ -117,42 +117,28 @@ internal sealed partial class MainForm
     void SelectLilyPondSource(JsonNode message)
     {
         if (Current == null || currentLilyPond == null) return;
-        int line = (int?)message["line"] ?? 0, column = (int?)message["column"] ?? 0;
+        int line = (int?)message["line"] ?? 0, col = (int?)message["column"] ?? 0;
         int endLine = (int?)message["endLine"] ?? line;
-        int endColumn = (int?)message["endColumn"] ?? column;
-        if (line < 1 || column < 1 || endLine < 1 || endColumn < 1) return;
+        int endCol = (int?)message["endColumn"] ?? col;
         string source = AppliedLilyPondText(Current);
-        // Source coordinates belong to the score currently rendered, never to
-        // unsaved edits. Refuse to jump to a misleading location.
-        if (composition.Text != source)
+        var mapping = ScoreSourceMapper.Map(source, composition.Text,
+            new(line, col), new(endLine, endCol));
+        if (mapping.Failure == ScoreSourceMapper.Error.StaleSource)
         {
-            SetStatus("Notenansicht und Editor unterscheiden sich. Erst Notation aktualisieren, dann Noten auswählen.", true);
+            SetStatus("Notenbild und Editor unterscheiden sich. Erst Notation aktualisieren.", true);
             return;
         }
-        var lines = source.Split('\n');
-        int Index(int l, int c)
+        if (mapping.Range is not { } selected)
         {
-            if (l > lines.Length) return -1;
-            int offset = 0;
-            for (int i = 0; i < l - 1; i++) offset += lines[i].Length + 1;
-            return offset + Math.Min(c - 1, lines[l - 1].Length);
+            SetStatus("Die Notenauswahl enthält keine gültige Quelltextposition.", true);
+            return;
         }
-        int start = Index(line, column), end = Index(endLine, endColumn);
-        if (start < 0 || end < 0) return;
-        if (end < start) (start, end) = (end, start);
         tabs.SelectedIndex = 0;
-        if (composition.Text != source)
-        {
-            loadingIdea = true;
-            try { composition.Text = source; }
-            finally { loadingIdea = false; }
-        }
         composition.Focus();
-        composition.SelectionStart = Math.Min(start, composition.TextLength);
-        composition.SelectionLength = Math.Min(Math.Max(1, end - start + 1), composition.TextLength - composition.SelectionStart);
+        composition.SelectionStart = selected.Start;
+        composition.SelectionLength = selected.Length;
         composition.ScrollToCaret();
-        SetStatus("LilyPond-Quelltext markiert: Zeile " + line + " bis " + endLine +
-            ". Tonhöhen im Editor korrigieren und anschließend Notation aktualisieren.");
+        SetStatus("LilyPond-Zeilen " + line + "–" + endLine + " im Editor markiert.");
     }
 
     void RenderLilyPond()
