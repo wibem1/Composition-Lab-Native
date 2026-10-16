@@ -101,7 +101,7 @@ internal sealed partial class MainForm
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28)); Controls.Add(root);
         root.Controls.Add(BuildMacMenus(), 0, 0);
         var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(233, 233, 233), Margin = Padding.Empty };
-        var project = MacLabel("Composition Lab V4.11", 15, true); project.AutoSize = false; project.AutoEllipsis = true; header.Controls.Add(project);
+        var project = MacLabel("Composition Lab V4.12", 15, true); project.AutoSize = false; project.AutoEllipsis = true; header.Controls.Add(project);
         var navigation = MacRow(); navigation.Dock = DockStyle.None; navigation.Size = new Size(408, 34); navigation.WrapContents = false;
         foreach (string label in new[] { "Main", "Noten", "Technik" })
         { int index = navButtons.Count; var button = new StudioButton { Text = label, Width = 126, Height = 28, AutoSize = false, Selected = index == 0 }; button.Click += (_, _) => tabs.SelectedIndex = index; navButtons.Add(button); navigation.Controls.Add(button); }
@@ -607,7 +607,7 @@ internal sealed partial class MainForm
 
     void ShowDevelopmentInfo()
     {
-        const string information = "Composition Lab für Windows – V4.11\r\n" +
+        const string information = "Composition Lab für Windows – V4.12\r\n" +
             "Entwicklungsstand: 16.10.2026\r\n\r\n" +
             "FUNKTIONSFÄHIG (automatisiert geprüft)\r\n" +
             "• KI-Komposition und Chat, dynamische Modellwahl\r\n" +
@@ -625,7 +625,7 @@ internal sealed partial class MainForm
             "• Mac-Backup und Soundfont-Auswahl sind noch nicht vollständig portiert.\r\n\r\n" +
             "Gemeinsamer Entwicklungszweig: v4-cross-platform\r\n" +
             "Diagnose und Tests: Hilfe → Diagnosedatei sichern.";
-        using var window = new Form { Text = "Composition Lab – Entwicklungsstand V4.11", StartPosition = FormStartPosition.CenterParent,
+        using var window = new Form { Text = "Composition Lab – Entwicklungsstand V4.12", StartPosition = FormStartPosition.CenterParent,
             ClientSize = new Size(640, 535), MinimumSize = new Size(490, 370), Font = Font, BackColor = StudioTheme.Canvas };
         var details = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
             Dock = DockStyle.Fill, Text = information, BorderStyle = BorderStyle.None, BackColor = Color.White,
