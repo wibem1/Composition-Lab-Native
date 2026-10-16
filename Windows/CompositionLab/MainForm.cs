@@ -299,9 +299,11 @@ internal sealed partial class MainForm : Form
         document["inputTokens"] = result["inputTokens"]?.DeepClone(); document["outputTokens"] = result["outputTokens"]?.DeepClone();
         documents[destination] = document; RememberPiece(document); RefreshSlots();
         refreshingSlots = true; try { slots.SelectedIndex = destination; } finally { refreshingSlots = false; }
-        SaveLocalState(); // Persist the slot while recovery source is still available.
+        // Commit the accepted slot and clear the recovery draft atomically in the saved workspace.
         pendingComposition = null;
-        SaveLocalState(); await DisplayCurrentAsync(); return document;
+        SaveLocalState();
+        await DisplayCurrentAsync();
+        return document;
     }
     void PreservePendingComposition(string music, JsonObject source, string assignmentText, string selectedProvider, string selectedModel)
     {
@@ -329,10 +331,26 @@ internal sealed partial class MainForm : Form
         if (destination < 0) throw new InvalidOperationException("Bitte zuerst einen Slot freimachen.");
         await TranslateStoredDiagnosticAsync(source, destination);
     }
+    // One interpretation of the diagnostic schema for import and recovery.
+    // A diagnostic can carry the finished source in 'composition', 'text',
+    // or the preserved sourceDiagnostic after a failed conversion.
+    static string FinishedMusicFromDiagnostic(JsonObject source)
+    {
+        foreach (string name in new[] { "composition", "text" })
+        {
+            var value = source[name]?.GetValue<string>();
+            if (!string.IsNullOrWhiteSpace(value) && ContainsFinishedMusic(value))
+                return value;
+        }
+        if (source["sourceDiagnostic"] is JsonObject nested)
+            return FinishedMusicFromDiagnostic(nested);
+        return "";
+    }
+
     async Task TranslateStoredDiagnosticAsync(JsonObject source, int destination)
     {
         if (busy) throw new InvalidOperationException("Bitte die laufende Anfrage abwarten.");
-        string music = source["composition"]?.GetValue<string>() ?? source["text"]?.GetValue<string>() ?? "";
+        string music = FinishedMusicFromDiagnostic(source);
         if (!ContainsFinishedMusic(music)) throw new InvalidOperationException("Diese Antwort enthält keine fertige LilyPond-Komposition.");
         string assignmentText = source["assignment"]?.GetValue<string>() ?? "Die vorhandene fertige Komposition unverändert technisch übertragen.";
         PreservePendingComposition(music, source, assignmentText, source["provider"]?.GetValue<string>() ?? activeProvider, source["model"]?.GetValue<string>() ?? SelectedModelId);
@@ -494,7 +512,7 @@ internal sealed partial class MainForm : Form
         else if (Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase))
         {
             var sourceDiagnostic = JsonNode.Parse(data)!.AsObject();
-            if (ContainsFinishedMusic(sourceDiagnostic["composition"]?.GetValue<string>() ?? sourceDiagnostic["text"]?.GetValue<string>() ?? ""))
+            if (ContainsFinishedMusic(FinishedMusicFromDiagnostic(sourceDiagnostic)))
             { await TranslateStoredDiagnosticAsync(sourceDiagnostic, destination); return; }
             var raw = RepairLegacyText(sourceDiagnostic["scoreResponse"]?.GetValue<string>() ?? throw new InvalidDataException("Diese Diagnose enthält keine technische Partiturantwort."));
             var response = await core.RunAsync(new JsonObject { ["operation"] = "recover-score", ["response"] = raw });
