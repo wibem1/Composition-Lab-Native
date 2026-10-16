@@ -109,9 +109,11 @@ internal sealed partial class MainForm
             try { RenderLilyPond(); if (!await navigation.Task.WaitAsync(TimeSpan.FromSeconds(20))) throw new Exception("Originalvorschau lädt nicht."); }
             finally { web.CoreWebView2.NavigationStarting -= Starting; web.CoreWebView2.NavigationCompleted -= Loaded; }
             await Task.Delay(150);
-            string state = JsonSerializer.Deserialize<string>(await web.ExecuteScriptAsync("JSON.stringify({count:document.images.length,loaded:Array.from(document.images).every(i=>i.complete&&i.naturalWidth>0),page:currentPage,scale:scale})"))!;
+            string state = JsonSerializer.Deserialize<string>(await web.ExecuteScriptAsync("JSON.stringify({count:document.querySelectorAll('.page svg').length,loaded:Array.from(document.querySelectorAll('.page svg')).every(i=>i.getBoundingClientRect().width>0),links:document.querySelectorAll('.page a').length,page:currentPage,scale:scale})"))!;
             var preview = JsonNode.Parse(state)!;
-            if (preview["count"]!.GetValue<int>() != 2 || !preview["loaded"]!.GetValue<bool>()) throw new Exception("Offline-Notenseiten sind nicht sichtbar.");
+            if (preview["count"]!.GetValue<int>() != 2 || !preview["loaded"]!.GetValue<bool>() ||
+                preview["links"]!.GetValue<int>() == 0)
+                throw new Exception("Interaktive LilyPond-SVG-Seiten oder Quelltextverweise sind nicht sichtbar.");
             await PreviewCommand("page(1);zoom(10)");
             if (await web.ExecuteScriptAsync("currentPage===2 && scale===110") != "true") throw new Exception("Seitenauswahl oder Zoom im Originalnotensatz funktioniert nicht.");
             await PreviewCommand("page(-1)");
