@@ -49,6 +49,7 @@ internal sealed partial class MainForm
         scoreJSON.Text = document["score"]?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
         validation.Text = "Technische Prüfung läuft …";
         playerBpm = double.TryParse(document["score"]?["bpm"]?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double bpmValue) ? (int)Math.Round(bpmValue) : 96; tempoOverride = false; foreach (var transport in transports) transport.Tempo.Text = playerBpm.ToString();
+        bool loadedSuccessfully = false;
         try
         {
             if ((document["directLilyPond"]?.GetValue<bool>() == true) && ContainsFinishedMusic(AppliedLilyPondText(document)))
@@ -71,10 +72,11 @@ internal sealed partial class MainForm
                 validation.Text = "Oktavprüfung offen: Das unveränderte Original wurde ausgegeben.\n" + (document["octaveReview"]?["message"]?.GetValue<string>() ?? "Auffällige klingende Oktavlagen erkannt.") + "\n\n" + validation.Text;
                 SetMusicStatus(document, "");
             }
+            loadedSuccessfully = true;
             cost.Text = document["costUSD"] is JsonValue c && c.TryGetValue<double>(out double n) ? "Stück ca. $" + n.ToString("0.0000") : "Kosten: –";
         }
         catch (Exception e) { if (generation == displayGeneration) SetStatus("Slot " + (slots.SelectedIndex + 1) + ": " + e.Message, true); }
-        if (generation == displayGeneration && document != null && !RegisterNeedsAttention(document))
+        if (loadedSuccessfully && generation == displayGeneration && document != null && !RegisterNeedsAttention(document))
             SetStatus("Slot " + (slots.SelectedIndex + 1) + " geladen: " + (document["title"]?.GetValue<string>() ?? "Komposition"));
     }
 
