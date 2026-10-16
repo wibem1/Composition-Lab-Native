@@ -588,6 +588,7 @@ internal sealed partial class MainForm
     void ShowSentPrompt()
     {
         string? prompt = lastDiagnostic?["sentUserPrompt"]?.GetValue<string>()
+            ?? lastDiagnostic?["sourceDiagnostic"]?["sentUserPrompt"]?.GetValue<string>()
             ?? lastDiagnostic?["compositionPrompt"]?.GetValue<string>();
         if (prompt == null)
         {
