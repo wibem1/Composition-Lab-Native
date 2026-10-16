@@ -1,9 +1,30 @@
-# Composition Lab Native · Windows · Alpha 19 · Build 4019 · 16.10.2026
+# Composition Lab Native · Windows · V4.1 · 16.10.2026
 
 Das gesamte ZIP in einen neuen Ordner entpacken und `Composition Lab 4.0.exe`
 starten. Die Unterordner `Core`, `LilyPond` und `Notices` beibehalten. .NET,
 Swift und LilyPond müssen nicht zusätzlich installiert werden. Voraussetzung:
 Windows 10/11 auf Intel/AMD 64 Bit und Microsoft Edge WebView2 Runtime.
+
+## V4.1 – konsolidierte Oberfläche
+
+Die Windows-Version trägt ab sofort die lesbare Versionsnummer **V4.1** statt
+einer fortlaufenden Alpha-/Build-Kombination. Der gemeinsame Entwicklungszweig
+ist `v4-cross-platform`. Der Menüpunkt **Hilfe → Entwicklungsstand /
+Über Composition Lab** nennt geprüfte Funktionen, bekannte Grenzen und den
+Entwicklungszweig. Die Hauptmenüs sind jetzt Datei, Bearbeiten, Komposition,
+Einstellungen und Hilfe.
+
+Redundante Diagnose-Menüs und nicht verfügbare Mac-Backup-Befehle wurden aus
+der Menüleiste entfernt. Projekt öffnen ist weiterhin bewusst vom
+**Datei → Diagnose importieren** getrennt, damit JSON-Diagnosen nicht mit
+Arbeitsplatzdateien verwechselt werden.
+
+**Wichtig:** Um vorhandene Nutzerdateien nicht zu gefährden, bleiben der
+bisherige Installationsordnername, die Windows-EXE und das lokale Datenverzeichnis
+vorläufig gleich. Die Umbenennung ändert das interne Projektformat nicht.
+Weitere Vereinfachungen der Verarbeitung müssen einzeln gegen die Windows-
+Selbsttests und reale Diagnosefälle geprüft werden; dies ist keine Behauptung
+einer abgeschlossenen Kern-Refaktorierung.
 
 ## Automatische Oktavprüfung
 
