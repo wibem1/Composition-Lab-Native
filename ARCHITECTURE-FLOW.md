@@ -89,7 +89,7 @@ Pfad: `Windows/CompositionLab/ProjectPieceCodec.cs`. Reine Umwandlung gespeicher
 - `ToHistory(document:JsonObject, fallbackProvider:string, fallbackModel:string) -> JsonObject`
 - `CopySavedPieceMetadata(source:JsonObject, target:JsonObject) -> void`: überträgt die bekannten optionalen Metadaten mittels DeepClone; die Zielinstanz ist expliziter Output/Seiteneffekt.
 - Fehler: Fehlender Titel oder fehlende Partitur wird abgelehnt.
-- Tests: Musikquelltext und Providerangaben bleiben beim Roundtrip erhalten.
+- Tests: Musikquelltext, ursprünglicher Kompositionsauftrag und Providerangaben bleiben beim Roundtrip erhalten. Die zunächst gefundene Metadatenlücke für `assignment`, Tempo-/Ensembleparameter und importiertes MusicXML wurde geschlossen.
 - **Noch offen:** Vollständige Projektlade- und Commit-Transaktion ist noch mit `MainForm` verbunden; dieses Modul ist nicht schon die komplette Persistenzschicht.
 
 ## Fünfter realer Modulschnitt: ProjectWorkspaceCodec
