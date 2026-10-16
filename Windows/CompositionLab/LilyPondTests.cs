@@ -162,12 +162,13 @@ internal sealed partial class MainForm
             await DisplayCurrentAsync();
             if (!currentMidi!.SequenceEqual(validMidi) || composition.Text == edited || Current!["lilyPondSource"]?.GetValue<string>() != edited) throw new Exception("Neuladen verliert gültige Ausgabe oder fehlerhaften Entwurf.");
             composition.Text = edited; await RefreshNotationAsync();
-            string expectedImage = "data:image/svg+xml;base64," + Convert.ToBase64String(Encoding.UTF8.GetBytes(currentLilyPond!.Pages[0]));
+            string expectedSvg = currentLilyPond!.Pages[0];
             bool editedVisible = false;
             for (int i = 0; i < 100; i++)
             {
-                string displayed = JsonSerializer.Deserialize<string>(await web.ExecuteScriptAsync("document.images[0]?.src || ''")) ?? "";
-                if (displayed == expectedImage && await web.ExecuteScriptAsync("document.images[0].complete && document.images[0].naturalWidth>0") == "true") { editedVisible = true; break; }
+                string displayed = JsonSerializer.Deserialize<string>(await web.ExecuteScriptAsync("typeof images!=='undefined' ? images[0] : ''")) ?? "";
+                bool rendered = await web.ExecuteScriptAsync("!!document.querySelector('.page:not([hidden]) svg') && document.querySelector('.page:not([hidden]) svg').getBoundingClientRect().width>0") == "true";
+                if (displayed == expectedSvg && rendered) { editedVisible = true; break; }
                 await Task.Delay(50);
             }
             if (!editedVisible) throw new Exception("Der Browser zeigt nach Aktualisieren weiterhin alte Noten.");
