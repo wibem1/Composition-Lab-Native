@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 namespace CompositionLab;
 
 /// <summary>
@@ -15,20 +16,32 @@ internal static class ScoreSourceMapper
         if (string.IsNullOrEmpty(renderedSource)) return (null, Error.EmptySource);
         if (!string.Equals(renderedSource, editorSource, StringComparison.Ordinal))
             return (null, Error.StaleSource);
+        // Renderers compile the LilyPond body only. Stored AI answers may
+        // wrap that body in a Markdown fence and introductory prose.
+        // Compute positions against the compiled body, then translate back
+        // to absolute editor offsets without modifying the editor text.
+        string mappingSource = renderedSource;
+        int baseOffset = 0;
+        var fenced = Regex.Match(renderedSource, @"(?s)```(?:lilypond|ly)\s*\r?\n(?<body>.*?)\r?\n```", RegexOptions.IgnoreCase);
+        if (fenced.Success)
+        {
+            mappingSource = fenced.Groups["body"].Value;
+            baseOffset = fenced.Groups["body"].Index;
+        }
         int Offset(Point p)
         {
             if (p.Line < 1 || p.Column < 1) return -1;
             int start = 0;
             for (int line = 1; line < p.Line; line++)
             {
-                int newline = renderedSource.IndexOf('\n', start);
+                int newline = mappingSource.IndexOf('\n', start);
                 if (newline < 0) return -1;
                 start = newline + 1;
             }
-            int stop = renderedSource.IndexOf('\n', start);
-            if (stop < 0) stop = renderedSource.Length;
+            int stop = mappingSource.IndexOf('\n', start);
+            if (stop < 0) stop = mappingSource.Length;
             if (p.Column > stop - start + 1) return -1;
-            return start + p.Column - 1;
+            return baseOffset + start + p.Column - 1;
         }
         int a = Offset(from), b = Offset(to);
         if (a < 0 || b < 0) return (null, Error.InvalidPosition);
@@ -45,6 +58,11 @@ internal static class ScoreSourceMapper
             throw new InvalidOperationException("ScoreSourceMapper: stale source accepted.");
         if (Map(music, music, new(20,1), new(20,2)).Failure != Error.InvalidPosition)
             throw new InvalidOperationException("ScoreSourceMapper: invalid source location accepted.");
+        const string wrapped = "Überschrift\\n```lilypond\\n" + music.TrimEnd('\\n') + "\\n```";
+        var wrappedResult = Map(wrapped, wrapped, new(1, 1), new(2, 2));
+        if (wrappedResult.Failure != Error.None ||
+            wrappedResult.Range?.Start != wrapped.IndexOf("c'4", StringComparison.Ordinal))
+            throw new Exception("ScoreSourceMapper: fenced LilyPond source coordinate incorrect.");
         if (Map(music, music, new(2,2), new(1,1)).Range is not {Start:0})
             throw new InvalidOperationException("ScoreSourceMapper: reverse range rejected.");
     }
