@@ -562,10 +562,12 @@ internal sealed partial class MainForm
         Action(music, "Fertige Komposition übernehmen", RecoverDisplayedMusicAsync);
         Action(music, "LilyPond-Original in freien Slot", RebuildOriginalAsync);
         Action(music, "Oktavlagen prüfen und korrigieren", ReviewCurrentRegistersAsync);
-        var octaveCheck = new ToolStripMenuItem("Oktavlagen automatisch prüfen") { CheckOnClick = true, Checked = automaticRegisterReview };
-        music.DropDownOpening += (_, _) => octaveCheck.Checked = automaticRegisterReview;
-        octaveCheck.CheckedChanged += (_, _) => { automaticRegisterReview = octaveCheck.Checked; SaveLocalState(); };
-        music.DropDownItems.Add(octaveCheck);
+        Action(music, "Oktavprüfung: lokal, ohne KI", () => {
+            MessageBox.Show(this,
+                "Oktavlagen werden lokal auf Auffälligkeiten geprüft. Die KI verändert die Komposition nicht automatisch.\n\nFür eine ausdrücklich gewünschte KI-Korrektur gibt es den eigenen Befehl „Oktavlagen prüfen und korrigieren“.",
+                "Oktavprüfung", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return Task.CompletedTask;
+        });
         Action(music, "Anfrage abbrechen", () => { pending?.Cancel(); return Task.CompletedTask; });
 
         var settings = new ToolStripMenuItem("Einstellungen"); menu.Items.Add(settings);
