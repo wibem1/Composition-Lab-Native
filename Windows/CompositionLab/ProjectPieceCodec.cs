@@ -14,7 +14,8 @@ internal static class ProjectPieceCodec
         foreach (string field in new[] {
             "title", "description", "provider", "model", "costUSD", "inputTokens",
             "outputTokens", "directLilyPond", "sourceMidiData", "lilyPondSource",
-            "octaveReview", "originalLilyPond"
+            "octaveReview", "originalLilyPond", "assignment", "measures",
+            "meter", "tempo", "musicalKey", "ensemble", "originalMusicXMLData"
         })
             if (source[field] != null) target[field] = source[field]!.DeepClone();
     }
@@ -28,6 +29,10 @@ internal static class ProjectPieceCodec
             ["model"] = document["model"]?.DeepClone() ?? JsonValue.Create(fallbackModel),
             ["concept"] = document["concept"]?.DeepClone() ?? JsonValue.Create(""),
             ["description"] = document["description"]?.DeepClone(), ["score"] = document["score"]!.DeepClone(),
+            ["assignment"] = document["assignment"]?.DeepClone(), ["measures"] = document["measures"]?.DeepClone(),
+            ["meter"] = document["meter"]?.DeepClone(), ["tempo"] = document["tempo"]?.DeepClone(),
+            ["musicalKey"] = document["musicalKey"]?.DeepClone(), ["ensemble"] = document["ensemble"]?.DeepClone(),
+            ["originalMusicXMLData"] = document["originalMusicXMLData"]?.DeepClone(),
             ["costUSD"] = document["costUSD"]?.DeepClone(), ["inputTokens"] = document["inputTokens"]?.DeepClone(),
             ["outputTokens"] = document["outputTokens"]?.DeepClone(), ["directLilyPond"] = document["directLilyPond"]?.DeepClone(),
             ["sourceMidiData"] = document["sourceMidiData"]?.DeepClone(), ["lilyPondSource"] = document["lilyPondSource"]?.DeepClone(),
@@ -41,7 +46,8 @@ internal static class ProjectPieceCodec
             encoded["provider"]?.GetValue<string>() != "gemini") throw new InvalidOperationException("ProjectPieceCodec: metadata lost.");
         var restored = new JsonObject { ["score"] = encoded["score"]!.DeepClone() };
         CopySavedPieceMetadata(encoded, restored);
-        if (restored["lilyPondSource"]?.GetValue<string>() != original["lilyPondSource"]?.GetValue<string>())
+        if (restored["lilyPondSource"]?.GetValue<string>() != original["lilyPondSource"]?.GetValue<string>() ||
+            restored["assignment"]?.GetValue<string>() != "User prompt")
             throw new InvalidOperationException("ProjectPieceCodec: LilyPond metadata not restored.");
     }
 }
