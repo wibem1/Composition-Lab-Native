@@ -126,6 +126,15 @@ internal sealed partial class MainForm
         for (int i = 0; i < line - 1; i++) start += lines[i].Length + 1;
         start += Math.Min(column - 1, lines[line - 1].Length);
         if (start > composition.TextLength) return;
+        // The notation is on the second workspace tab and the editable
+        // LilyPond source is on the first. Navigate before selecting.
+        tabs.SelectedIndex = 0;
+        if (composition.Text != source)
+        {
+            loadingIdea = true;
+            try { composition.Text = source; }
+            finally { loadingIdea = false; }
+        }
         composition.Focus();
         composition.SelectionStart = start;
         composition.SelectionLength = Math.Min(1, composition.TextLength - start);
@@ -161,7 +170,7 @@ internal sealed partial class MainForm
               const a=event.target.closest && event.target.closest('a');if(!a)return;
               const href=a.getAttribute('href')||a.getAttribute('xlink:href')||'';
               // LilyPond textedit links: textedit:///.../source.ly:LINE:COL:CHAR
-              const match=href.match(/source\\.ly:(\\d+):(\\d+)(?::\\d+)?/i);
+              const match=href.match(/source\.ly:(\d+):(\d+)(?::\d+)?/i);
               if(!match)return;event.preventDefault();
               host.querySelectorAll('a.selected').forEach(n=>n.classList.remove('selected'));
               a.classList.add('selected');
