@@ -74,8 +74,10 @@ internal sealed partial class MainForm
                 composition.Text = bad;
                 registerRepairTransport = (_, _) => Task.FromResult(new JsonObject { ["text"] = bad });
                 bool rejected = false;
+                forceRegisterReview = true;
                 try { await RefreshNotationAsync(); } catch (RegisterRepairException) { rejected = true; }
-                if (!rejected || !currentMidi.SequenceEqual(valid) || Score.ToJsonString() != score) throw new Exception("Gescheiterte Oktavkorrektur ersetzt die letzte gültige Musik.");
+                finally { forceRegisterReview = false; }
+                if (!rejected || !currentMidi.SequenceEqual(valid) || Score.ToJsonString() != score) throw new Exception("Gescheiterte ausdrücklich angeforderte Oktavkorrektur ersetzt die letzte gültige Musik.");
             }
             finally
             {
