@@ -12,7 +12,7 @@ flowchart TB
     COMP["CompositionService\nKI-Anfrage, Ergebnisprüfung\nGEPLANT"]
     CORE["CompositionCore\nMusikmodell, MIDI, MusicXML\nVORHANDEN"]
     REND["LilyPondCompiler\nQuelle → SVG + MIDI\nVORHANDEN"]
-    SVG["Notenanzeige / SVG-Interaktion\nAKTUELL IN DirectLilyPond.cs"]
+    SVG["ScorePreviewDocument\nSVG/HTML-Erzeugung\nEXTRAHIERT"]
     MAP["ScoreSourceMapper\nQuellkoordinaten → Editorbereich\nEXTRAHIERT"]
     EDIT["Editor / Bearbeiten\nAKTUELL IN MainForm"]
     DISK["WorkspacePersistence\nDateien, Wiederherstellung\nGEPLANT"]
@@ -30,6 +30,12 @@ flowchart TB
 ```
 
 Die Pfeile zeigen das geplante **Aufruf-/Datenflussmodell**, nicht lauter bereits implementierte unabhängige Klassen. VORHANDEN und EXTRAHIERT sind echte technische Einheiten. GEPLANT ist ausdrücklich **noch nicht implementiert**.
+
+## Zweiter realer Modulschnitt: ScorePreviewDocument
+
+Pfad: `Windows/CompositionLab/ScorePreviewDocument.cs`. Reines Modul ohne WinForms oder WebView2. Vertrag: `Build(string[] svgPages) -> string html`.
+
+**Input:** Mindestens eine vollständig von LilyPond generierte SVG-Seite (UTF-8-Inhalt als Zeichenfolge). **Output:** Ein lokales HTML-Dokument mit Seitendarstellung, Klick-/Drag-Auswahl und Nachrichtenvertrag `{action:"select-source",line:int,column:int,endLine:int,endColumn:int}`. **Fehler:** Leere Seitenliste wird als ungültige Eingabe abgelehnt. **Nebenwirkungen:** Keine; der Host speichert und navigiert das Ergebnis. Der GUI-Adapter `DirectLilyPond.RenderLilyPond` übernimmt weiterhin ausschließlich Cache-Datei und WebView-Navigation.
 
 ## Erster realer Modulschnitt: ScoreSourceMapper
 
