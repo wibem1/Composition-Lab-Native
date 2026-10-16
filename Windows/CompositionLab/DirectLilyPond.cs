@@ -163,7 +163,7 @@ internal sealed partial class MainForm
             #selection button{padding:6px 12px;cursor:pointer}
             @media print{#selection{display:none}}
             @media print{html,body{background:white}#score{padding:0}.page,.page[hidden]{display:block!important;width:100%!important;margin:0;break-after:page}.page:last-child{break-after:auto}}</style></head>
-            <body><div id="selection"><span id="selectionCount">Noten anklicken, um sie zu markieren.</span><button id="openSelection" disabled>Auswahl im Editor öffnen</button><button id="clearSelection">Auswahl aufheben</button></div><div id="score"></div><script>
+            <body><div id="selection"><span id="selectionCount">Note anklicken oder mit gedrückter Maus über die Passage ziehen.</span><button id="openSelection" disabled>Auswahl im Editor öffnen</button><button id="clearSelection">Auswahl aufheben</button></div><div id="score"></div><script>
             const images=PAGES_VALUE; let currentPage=1,scale=100;
             const host=document.getElementById('score');
             images.forEach(source=>{const page=document.createElement('div');page.className='page';
@@ -178,7 +178,27 @@ internal sealed partial class MainForm
             const chosen=new Map();
             const count=document.getElementById('selectionCount');
             const open=document.getElementById('openSelection');
+            const linkLocation=a=>{
+              if(!a)return null;
+              const href=a.getAttribute('href')||a.getAttribute('xlink:href')||'';
+              const m=href.match(/source\.ly:(\d+):(\d+):(\d+)/i);
+              return m?{line:Number(m[1]),column:Number(m[3])}:null;
+            };
+            const links=Array.from(host.querySelectorAll('a')).filter(a=>linkLocation(a));
+            const nearestLink=target=>target && target.closest ? target.closest('a') : null;
             function updateSelection(){count.textContent=chosen.size+' Noten markiert';open.disabled=chosen.size===0}
+            function clear(){chosen.forEach((_,a)=>a.classList.remove('selected'));chosen.clear();updateSelection()}
+            function setNote(a,on){const loc=linkLocation(a);if(!loc)return;
+              if(on){chosen.set(a,loc);a.classList.add('selected')}
+              else {chosen.delete(a);a.classList.remove('selected')}
+              updateSelection();
+            }
+            function markRange(first,last){
+              const a=links.indexOf(first),b=links.indexOf(last);
+              if(a<0||b<0)return;
+              clear();
+              for(let i=Math.min(a,b);i<=Math.max(a,b);i++)setNote(links[i],true);
+            }
             function openEditor(){
               if(!chosen.size)return;
               const notes=Array.from(chosen.values()).sort((a,b)=>a.line-b.line||a.column-b.column);
@@ -186,18 +206,42 @@ internal sealed partial class MainForm
               window.chrome.webview.postMessage({action:'select-source',line:first.line,column:first.column,endLine:last.line,endColumn:last.column});
             }
             open.addEventListener('click',openEditor);
-            document.getElementById('clearSelection').addEventListener('click',()=>{
-              chosen.forEach((_,a)=>a.classList.remove('selected'));chosen.clear();updateSelection()});
-            host.addEventListener('click',event=>{
-              const a=event.target.closest && event.target.closest('a');if(!a)return;
-              const href=a.getAttribute('href')||a.getAttribute('xlink:href')||'';
-              // LilyPond textedit links: textedit:///.../source.ly:LINE:CHAR:COLUMN
-              const match=href.match(/source\.ly:(\d+):(\d+):(\d+)/i);
-              if(!match)return;event.preventDefault();
-              if(chosen.has(a)){chosen.delete(a);a.classList.remove('selected')}
-              else {chosen.set(a,{line:Number(match[1]),column:Number(match[3])});a.classList.add('selected')}
-              updateSelection();
+            document.getElementById('clearSelection').addEventListener('click',clear);
+            // Single click toggles notes. Dragging across anchored notes selects
+            // a contiguous range, including beamed passages and multiple notes.
+            let dragStart=null,dragEnd=null,didDrag=false,suppressClick=false;
+            host.addEventListener('pointerdown',event=>{
+              if(event.button!==0)return;
+              const a=nearestLink(event.target);if(!linkLocation(a))return;
+              dragStart=a;dragEnd=a;didDrag=false;
+              event.preventDefault();
             });
+            host.addEventListener('pointermove',event=>{
+              if(!dragStart || !(event.buttons&1))return;
+              const at=document.elementFromPoint(event.clientX,event.clientY);
+              const a=nearestLink(at);
+              if(!linkLocation(a)||a===dragEnd)return;
+              dragEnd=a;didDrag=true;markRange(dragStart,dragEnd);
+              event.preventDefault();
+            });
+            document.addEventListener('pointerup',event=>{
+              if(!dragStart)return;
+              const last=dragEnd,first=dragStart,wasDrag=didDrag;
+              dragStart=null;dragEnd=null;didDrag=false;
+              suppressClick=true;
+              if(wasDrag)markRange(first,last);
+              else setNote(first,!chosen.has(first));
+              event.preventDefault();
+            });
+            host.addEventListener('click',event=>{
+              const a=nearestLink(event.target);
+              if(!linkLocation(a))return;
+              event.preventDefault();
+              if(suppressClick){suppressClick=false;return}
+              // Also supports keyboard-activated links and synthetic clicks.
+              setNote(a,!chosen.has(a));
+            });
+            host.addEventListener('dragstart',event=>event.preventDefault());
             render();
             </script></body></html>
             """;
