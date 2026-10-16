@@ -32,6 +32,10 @@ internal sealed partial class MainForm
         if (LilyPondCompiler.Prepare(source) != source) throw new Exception("Vollständiger LilyPond-Code wurde verändert.");
         var generated = await Engraver.CompileAsync(source);
         if (generated.Cached || generated.Pages.Length != 2) throw new Exception("Originalnoten werden nicht vollständig in zwei Seiten gesetzt.");
+        // V4.13: SVG notation must retain the source references required
+        // for click-to-editor selection. Raster-like SVG images are insufficient.
+        if (!generated.Pages.Any(page => page.Contains("textedit:", StringComparison.OrdinalIgnoreCase)))
+            throw new Exception("LilyPond SVG enthält keine Point-and-Click-Quelltextverweise.");
         var cached = await Engraver.CompileAsync(source);
         if (!cached.Cached || !cached.Midi.SequenceEqual(generated.Midi) || !cached.Pages.SequenceEqual(generated.Pages)) throw new Exception("LilyPond-Cache verändert Musik oder Seiten.");
         var noMidi = await Engraver.CompileAsync("\\version \"2.24.0\"\n\\score { { c'4 d' e' f' } }");
