@@ -98,7 +98,7 @@ internal sealed partial class MainForm
         var document = Current ?? throw new InvalidOperationException("Kein Stück geladen.");
         string music = document["concept"]?.GetValue<string>() ?? "";
         if (!ContainsFinishedMusic(music)) throw new InvalidOperationException("Dieses Stück enthält kein LilyPond-Original.");
-        int destination = Array.FindIndex(documents, d => d == null);
+        int destination = documents.FirstFreeIndex();
         if (destination < 0) throw new InvalidOperationException("Bitte einen Slot für die Originalausgabe freimachen. Die bisherige Fassung bleibt erhalten.");
         try
         {
