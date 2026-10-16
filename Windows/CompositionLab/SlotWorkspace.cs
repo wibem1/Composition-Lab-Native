@@ -29,7 +29,9 @@ internal sealed partial class MainForm
         try
         {
             editableIdea = document?["description"]?.GetValue<string>() ?? document?["concept"]?.GetValue<string>() ?? document?["assignment"]?.GetValue<string>() ?? slotDrafts.GetValueOrDefault(slots.SelectedIndex, "");
-            composition.Text = editableIdea; composition.ClearUndo(); assignment.Text = editableIdea;
+            composition.Text = editableIdea; composition.ClearUndo();
+            // The score source and the original creative assignment are distinct.
+            if (document != null) assignment.Text = document["assignment"]?.GetValue<string>() ?? "";
         }
         finally { loadingIdea = false; }
         playback.Text = "00:00 / 00:00";
