@@ -169,12 +169,12 @@ internal sealed partial class MainForm
             host.addEventListener('click',event=>{
               const a=event.target.closest && event.target.closest('a');if(!a)return;
               const href=a.getAttribute('href')||a.getAttribute('xlink:href')||'';
-              // LilyPond textedit links: textedit:///.../source.ly:LINE:COL:CHAR
-              const match=href.match(/source\.ly:(\d+):(\d+)(?::\d+)?/i);
+              // LilyPond textedit links: textedit:///.../source.ly:LINE:CHAR:COLUMN
+              const match=href.match(/source\.ly:(\d+):(\d+):(\d+)/i);
               if(!match)return;event.preventDefault();
               host.querySelectorAll('a.selected').forEach(n=>n.classList.remove('selected'));
               a.classList.add('selected');
-              window.chrome.webview.postMessage({action:'select-source',line:Number(match[1]),column:Number(match[2])});
+              window.chrome.webview.postMessage({action:'select-source',line:Number(match[1]),column:Number(match[3])});
             });
             render();
             </script></body></html>
