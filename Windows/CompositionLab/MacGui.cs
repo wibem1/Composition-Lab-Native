@@ -223,8 +223,8 @@ internal sealed partial class MainForm
         }
         dl.Controls.Add(cards, 0, 1); deck.Controls.Add(dl); main.Controls.Add(deck, 0, 2);
         var bottom = MacPanel(); bottom.Padding = new Padding(8, 5, 8, 5); var bl = Grid(1, 2); bl.RowStyles.Add(new RowStyle(SizeType.Absolute, 34)); bl.RowStyles.Add(new RowStyle(SizeType.Absolute, 34)); var playerRow = BuildTransport(false); bl.Controls.Add(playerRow, 0, 0);
-        var actions = MacRow(true); AddButton(actions, "MIDI sichern", () => ExportAsync("mid")); AddButton(actions, "CLAB sichern", SaveDocumentAsync); AddButton(actions, "CLAB laden …", () => OpenAsync());
-        actions.Controls.Add(new Panel { Width = 22, Height = 1 }); AddButton(actions, "Import …", () => OpenAsync(slots.SelectedIndex)); AddButton(actions, "Motiv …", PrepareMotif);
+        var actions = MacRow(true); AddButton(actions, "Stück speichern", SaveDocumentAsync);
+        actions.Controls.Add(new Panel { Width = 12, Height = 1 }); AddButton(actions, "Stück laden …", () => OpenAsync(slots.SelectedIndex));
         actions.Controls.Add(compose); bl.Controls.Add(actions, 0, 1); bottom.Controls.Add(bl); main.Controls.Add(bottom, 0, 3);
         static void SetRow(RowStyle row, int height)
         {
@@ -374,9 +374,9 @@ internal sealed partial class MainForm
         var previewTools = MacRow(true);
         var enlarge = new StudioButton { Text = "Große Ansicht", AutoSize = true };
         enlarge.Click += (_, _) => toggleLargePreview?.Invoke(); previewTools.Controls.Add(enlarge);
-        AddButton(previewTools, "◀", () => PreviewCommand("page(-1)")); previewTools.Controls.Add(previewPage); AddButton(previewTools, "▶", () => PreviewCommand("page(1)")); AddButton(previewTools, "−", () => PreviewCommand("zoom(-10)")); previewTools.Controls.Add(previewZoom); AddButton(previewTools, "+", () => PreviewCommand("zoom(10)")); AddButton(previewTools, "Aktualisieren", RefreshNotationAsync); AddButton(previewTools, "Drucken …", () => { if (webReady) web.CoreWebView2.ShowPrintUI(Microsoft.Web.WebView2.Core.CoreWebView2PrintDialogKind.Browser); return Task.CompletedTask; });
+        AddButton(previewTools, "◀", () => PreviewCommand("page(-1)")); previewTools.Controls.Add(previewPage); AddButton(previewTools, "▶", () => PreviewCommand("page(1)")); AddButton(previewTools, "−", () => PreviewCommand("zoom(-10)")); previewTools.Controls.Add(previewZoom); AddButton(previewTools, "+", () => PreviewCommand("zoom(10)")); AddButton(previewTools, "Aktualisieren", RefreshNotationAsync); 
         preview.Controls.Add(previewTools, 0, 0); notationHost.Controls.Add(web); preview.Controls.Add(notationHost, 0, 1); right.Controls.Add(preview, 0, 3); notationSummary.Text = "Darstellungsregeln · Klavier – lesbar"; notationSummary.Visible = false; right.Controls.Add(notationSummary, 0, 4);
-        var exports = MacRow(true); exports.Controls.Add(MacLabel("Export", 12, true)); AddButton(exports, "LilyPond sichern …", ExportLilyPondAsync); var export = new StudioButton { Text = "MusicXML sichern / ziehen …", AutoSize = true }; export.Click += async (_, _) => await GuardAsync(() => ExportAsync("musicxml")); Point dragStart = Point.Empty; export.MouseDown += (_, e) => dragStart = e.Location; export.MouseMove += async (_, e) => { if (e.Button != MouseButtons.Left || Math.Abs(e.X - dragStart.X) + Math.Abs(e.Y - dragStart.Y) < 10 || Score == null) return; dragStart = e.Location; await GuardAsync(async () => { string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".musicxml"); await WriteMusicExportAsync(path, "musicxml"); export.DoDragDrop(new DataObject(DataFormats.FileDrop, new[] { path }), DragDropEffects.Copy); }); }; exports.Controls.Add(export); right.Controls.Add(exports, 0, 5); page.Controls.Add(right, 1, 0);
+        var exports = MacRow(true); var export = new StudioButton { Text = "MusicXML sichern / ziehen …", AutoSize = true }; export.Click += async (_, _) => await GuardAsync(() => ExportAsync("musicxml")); Point dragStart = Point.Empty; export.MouseDown += (_, e) => dragStart = e.Location; export.MouseMove += async (_, e) => { if (e.Button != MouseButtons.Left || Math.Abs(e.X - dragStart.X) + Math.Abs(e.Y - dragStart.Y) < 10 || Score == null) return; dragStart = e.Location; await GuardAsync(async () => { string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".musicxml"); await WriteMusicExportAsync(path, "musicxml"); export.DoDragDrop(new DataObject(DataFormats.FileDrop, new[] { path }), DragDropEffects.Copy); }); }; exports.Controls.Add(export); right.Controls.Add(exports, 0, 5); page.Controls.Add(right, 1, 0);
         // The browser remains in a fixed viewport: only the score itself scrolls.
         bool arranging = false, flowRowsPending = false;
         void ArrangeNotation()
@@ -502,7 +502,7 @@ internal sealed partial class MainForm
     {
         var page = Grid(1, 4); page.Padding = new Padding(18, 16, 18, 16); page.RowStyles.Add(new RowStyle(SizeType.Absolute, 32)); page.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); page.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         page.Controls.Add(MacLabel("Technik", 17, true), 0, 0); page.Controls.Add(new Label { Text = "Einstellungen, Diagnose und Verlauf", Dock = DockStyle.Fill, Font = MacFont(12), ForeColor = StudioTheme.Muted }, 0, 1);
-        var actions = MacRow(); AddButton(actions, "API-Schlüssel …", ShowKeys); AddButton(actions, "MIDI-Ausgabe …", ShowMidiOutput); AddButton(actions, "CLAB öffnen …", () => OpenAsync()); AddButton(actions, "CLAB sichern …", SaveDocumentAsync); AddButton(actions, "JSON sichern …", SaveScoreJSON); page.Controls.Add(actions, 0, 2);
+        var actions = MacRow(); AddButton(actions, "Diagnose sichern …", () => { SaveDiagnostic(); return Task.CompletedTask; }); page.Controls.Add(actions, 0, 2);
         var pages = new TabControl { Dock = DockStyle.Fill }; foreach (var pair in new[] { ("Technische Prüfung", (Control)validation), ("JSON", (Control)scoreJSON), ("Verlauf", BuildHistory()) }) { var tab = new TabPage(pair.Item1); tab.Controls.Add(pair.Item2); pages.TabPages.Add(tab); } page.Controls.Add(pages, 0, 3);
         return ScrollWorkspace(page, 1000, 640);
     }
@@ -541,6 +541,8 @@ internal sealed partial class MainForm
         Action(file, "MIDI exportieren …", () => ExportAsync("mid"));
         Action(file, "LilyPond exportieren …", ExportLilyPondAsync);
         Action(file, "MusicXML exportieren …", () => ExportAsync("musicxml"));
+        Action(file, "CLAB-Stück speichern …", SaveDocumentAsync);
+        Action(file, "JSON-Partitur exportieren …", SaveScoreJSON);
         Action(file, "An Hacklily übergeben", () => { OpenHacklily(); return Task.CompletedTask; });
 
         var edit = new ToolStripMenuItem("Bearbeiten"); menu.Items.Add(edit);
@@ -554,6 +556,7 @@ internal sealed partial class MainForm
 
         var music = new ToolStripMenuItem("Komposition"); menu.Items.Add(music);
         Action(music, "Komponieren", () => RequestAIAsync(true));
+        Action(music, "Motiv vorbereiten …", PrepareMotif);
         Action(music, "Fertige Komposition übernehmen", RecoverDisplayedMusicAsync);
         Action(music, "LilyPond-Original in freien Slot", RebuildOriginalAsync);
         Action(music, "Oktavlagen prüfen und korrigieren", ReviewCurrentRegistersAsync);
@@ -573,6 +576,7 @@ internal sealed partial class MainForm
         var help = new ToolStripMenuItem("Hilfe"); menu.Items.Add(help);
         Action(help, "Entwicklungsstand / Über Composition Lab …", () => { ShowDevelopmentInfo(); return Task.CompletedTask; });
         Action(help, "Diagnosedatei sichern …", () => { SaveDiagnostic(); return Task.CompletedTask; });
+        Action(file, "Noten drucken …", () => { if (webReady) web.CoreWebView2.ShowPrintUI(Microsoft.Web.WebView2.Core.CoreWebView2PrintDialogKind.Browser); return Task.CompletedTask; });
         return menu;
     }
 
