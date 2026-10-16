@@ -548,7 +548,9 @@ internal sealed partial class MainForm
         var edit = new ToolStripMenuItem("Bearbeiten"); menu.Items.Add(edit);
         Action(edit, "Rückgängig", () => { if (ActiveControl is TextBoxBase text) text.Undo(); return Task.CompletedTask; });
         Action(edit, "Wiederholen", () => { if (ActiveControl is RichTextBox text && text.CanRedo) text.Redo(); return Task.CompletedTask; });
-        Action(edit, "Partituränderung rückgängig", () => UndoScoreAsync(false));\n        Action(edit, "Partituränderung wiederholen", () => UndoScoreAsync(true));\n        edit.DropDownItems.Add(new ToolStripSeparator());
+        Action(edit, "Partituränderung rückgängig", () => UndoScoreAsync(false));
+        Action(edit, "Partituränderung wiederholen", () => UndoScoreAsync(true));
+        edit.DropDownItems.Add(new ToolStripSeparator());
         Action(edit, "Ausschneiden", () => { if (ActiveControl is TextBoxBase text) text.Cut(); return Task.CompletedTask; });
         Action(edit, "Kopieren", () => { if (ActiveControl is TextBoxBase text) text.Copy(); return Task.CompletedTask; });
         Action(edit, "Einfügen", () => { if (ActiveControl is TextBoxBase text) text.Paste(); return Task.CompletedTask; });
