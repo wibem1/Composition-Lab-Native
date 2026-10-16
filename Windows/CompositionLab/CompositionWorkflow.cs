@@ -16,7 +16,7 @@ internal sealed partial class MainForm
         int destination = -1;
         if (makeMusic)
         {
-            destination = Current == null ? slots.SelectedIndex : Array.FindIndex(documents, d => d == null);
+            destination = Current == null ? slots.SelectedIndex : documents.FirstFreeIndex();
             if (destination < 0) { SetStatus("Alle zehn Slots sind belegt. Bitte zuerst ein Stück speichern und einen Slot leeren.", true); return; }
         }
         string userText = inputText.Trim();
@@ -62,7 +62,7 @@ internal sealed partial class MainForm
                 SaveLocalState(); // Keep the full answer before any translation or slot validation can fail.
                 if (ContainsFinishedMusic(answer))
                 {
-                    destination = Array.FindIndex(documents, d => d == null);
+                    destination = documents.FirstFreeIndex();
                     if (destination < 0) throw new InvalidOperationException("Komposition erhalten, aber alle Slots sind belegt. Einen Slot leeren und unter Komposition → Fertige Komposition übernehmen fortsetzen.");
                     PreservePendingComposition(answer, result, userText, selectedProvider, selectedModel);
                     var translated = await CompileCheckedCompositionAsync(answer, result, pending.Token);
