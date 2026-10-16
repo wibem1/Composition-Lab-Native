@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.0.0-alpha.18 · Build 4018";
+    const string Version = "4.0.0-alpha.19 · Build 4019";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -242,12 +242,12 @@ internal sealed partial class MainForm : Form
                 else if (string.IsNullOrWhiteSpace(composition.Text)) composition.Text = answer;
             }
             cost.Text = "Anfrage ca. $" + result["estimatedCostUSD"]!.GetValue<double>().ToString("0.0000");
-            SetStatus(makeMusic ? "Komposition abgeschlossen." : "Antwort erhalten."); SaveLocalState();
+            SetMusicStatus(result, makeMusic ? "Komposition abgeschlossen." : "Antwort erhalten."); SaveLocalState();
         }
         catch (OperationCanceledException) { SetStatus("Anfrage lokal abgebrochen."); }
         catch (CoreRequestException e)
         {
-            var failure = e.Diagnostic.DeepClone().AsObject();
+            var failure = e.Diagnostic?.DeepClone().AsObject() ?? new JsonObject();
             if (pendingComposition != null) failure["sourceDiagnostic"] = pendingComposition.DeepClone();
             failure["stage"] = "post-chat-processing-failed";
             failure["processingError"] = e.Message;
@@ -345,7 +345,7 @@ internal sealed partial class MainForm : Form
             await AcceptCompositionAsync(result, destination, assignmentText,
                 source["provider"]?.GetValue<string>() ?? activeProvider,
                 source["model"]?.GetValue<string>() ?? SelectedModelId);
-            SetStatus("Vorhandene Komposition in Slot " + (destination + 1) + " übernommen; MIDI bereit.");
+            SetMusicStatus(result, "Vorhandene Komposition in Slot " + (destination + 1) + " übernommen; MIDI bereit.");
         }
         catch (CoreRequestException e) { lastDiagnostic = e.Diagnostic; UpdateDiagnostic(); SaveLocalState(); throw; }
         finally { pending?.Dispose(); pending = null; SetBusy(false); }
@@ -382,10 +382,19 @@ internal sealed partial class MainForm : Form
         }
         finally { loadingIdea = false; }
         playback.Text = "00:00 / 00:00";
+        pieceInfo.ForeColor = StudioTheme.Muted; notationCurrent.ForeColor = StudioTheme.Ink;
         if (document == null) { cost.Text = "Kosten: –"; pieceInfo.Text = "Wähle links ein Stück oder komponiere etwas Neues."; pieceTitle.Text = "Raum für deine nächste Idee"; scoreJSON.Clear(); validation.Clear(); notationCurrent.Text = "Aktuelles Stück: –"; if (webReady) web.NavigateToString("<html><body>Kein Stück geladen.</body></html>"); return; }
         pieceTitle.Text = document["title"]?.GetValue<string>() ?? "Komposition"; notationCurrent.Text = "Aktuelles Stück: " + pieceTitle.Text;
         var scoreInfo = document["score"];
         pieceInfo.Text = string.Join("  ·  ", new[] { document["ensemble"]?.GetValue<string>(), scoreInfo?["k"]?.GetValue<string>(), scoreInfo?["bpm"]?.ToString() is string bpm ? bpm + " BPM" : null }.Where(v => !string.IsNullOrWhiteSpace(v)));
+        bool registerWarning = RegisterNeedsAttention(document);
+        if (registerWarning)
+        {
+            pieceInfo.Text = "Oktavprüfung offen · " + pieceInfo.Text;
+            pieceInfo.ForeColor = Color.Firebrick;
+            notationCurrent.Text = "Oktavprüfung offen: " + pieceTitle.Text;
+            notationCurrent.ForeColor = Color.Firebrick;
+        }
         scoreJSON.Text = document["score"]?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
         validation.Text = "Technische Prüfung läuft …";
         playerBpm = double.TryParse(document["score"]?["bpm"]?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double bpmValue) ? (int)Math.Round(bpmValue) : 96; tempoOverride = false; foreach (var transport in transports) transport.Tempo.Text = playerBpm.ToString();
@@ -406,6 +415,11 @@ internal sealed partial class MainForm : Form
             currentXML = Encoding.UTF8.GetString(Convert.FromBase64String(xml["data"]!.GetValue<string>()));
             if (webReady) RenderNotation();
             validation.Text = (currentLilyPond != null ? "Originalkomposition mit LilyPond gesetzt. MIDI direkt aus dem Original; keine zusätzliche KI-Anfrage. MusicXML ist eine vereinfachte Austauschansicht.\n\n" : "Technische Partiturprüfung bestanden. MIDI und MusicXML erzeugt.\n\n") + (document["title"]?.GetValue<string>() ?? "");
+            if (registerWarning)
+            {
+                validation.Text = "Oktavprüfung offen: Das unveränderte Original wurde ausgegeben.\n" + (document["octaveReview"]?["message"]?.GetValue<string>() ?? "Auffällige klingende Oktavlagen erkannt.") + "\n\n" + validation.Text;
+                SetMusicStatus(document, "");
+            }
             cost.Text = document["costUSD"] is JsonValue c && c.TryGetValue<double>(out double n) ? "Stück ca. $" + n.ToString("0.0000") : "Kosten: –";
         }
         catch (Exception e) { if (generation == displayGeneration) SetStatus(e.Message, true); }

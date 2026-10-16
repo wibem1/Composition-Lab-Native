@@ -1,4 +1,4 @@
-# Composition Lab Native · Windows · Alpha 18 · Build 4018 · 15.10.2026
+# Composition Lab Native · Windows · Alpha 19 · Build 4019 · 16.10.2026
 
 Das gesamte ZIP in einen neuen Ordner entpacken und `Composition Lab 4.0.exe`
 starten. Die Unterordner `Core`, `LilyPond` und `Notices` beibehalten. .NET,
@@ -17,8 +17,13 @@ verfügbar sein. Zusätzliche Tokens und Kosten erscheinen in der Diagnose.
 Die Korrektur wird lokal erneut kompiliert und nur übernommen, wenn alle
 Tonklassen, Einsätze, Dauern, Dynamikwerte, Stimmen, Instrumente, Tonart,
 Taktart und das Grundtempo erhalten bleiben und die Prüfung danach besteht.
-Bei einem Fehler bleibt ein vorhandenes Stück unverändert; die neue
-Komposition mit Befund und Korrekturantwort steht in der Diagnose.
+Scheitert die automatische Korrektur, bleibt das vollständige Original als
+Notation und MIDI verfügbar. **Oktavprüfung offen** bleibt dann im Main- und
+Noten-Tab sichtbar. Eine ausdrücklich verlangte Korrektur ersetzt die vorhandene
+Fassung nur nach erfolgreicher Prüfung. Original, Befund und Korrekturantwort
+stehen in der Diagnose. Fertige Antworten werden bereits vor der Verarbeitung
+gesichert und lassen sich über **Komposition → Fertige Komposition übernehmen**
+wiederherstellen. **Datei → Diagnose-JSON importieren …** lädt Diagnosedateien.
 
 Für bereits gespeicherte Stücke: **Komposition → Oktavlagen prüfen und
 korrigieren**. **Oktavlagen automatisch prüfen** ist standardmäßig eingeschaltet

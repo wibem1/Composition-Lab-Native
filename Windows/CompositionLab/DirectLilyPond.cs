@@ -46,7 +46,7 @@ internal sealed partial class MainForm
             lastDiagnostic = result.DeepClone().AsObject(); UpdateDiagnostic();
             RememberPiece(document); RefreshSlots(); SaveLocalState();
             await DisplayCurrentAsync();
-            SetStatus(result["octaveReview"]?["status"]?.GetValue<string>() == "corrected" ? "Oktavlagen korrigiert und geprüft. Notation und MIDI aktualisiert." : "Bearbeiteter LilyPond-Code übernommen. Notation und MIDI aktualisiert.");
+            SetMusicStatus(result, result["octaveReview"]?["status"]?.GetValue<string>() == "corrected" ? "Oktavlagen korrigiert und geprüft. Notation und MIDI aktualisiert." : "Bearbeiteter LilyPond-Code übernommen. Notation und MIDI aktualisiert.");
         }
         catch (OperationCanceledException) { SetStatus("Aktualisierung abgebrochen. Die letzte gültige Ausgabe bleibt erhalten."); }
         catch (Exception e)
@@ -106,7 +106,7 @@ internal sealed partial class MainForm
                 ["estimatedCostUSD"] = document["costUSD"]?.DeepClone(), ["inputTokens"] = document["inputTokens"]?.DeepClone(), ["outputTokens"] = document["outputTokens"]?.DeepClone() };
             var result = await CompileCheckedCompositionAsync(music, input, pending.Token);
             await AcceptCompositionAsync(result, destination, document["assignment"]?.GetValue<string>() ?? "", document["provider"]?.GetValue<string>() ?? activeProvider, document["model"]?.GetValue<string>() ?? SelectedModelId);
-            SetStatus("Originalnoten und Original-MIDI in Slot " + (destination + 1) + ". Die bisherige Fassung bleibt erhalten.");
+            SetMusicStatus(result, "Originalnoten und Original-MIDI in Slot " + (destination + 1) + ". Die bisherige Fassung bleibt erhalten.");
         }
         finally { pending?.Dispose(); pending = null; SetBusy(false); }
     }

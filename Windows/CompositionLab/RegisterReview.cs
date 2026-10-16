@@ -118,6 +118,13 @@ internal sealed partial class MainForm
         return original;
     }
 
+    static bool RegisterNeedsAttention(JsonObject? value) => value?["octaveReview"]?["status"]?.GetValue<string>() is "warning" or "issues";
+    void SetMusicStatus(JsonObject? value, string success)
+    {
+        if (RegisterNeedsAttention(value)) SetStatus("Oktavprüfung offen: Original ausgegeben. Komposition → Oktavlagen prüfen und korrigieren.", true);
+        else SetStatus(success);
+    }
+
     async Task ReviewCurrentRegistersAsync()
     {
         if (busy) return;

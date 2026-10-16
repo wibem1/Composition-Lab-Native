@@ -65,6 +65,10 @@ internal sealed partial class MainForm
             {
                 var existing = await CompileCompositionAsync(good, source, CancellationToken.None);
                 await AcceptCompositionAsync(existing, free, "Oktavtest", "gemini", "test-register");
+                Current!["octaveReview"] = new JsonObject { ["status"] = "warning", ["message"] = "Test: Korrektur fehlgeschlagen" };
+                await DisplayCurrentAsync();
+                SetMusicStatus(Current, "Komposition abgeschlossen.");
+                if (!pieceInfo.Text.StartsWith("Oktavprüfung offen") || !notationCurrent.Text.StartsWith("Oktavprüfung offen") || !validation.Text.StartsWith("Oktavprüfung offen") || !status.Text.StartsWith("Oktavprüfung offen")) throw new Exception("Offene Oktavprüfung wird durch Erfolgsmeldung verdeckt.");
                 composition.Text = bad;
                 registerRepairTransport = (_, _) => Task.FromResult(new JsonObject { ["text"] = good });
                 await RefreshNotationAsync();

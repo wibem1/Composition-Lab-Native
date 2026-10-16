@@ -42,5 +42,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: composition-lab-windows-slot-recovery
-          path: Composition-Lab-4.0-alpha.18-Windows-x64.zip
+          path: Composition-Lab-4.0-alpha.19-Windows-x64.zip
           if-no-files-found: error
