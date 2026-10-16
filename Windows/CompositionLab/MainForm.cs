@@ -608,6 +608,19 @@ internal sealed partial class MainForm : Form
     public async Task<string> RunSelfTestAsync(string output)
     {
         Directory.CreateDirectory(output);
+        // Guard the intentionally compact V4.1 interface against button/menu duplication.
+        var topMenus = MainMenuStrip?.Items.OfType<ToolStripMenuItem>().ToArray()
+            ?? throw new Exception("V4.1-Menüleiste fehlt.");
+        if (!topMenus.Select(item => item.Text).SequenceEqual(new[] {
+                "Datei", "Bearbeiten", "Komposition", "Einstellungen", "Hilfe"
+            })) throw new Exception("V4.1-Menüstruktur ist nicht konsolidiert.");
+        var menuLabels = topMenus.SelectMany(item => item.DropDownItems.OfType<ToolStripMenuItem>())
+            .Select(item => item.Text).ToHashSet();
+        foreach (string essential in new[] {
+            "Diagnose importieren …", "MusicXML exportieren …", "LilyPond exportieren …",
+            "Motiv vorbereiten …", "Entwicklungsstand / Über Composition Lab …"
+        }) if (!menuLabels.Contains(essential))
+            throw new Exception("Menüfunktion fehlt: " + essential);
         await ModelCatalogTests.RunAsync();
         await RunModelDialogTestsAsync(output);
         modelCatalogs["anthropic"] = new ModelSnapshot(DateTimeOffset.UtcNow, Enumerable.Range(0, 235).Select(i => new CatalogModel("future-" + i, "Future " + i, "Test-Katalog")).ToList());
