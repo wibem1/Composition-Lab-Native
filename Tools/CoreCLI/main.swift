@@ -5,7 +5,10 @@ import CompositionCore
 do {
     let args = Array(CommandLine.arguments.dropFirst())
     if args == ["service"] {
-        try BridgeService.run()
+        // All service operations use the same error envelope. A validation
+        // failure is a structured domain error, not a crashed runtime.
+        do { try BridgeService.run() }
+        catch { BridgeService.send(["ok": false, "error": error.localizedDescription]) }
     } else if args == ["--version"] {
         print("Composition Lab Core \(CoreServices.version)")
     } else if args.count == 3 {

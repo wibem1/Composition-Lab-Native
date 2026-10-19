@@ -24,6 +24,15 @@ enum BridgeService {
         let title = obj["title"] as? String ?? "Import"
         switch operation {
         case "version": send(["ok": true, "version": CoreServices.version, "titleEcho": title])
+        case "interpret-composition":
+            send(["ok": true, "interpretation": try JSONSerialization.jsonObject(with: CoreServices.interpretComposition(obj["source"] as? String ?? ""))])
+        case "source-selection":
+            let selection = try CoreServices.sourceSelection(rendered: obj["rendered"] as? String ?? "", editor: obj["editor"] as? String ?? "",
+                fromLine: obj["line"] as? Int ?? 0, fromCharacter: obj["character"] as? Int ?? -1,
+                toLine: obj["endLine"] as? Int ?? 0, toCharacter: obj["endCharacter"] as? Int ?? -1)
+            send(["ok": true, "selection": try JSONSerialization.jsonObject(with: selection)])
+        case "prepare-lilypond":
+            send(["ok": true, "source": try CoreServices.prepareLilyPond(obj["source"] as? String ?? "")])
         case "model-catalog-step":
             let result = try CoreServices.modelCatalogStep(provider: obj["provider"] as? String ?? "",
                 stateJSON: obj["state"] == nil ? nil : data("state"),

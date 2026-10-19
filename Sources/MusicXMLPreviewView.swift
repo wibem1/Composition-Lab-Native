@@ -17,7 +17,32 @@ final class MusicXMLPreviewView: NSView, WKScriptMessageHandler, WKNavigationDel
     private let printButton = NSButton(title: "Drucken …", target: nil, action: nil)
     private let statusLabel = NSTextField(labelWithString: "Vorschau wird vorbereitet …")
 
+    var originalPreviewIsReady: Bool { lilyPondPages != nil && ready }
+    func probeOriginalSelection(completion: @escaping (Bool) -> Void) {
+        webView.evaluateJavaScript(#"""
+        (()=>{const a=Array.from(document.querySelectorAll('.page a')).find(n=>/source\.ly:\d+:\d+:\d+/i.test(n.getAttribute('href')||n.getAttribute('xlink:href')||''));
+        if(!a)return false;a.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));
+        if(document.getElementById('openSelection').disabled)return false;document.getElementById('openSelection').click();return true})()
+        """#) { value, error in completion(error == nil && value as? Bool == true) }
+    }
+
     var onRefreshRequested: (() -> Void)?
+    var onSourceSelection: (([String: Any]) -> Void)?
+    private var lilyPondPages: [String]?
+    private var lilyPondRenderID: String?
+
+    func setLilyPond(_ pages: [String]) {
+        pendingData = nil; lilyPondPages = pages
+        let renderID = UUID().uuidString
+        lilyPondRenderID = renderID
+        ready = false; currentPage = 1; pageCount = pages.count
+        do {
+            webView.loadHTMLString(try LilyPondSource.preview(pages: pages, renderID: renderID), baseURL: nil)
+            statusLabel.stringValue = "Originalnoten aus LilyPond."
+        } catch { statusLabel.stringValue = error.localizedDescription }
+        updateControls()
+    }
+
 
     private var ready = false
     private var pendingData: Data?
@@ -134,6 +159,7 @@ final class MusicXMLPreviewView: NSView, WKScriptMessageHandler, WKNavigationDel
 
     /// Setzt neues MusicXML. Falls der Renderer noch lädt, wird es anschließend automatisch angezeigt.
     func setMusicXML(_ data: Data?) {
+        if lilyPondPages != nil { lilyPondPages = nil; lilyPondRenderID = nil; loadRendererPage() }
         pendingData = data
         currentPage = 1
         pageCount = 0
@@ -165,12 +191,14 @@ final class MusicXMLPreviewView: NSView, WKScriptMessageHandler, WKNavigationDel
     }
 
     @objc private func previousPage() {
+        if lilyPondPages != nil { webView.evaluateJavaScript("page(-1)", completionHandler: nil); return }
         guard currentPage > 1, let data = pendingData else { return }
         currentPage -= 1
         render(data: data, page: currentPage)
     }
 
     @objc private func nextPage() {
+        if lilyPondPages != nil { webView.evaluateJavaScript("page(1)", completionHandler: nil); return }
         guard currentPage < pageCount, let data = pendingData else { return }
         currentPage += 1
         render(data: data, page: currentPage)
@@ -197,6 +225,12 @@ final class MusicXMLPreviewView: NSView, WKScriptMessageHandler, WKNavigationDel
     }
 
     @objc private func printPressed() {
+        if lilyPondPages != nil {
+            let operation = webView.printOperation(with: NSPrintInfo.shared)
+            operation.showsPrintPanel = true; operation.showsProgressPanel = true
+            _ = operation.run()
+            return
+        }
         guard !isPrinting, ready, let data = pendingData, pageCount > 0 else { return }
         isPrinting = true
         printButton.isEnabled = false
@@ -298,12 +332,21 @@ final class MusicXMLPreviewView: NSView, WKScriptMessageHandler, WKNavigationDel
         pageLabel.stringValue = pageCount > 0 ? "Seite \(currentPage) / \(pageCount)" : "Seite – / –"
         backButton.isEnabled = pageCount > 0 && currentPage > 1
         forwardButton.isEnabled = pageCount > 0 && currentPage < pageCount
-        printButton.isEnabled = ready && pendingData != nil && !isPrinting
+        printButton.isEnabled = ready && (pendingData != nil || lilyPondPages != nil) && !isPrinting
         zoomLabel.stringValue = "\(zoomPercent) %"
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "preview", let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
+        guard message.name == "preview", let body = message.body as? [String: Any] else { return }
+        if let id = body["renderId"] as? String {
+            guard id == lilyPondRenderID else { return }
+            if body["action"] as? String == "select-source" { onSourceSelection?(body); return }
+            if let count = body["count"] as? Int, let page = body["page"] as? Int {
+                pageCount = count; currentPage = page; ready = true; updateControls()
+            }
+            return
+        }
+        guard lilyPondPages == nil, let type = body["type"] as? String else { return }
         switch type {
         case "ready":
             ready = true

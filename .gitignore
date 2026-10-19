@@ -59,3 +59,5 @@ Windows/CompositionLab/obj/
 Windows/Bundle/
 Windows/TestResults/
 Composition-Lab-*.zip
+
+.build-lilypond/

@@ -50,7 +50,7 @@ private enum LocalSecretsStore {
     private static var fileURL: URL? { directoryURL?.appendingPathComponent("api-secrets.dat") }
 
     private static func localKey() -> SymmetricKey {
-        let defaults = UserDefaults.standard
+        let defaults = AppPreferences.standard
         if let encoded = defaults.string(forKey: keyDefaultsName), let data = Data(base64Encoded: encoded), data.count == 32 {
             return SymmetricKey(data: data)
         }

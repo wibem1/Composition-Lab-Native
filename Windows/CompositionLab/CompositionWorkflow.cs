@@ -104,45 +104,12 @@ internal sealed partial class MainForm
     async Task<JsonObject?> ImportAIResponseLocallyAsync(
         string original, JsonObject source, CancellationToken token)
     {
-        if (ContainsFinishedMusic(original))
+        var response = await core.RunAsync(new JsonObject { ["operation"] = "interpret-composition", ["source"] = original }, token);
+        var interpretation = response["interpretation"]!;
+        if (interpretation["kind"]?.GetValue<string>() == "lilypond")
             return await CompileCheckedCompositionAsync(original, source, token);
-
-        string trimmed = original.Trim();
-        if (trimmed.StartsWith("```", StringComparison.Ordinal))
-        {
-            int newLine = trimmed.IndexOf('\n');
-            int closing = trimmed.LastIndexOf("```", StringComparison.Ordinal);
-            if (newLine >= 0 && closing > newLine)
-                trimmed = trimmed[(newLine + 1)..closing].Trim();
-        }
-
-        JsonObject? score = null;
-        if (trimmed.StartsWith("{", StringComparison.Ordinal))
-        {
-            try
-            {
-                var imported = await core.RunAsync(new JsonObject {
-                    ["operation"] = "recover-score", ["response"] = trimmed
-                }, token);
-                score = imported["score"]?.DeepClone().AsObject();
-            }
-            catch (Exception) when (!token.IsCancellationRequested) { return null; }
-        }
-        else if (trimmed.StartsWith("<?xml", StringComparison.OrdinalIgnoreCase)
-                 || trimmed.StartsWith("<score-partwise", StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                var imported = await core.RunAsync(new JsonObject {
-                    ["operation"] = "import-musicxml",
-                    ["data"] = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(trimmed)),
-                    ["title"] = "Komposition"
-                }, token);
-                score = imported["score"]?.DeepClone().AsObject();
-            }
-            catch (Exception) when (!token.IsCancellationRequested) { return null; }
-        }
-        if (score == null) return null;
+        if (interpretation["kind"]?.GetValue<string>() != "score") return null;
+        var score = interpretation["score"]!.DeepClone().AsObject();
         var result = source.DeepClone().AsObject();
         result["score"] = score;
         result["composition"] = original;

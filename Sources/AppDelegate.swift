@@ -23,6 +23,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         buildMenus()
         createMainWindowIfNeeded()
         DispatchQueue.main.async { [weak self] in self?.showMainWindow() }
+        if let index = CommandLine.arguments.firstIndex(of: "--native-self-test"), CommandLine.arguments.count > index + 1 {
+            guard ProcessInfo.processInfo.environment["COMPOSITION_LAB_TEST_DOMAIN"] != nil else { print("Native tests require an isolated preferences domain."); exit(2) }
+            let output = CommandLine.arguments[index + 1]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                self?.mainVC?.runNativeSelfTest(output: output) { error in
+                    if let error { print("Native Mac self-test failed: " + error.localizedDescription); exit(1) }
+                    exit(0)
+                }
+            }
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--capture-gui-reference"), CommandLine.arguments.count > index + 1 {
             let output = CommandLine.arguments[index + 1]
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.captureGUIReference(output) }
@@ -76,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         w.isReleasedWhenClosed = false
         w.delegate = self
 
-        let defaults = UserDefaults.standard
+        let defaults = AppPreferences.standard
         if let saved = defaults.string(forKey: mainWindowFrameKey), !saved.isEmpty {
             let restored = NSRectFromString(saved)
             if restored.width >= w.minSize.width,
@@ -107,8 +117,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func saveMainWindowFrame() {
         guard let w = window, !w.frame.isEmpty else { return }
-        UserDefaults.standard.set(NSStringFromRect(w.frame), forKey: mainWindowFrameKey)
-        UserDefaults.standard.synchronize()
+        AppPreferences.standard.set(NSStringFromRect(w.frame), forKey: mainWindowFrameKey)
+        AppPreferences.standard.synchronize()
     }
 
     private func showMainWindow() {

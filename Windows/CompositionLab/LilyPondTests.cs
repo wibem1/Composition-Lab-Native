@@ -9,7 +9,7 @@ internal sealed partial class MainForm
 {
     async Task RunLilyPondTestsAsync(string output)
     {
-        ScoreSourceMapper.SelfTest();
+        await ScoreSourceMapper.SelfTestAsync();
         WorkspaceRevisionGate.SelfTest();
         ProjectPieceCodec.SelfTest();
         ProjectWorkspaceCodec.SelfTest();
@@ -36,10 +36,10 @@ internal sealed partial class MainForm
             """;
         foreach (string unsafeSource in new[] { @"\score { c4 } #(system ""anything"")", @"\include ""private.ly"" \score { c4 }", @"\score { c4 } $(ly:gulp-file ""private"")" })
         {
-            bool failed = false; try { LilyPondCompiler.Prepare(unsafeSource); } catch (InvalidDataException) { failed = true; }
+            bool failed = false; try { await LilyPondCompiler.PrepareAsync(unsafeSource); } catch (InvalidDataException) { failed = true; }
             if (!failed) throw new Exception("Ausführbarer LilyPond-Code wird nicht abgefangen.");
         }
-        if (LilyPondCompiler.Prepare(source) != source) throw new Exception("Vollständiger LilyPond-Code wurde verändert.");
+        if (await LilyPondCompiler.PrepareAsync(source) != source) throw new Exception("Vollständiger LilyPond-Code wurde verändert.");
         var generated = await Engraver.CompileAsync(source);
         if (generated.Cached || generated.Pages.Length != 2) throw new Exception("Originalnoten werden nicht vollständig in zwei Seiten gesetzt.");
         // V4.13: SVG notation must retain the source references required

@@ -1,5 +1,15 @@
 import Foundation
 
+/// A test domain isolates automated native UI checks from the user's settings.
+/// Production keeps its existing preference domains and migration paths.
+enum AppPreferences {
+    static let standard: UserDefaults = {
+        if let domain = ProcessInfo.processInfo.environment["COMPOSITION_LAB_TEST_DOMAIN"], !domain.isEmpty,
+           let defaults = UserDefaults(suiteName: domain) { return defaults }
+        return UserDefaults.standard
+    }()
+}
+
 struct CurrentPlayerState: Codable {
     var score: Score
     var concept: String
@@ -17,6 +27,7 @@ struct CurrentPlayerState: Codable {
 final class Storage {
     static let shared = Storage()
     private let defaults: UserDefaults = {
+        if ProcessInfo.processInfo.environment["COMPOSITION_LAB_TEST_DOMAIN"] != nil { return AppPreferences.standard }
         let identifier = "de.klangwerke.compositionlab.native.v4"
         // A bundle must use its standard domain, not open itself as a suite.
         if Bundle.main.bundleIdentifier == identifier { return .standard }

@@ -9,7 +9,7 @@ let package = Package(
         .executable(name: "composition-lab-core", targets: ["CoreCLI"])
     ],
     targets: [
-        .target(name: "CompositionCore", path: "Shared/CompositionCore"),
+        .target(name: "CompositionCore", path: "Shared/CompositionCore", resources: [.copy("Resources")]),
         .executableTarget(name: "CoreCLI", dependencies: ["CompositionCore"], path: "Tools/CoreCLI"),
         .testTarget(name: "CompositionCoreTests", dependencies: ["CompositionCore"],
                     path: "Tests/CompositionCoreTests", resources: [.copy("Fixtures")])

@@ -24,6 +24,8 @@ fi
 rm -rf "$BUILD" "$APP"
 mkdir -p "$BUILD" "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Info.plist "$APP/Contents/Info.plist"
+cp Shared/CompositionCore/Resources/ScorePreview.html "$APP/Contents/Resources/ScorePreview.html"
+python3 Tools/bundle_lilypond.py "$APP/Contents/Resources"
 if [ -f "Composition_Lab_Benutzerhandbuch_V3_0.pdf" ]; then cp "Composition_Lab_Benutzerhandbuch_V3_0.pdf" "$APP/Contents/Resources/"; fi
 if [ -f "AppIcon.png" ]; then
   ICONSET="$BUILD/AppIcon.iconset"; mkdir -p "$ICONSET"

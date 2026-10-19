@@ -114,15 +114,19 @@ internal sealed partial class MainForm
 
     // LilyPond's point-and-click links contain source.ly:line:column.
     // Only source locations from the locally generated score are accepted.
-    void SelectLilyPondSource(JsonNode message)
+    async Task SelectLilyPondSourceAsync(JsonNode message)
     {
         if (Current == null || currentLilyPond == null) return;
         int line = (int?)message["line"] ?? 0, col = (int?)message["column"] ?? 0;
         int endLine = (int?)message["endLine"] ?? line;
         int endCol = (int?)message["endColumn"] ?? col;
         string source = AppliedLilyPondText(Current);
-        var mapping = ScoreSourceMapper.Map(source, composition.Text,
-            new(line, col), new(endLine, endCol));
+        var document = Current;
+        string editorText = composition.Text;
+        string? previewURI = currentLilyPondPreviewUri;
+        var mapping = await ScoreSourceMapper.MapAsync(source, editorText,
+            new(line, col, (int?)message["character"]), new(endLine, endCol, (int?)message["endCharacter"]));
+        if (!ReferenceEquals(Current, document) || composition.Text != editorText || currentLilyPondPreviewUri != previewURI) return;
         if (mapping.Failure == ScoreSourceMapper.Error.StaleSource)
         {
             SetStatus("Notenbild und Editor unterscheiden sich. Erst Notation aktualisieren.", true);

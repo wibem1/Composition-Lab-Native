@@ -189,20 +189,21 @@ internal sealed partial class MainForm : Form
         {
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(dataDirectory, "WebView2"));
             await web.EnsureCoreWebView2Async(environment);
-            webReady = true; web.CoreWebView2.WebMessageReceived += (_, e) =>
+            webReady = true; web.CoreWebView2.WebMessageReceived += async (_, e) =>
             {
                 try
                 {
                     var message = JsonNode.Parse(e.WebMessageAsJson)!;
                     if (message["action"]?.GetValue<string>() == "select-source")
                     {
-                        SelectLilyPondSource(message);
+                        if (e.Source != currentLilyPondPreviewUri) return;
+                        await SelectLilyPondSourceAsync(message);
                         return;
                     }
                     if (message["page"] != null) previewPage.Text = "Seite " + message["page"] + " / " + message["count"];
                     if (message["zoom"] != null) previewZoom.Text = message["zoom"] + " %";
                 }
-                catch (Exception error) when (error is JsonException or InvalidOperationException or FormatException)
+                catch (Exception error) when (error is JsonException or InvalidOperationException or FormatException or IOException)
                 {
                     SetStatus("Ungültige Notenauswahl: " + error.Message, true);
                 }

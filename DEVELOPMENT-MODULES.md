@@ -135,3 +135,26 @@ Keine Modultrennung nur zur Kosmetik: `partial MainForm` in mehreren Dateien ist
 - Vorabnachweis: vorhandene grüne Kerntests in Actions `39317627348`;
   Regressionen für Zeilenenden, Dateierweiterungen und Katalogseiten ergänzt.
   Plattformübergreifende CI-Abnahme und Funktionsgleichheit noch offen.
+
+### Gemeinsamer Quell- und Notensatzweg
+
+- `LilyPondSource.swift`: Extraktion und sichere Aufbereitung ohne Änderung der
+  Musik; Quelltextauswahl anhand der echten LilyPond-Zeichenposition (Unicode-
+  Skalare, nicht tabulatorabhängige Bildspalten), Ausgabe als native UTF-16-Range.
+  Die Quellrevision muss mit dem Editor übereinstimmen; nur Zeilenenden dürfen
+  sich unterscheiden. Eine gemeinsame HTML/SVG-Vorlage unterstützt WebView2 und
+  WKWebView, einschließlich Mehrfachauswahl und Quellenverweis.
+- `CoreServices.interpretComposition`: ausschließlich lokale Erkennung von
+  LilyPond, Score-JSON und MusicXML. Kein kostenpflichtiger Fallback.
+- `NativeLilyPondCompiler`, `NativeLocalCompositionService`: Mac-Prozess- und
+  Dateiadapter; mitgeliefertes LilyPond 2.26.0 für beide Mac-Architekturen,
+  überprüfte Archivprüfsummen, serieller Cache, Prozesszeitlimit, Outputprüfung.
+- Mac übernimmt Original-MIDI, lokale Quelltextbearbeitung und SVG-Auswahl.
+  Fehlerhafte Bearbeitungen ersetzen die letzte gültige Ausgabe nicht.
+- Leere Mac-Slots und gelöschte aktive Slots leeren jetzt den aktuellen
+  Player-/Partiturzustand; Autospeichern darf fremde Partituren nicht duplizieren.
+- `--native-self-test` prüft den realen Mac-Original→SVG→Editor→Bearbeitung→CLAB-
+  Datenfluss ohne KI-Zugriff in einer getrennten Preferences-Domain.
+- Der CLI-Service liefert für alle Domainfehler denselben JSON-Fehlerumschlag.
+  Der Windows-Adapter unterscheidet damit ungültige Provider-Seiten von einem
+  fehlenden oder abgestürzten Kern. Nachweis: echter Adapter/Kern-Offline-Test.

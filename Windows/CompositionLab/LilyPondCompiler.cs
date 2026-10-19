@@ -13,40 +13,20 @@ internal sealed class LilyPondCompiler(string cacheRoot)
 {
     public const string Version = "2.26.0";
     readonly SemaphoreSlim gate = new(1, 1);
-    public static string Prepare(string source)
+    public static async Task<string> PrepareAsync(string source, CancellationToken cancellation = default)
     {
-        // Accept ordinary notation, not arbitrary embedded Scheme or external files.
-        string notation = Regex.Replace(source, "(?s)\\%\\{.*?\\%\\}|%[^\\r\\n]*|\"(?:\\\\.|[^\"\\\\])*\"", " ");
-        notation = Regex.Replace(notation, @"##[tf]\b|#\(set-global-staff-size\s+\d+(?:\.\d+)?\s*\)", " ");
-        if (Regex.IsMatch(notation, @"\\(?:include|includeSpecial|applyContext|applyOutput|displayScheme|scheme|load)\b|\$|#(?!#[tf]\b|[-+]?\d+(?:\.\d+)?)"))
-            throw new InvalidDataException("Die LilyPond-Datei enthält externe Dateien oder ausführbare Scheme-Ausdrücke. Für die direkte Ausgabe bitte reine Notation verwenden.");
-        if (!Regex.IsMatch(notation, @"\\score\s*\{")) throw new InvalidDataException("Kein vollständiger LilyPond-Score vorhanden.");
-        // A score without an explicit MIDI block still gets playback. A layout
-        // block is needed when an explicit MIDI block would suppress engraving.
-        // Add only output directives, never change the music expressions.
-        var score = Regex.Match(source, @"\\score\s*\{");
-        int depth = 1, end = score.Index + score.Length;
-        bool quoted = false, comment = false, block = false;
-        for (; end < source.Length && depth > 0; end++)
-        {
-            char c = source[end];
-            if (comment) { if (c == '\n') comment = false; continue; }
-            if (block) { if (c == '%' && end + 1 < source.Length && source[end + 1] == '}') { block = false; end++; } continue; }
-            if (quoted) { if (c == '\\') end++; else if (c == '"') quoted = false; continue; }
-            if (c == '"') { quoted = true; continue; }
-            if (c == '%') { if (end + 1 < source.Length && source[end + 1] == '{') { block = true; end++; } else comment = true; continue; }
-            if (c == '{') depth++; else if (c == '}') depth--;
+        try {
+            var response = await new CoreClient().RunAsync(new System.Text.Json.Nodes.JsonObject {
+                ["operation"] = "prepare-lilypond", ["source"] = source
+            }, cancellation);
+            return response["source"]!.GetValue<string>();
         }
-        if (depth != 0) throw new InvalidDataException("Die LilyPond-Score-Klammer ist nicht geschlossen.");
-        string body = notation;
-        string directives = (Regex.IsMatch(body, @"\\layout\s*\{") ? "" : "\n\\layout { }\n") +
-                            (Regex.IsMatch(body, @"\\midi\s*\{") ? "" : "\n\\midi { }\n");
-        return source.Insert(end - 1, directives);
+        catch (CoreRequestException e) { throw new InvalidDataException(e.Message, e); }
     }
 
     public async Task<LilyPondOutput> CompileAsync(string source, CancellationToken cancellation = default)
     {
-        string prepared = Prepare(source);
+        string prepared = await PrepareAsync(source, cancellation);
         string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Version + "\npoint-and-click-v1\n" + prepared)));
         string final = Path.Combine(cacheRoot, hash);
         await gate.WaitAsync(cancellation);

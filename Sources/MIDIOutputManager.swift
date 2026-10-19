@@ -12,7 +12,7 @@ final class MIDIOutputManager {
 
     private var client = MIDIClientRef()
     private var outputPort = MIDIPortRef()
-    private let defaults = UserDefaults.standard
+    private let defaults = AppPreferences.standard
 
     private init() {
         MIDIClientCreate("Composition Lab MIDI Client" as CFString, nil, nil, &client)

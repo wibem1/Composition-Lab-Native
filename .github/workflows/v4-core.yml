@@ -41,6 +41,8 @@ jobs:
           test -x 'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0'
           lipo 'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0' -verify_arch x86_64 arm64
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' 'Composition Lab 4.0.app/Contents/Info.plist')" = 'de.klangwerke.compositionlab.native.v4'
+          COMPOSITION_LAB_TEST_DOMAIN=de.klangwerke.compositionlab.ci 'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0' --native-self-test "$PWD/Mac-TestResults"
+          test -s Mac-TestResults/result.json
           'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0' --capture-gui-reference "$PWD/Mac-GUI-Reference"
           test -s Mac-GUI-Reference/Mac-Main.png
           ditto -c -k --keepParent 'Composition Lab 4.0.app' Composition-Lab-4.0-alpha.12-Mac.zip
@@ -71,3 +73,9 @@ jobs:
         with:
           name: Mac-GUI-Reference
           path: Mac-GUI-Reference/
+
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'macOS'
+        with:
+          name: Mac-TestResults
+          path: Mac-TestResults/

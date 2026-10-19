@@ -18,6 +18,34 @@ public enum CoreServices {
         return try JSONSerialization.data(withJSONObject: response)
     }
 
+    /// Interpret a finished answer locally. Never calls a provider, repairs
+    /// music or falls back to a paid technical translation.
+    public static func interpretComposition(_ original: String) throws -> Data {
+        if let source = try? LilyPondSource.extract(original), source.contains("\\score") {
+            return try JSONSerialization.data(withJSONObject: ["kind": "lilypond", "source": source])
+        }
+        var text = original.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("```"), let first = text.firstIndex(of: "\n"), let last = text.range(of: "```", options: .backwards), last.lowerBound > first {
+            text = String(text[text.index(after: first)..<last.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let score: Score?
+        if text.hasPrefix("{") { score = try? ScoreDecoder.decode(Data(text.utf8)) }
+        else if text.hasPrefix("<?xml") || text.hasPrefix("<score-partwise") {
+            score = try? MusicXMLParser.parse(data: Data(text.utf8), fallbackTitle: "Komposition")
+        } else { score = nil }
+        guard let score else { return try JSONSerialization.data(withJSONObject: ["kind": "unrecognized"]) }
+        try ScoreValidation.validate(score)
+        return try JSONSerialization.data(withJSONObject: ["kind": "score", "score": try JSONSerialization.jsonObject(with: JSONEncoder().encode(score))])
+    }
+
+    public static func sourceSelection(rendered: String, editor: String, fromLine: Int, fromCharacter: Int, toLine: Int, toCharacter: Int) throws -> Data {
+        try JSONEncoder().encode(LilyPondSource.selection(rendered: rendered, editor: editor,
+            from: .init(line: fromLine, character: fromCharacter), to: .init(line: toLine, character: toCharacter)))
+    }
+
+    public static func prepareLilyPond(_ source: String) throws -> String { try LilyPondSource.prepare(source) }
+    public static func extractLilyPond(_ source: String) throws -> String { try LilyPondSource.extract(source) }
+
     public static func midi(scoreJSON: Data) throws -> Data {
         MIDIBuilder.build(try validatedScore(scoreJSON))
     }
