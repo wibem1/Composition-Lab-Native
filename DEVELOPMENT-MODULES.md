@@ -180,3 +180,10 @@ Keine Modultrennung nur zur Kosmetik: `partial MainForm` in mehreren Dateien ist
   einschließlich unverändertem MIDI, Abbruch und beschädigtem Cache, lokal bestanden.
 - Automatische Tests unterscheiden weiterhin lokale Kern-/Adapterprüfungen,
   native GUI-Prüfungen und die nicht ersetzte praktische Hör-/Geräteabnahme.
+
+Die automatische Matrix ist der maßgebliche Mac-/Windows-/Linux-Prüflauf.
+Die beiden zusätzlichen Windows-Diagnoseworkflows bleiben manuell ausführbar;
+sie bauen bei jedem Commit nicht mehr dieselbe Anwendung doppelt. Native Mac-
+Tests prüfen auch zwei verschiedene Modellkennungen mit demselben Anzeigenamen.
+Die Auswahl zeigt tatsächliche Kennungen, statt gleich benannte Einträge zu
+verlieren oder unbeabsichtigt das Modell zu wechseln.

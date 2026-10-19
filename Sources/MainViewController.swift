@@ -948,6 +948,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         if effortPop.numberOfItems == 0 { effortPop.addItems(withTitles: Effort.allCases.map(\.displayName)) }
         let ai = NSTextField(labelWithString: "KI"); ai.font = .systemFont(ofSize: 12, weight: .semibold); row.addArrangedSubview(ai)
         row.addArrangedSubview(providerPop); row.addArrangedSubview(modelPop)
+        modelPop.widthAnchor.constraint(lessThanOrEqualToConstant: 280).isActive = true
+        modelPop.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let refreshModels = NSButton(title: "Modelle aktualisieren", target: self, action: #selector(refreshProviderModels))
         row.addArrangedSubview(refreshModels); row.addArrangedSubview(effortPop); row.addArrangedSubview(NSView())
         func label(_ text: String) { row.addArrangedSubview(NSTextField(labelWithString: text)) }
@@ -2092,8 +2094,13 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         // Imported projects can reference a model absent from today's catalog.
         // Keep that exact ID selectable instead of silently changing the model.
         if let stored, !stored.isEmpty, !list.contains(where: { $0.0 == stored }) { list.insert((stored, stored), at: 0) }
+        var labels = Set<String>()
         for (id, title) in list {
-            modelPop.addItem(withTitle: title)
+            let base = title == id ? id : title + " · " + id
+            var label = base, suffix = 2
+            while labels.contains(label) { label = base + " (\(suffix))"; suffix += 1 }
+            labels.insert(label)
+            modelPop.addItem(withTitle: label)
             modelPop.lastItem?.representedObject = id
             modelPop.lastItem?.toolTip = modelCatalog.models(for: provider).first(where: { $0.id == id })?.details
         }
@@ -4143,6 +4150,14 @@ extension MainViewController {
                 guard let self else { completion(APIError.badResponse("Testfenster fehlt.")); return }
                 do {
                     guard let work = try result.get() else { throw APIError.badResponse("Lokale Originalübernahme fehlt.") }
+                    let catalogProvider = self.provider
+                    self.modelCatalog.accept([CatalogModel(id: "native-model-a", name: "Gleicher Modellname", details: "A"),
+                        CatalogModel(id: "native-model-b", name: "Gleicher Modellname", details: "B")], for: catalogProvider)
+                    self.settings.models[catalogProvider.rawValue] = "native-model-a"
+                    self.refillModels()
+                    try require(self.modelPop.numberOfItems == 2 && self.model == "native-model-a", "Gleich benannte Provider-Modelle gehen in der Mac-Auswahl verloren.")
+                    self.modelPop.selectItem(at: 1)
+                    try require(self.model == "native-model-b", "Modellauswahl verwendet nicht die tatsächliche Kennung.")
                     self.pendingCompositionSlot = 0
                     self.install(score: work.score, concept: source, provider: .gemini, model: "offline-test", metadata: work.metadata)
                     let originalMidi = self.lastMidi
@@ -4183,7 +4198,7 @@ extension MainViewController {
                                                     let restored = try JSONDecoder().decode(CompositionLabDocument.self, from: doc)
                                                     try require(restored.extraFields["lilyPondSource"] == .string(edited), "Mac-CLAB verliert angewendete Quelle.")
                                                     let report: [String: Any] = ["passed": true, "interface": "AppKit/WebKit", "offline": true,
-                                                        "checks": ["local-original", "svg-to-editor", "empty-slot", "source-edit", "invalid-edit-rollback", "failed-import-rollback", "clab-metadata", "original-midi", "playback-copy"]]
+                                                        "checks": ["local-original", "duplicate-model-names", "svg-to-editor", "empty-slot", "source-edit", "invalid-edit-rollback", "failed-import-rollback", "clab-metadata", "original-midi", "playback-copy"]]
                                                     try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
                                                     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: output).appendingPathComponent("result.json"))
                                                     completion(nil)

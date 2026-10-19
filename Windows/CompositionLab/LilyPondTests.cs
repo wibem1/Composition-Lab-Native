@@ -51,7 +51,9 @@ internal sealed partial class MainForm
         var recoveryRoot = Path.Combine(output, "Cache-Recovery");
         var cacheProbe = new LilyPondCompiler(recoveryRoot);
         var cacheOriginal = await cacheProbe.CompileAsync(source);
-        var cachedMidi = Directory.GetFiles(recoveryRoot, "score.midi", SearchOption.AllDirectories).Single();
+        var cachedMidi = Directory.EnumerateFiles(recoveryRoot, "*", SearchOption.AllDirectories).Single(path =>
+            Path.GetExtension(path).Equals(".mid", StringComparison.OrdinalIgnoreCase) ||
+            Path.GetExtension(path).Equals(".midi", StringComparison.OrdinalIgnoreCase));
         await File.WriteAllTextAsync(cachedMidi, "corrupt cache fixture");
         var recoveredCache = await cacheProbe.CompileAsync(source);
         if (recoveredCache.Cached || !recoveredCache.Midi.SequenceEqual(cacheOriginal.Midi))

@@ -1,8 +1,7 @@
 name: Windows slot persistence compile check
+# The automatic matrix already compiles, packages and tests Windows.
+# Keep this focused diagnostic workflow available for explicit runs.
 on:
-  push:
-    branches:
-      - v4-cross-platform
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
