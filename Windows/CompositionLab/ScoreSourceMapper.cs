@@ -14,15 +14,15 @@ internal static class ScoreSourceMapper
     internal static (Span? Range, Error Failure) Map(string renderedSource, string editorSource, Point from, Point to)
     {
         if (string.IsNullOrEmpty(renderedSource)) return (null, Error.EmptySource);
-        if (!string.Equals(renderedSource, editorSource, StringComparison.Ordinal))
+        if (!string.Equals(NormalizeLines(renderedSource), NormalizeLines(editorSource), StringComparison.Ordinal))
             return (null, Error.StaleSource);
         // Renderers compile the LilyPond body only. Stored AI answers may
         // wrap that body in a Markdown fence and introductory prose.
         // Compute positions against the compiled body, then translate back
         // to absolute editor offsets without modifying the editor text.
-        string mappingSource = renderedSource;
+        string mappingSource = editorSource;
         int baseOffset = 0;
-        var fenced = Regex.Match(renderedSource, @"(?s)```(?:lilypond|ly)\s*\r?\n(?<body>.*?)\r?\n```", RegexOptions.IgnoreCase);
+        var fenced = Regex.Match(editorSource, @"(?s)```(?:lilypond|ly)\s*\r?\n(?<body>.*?)\r?\n```", RegexOptions.IgnoreCase);
         if (fenced.Success)
         {
             mappingSource = fenced.Groups["body"].Value;
@@ -46,8 +46,10 @@ internal static class ScoreSourceMapper
         int a = Offset(from), b = Offset(to);
         if (a < 0 || b < 0) return (null, Error.InvalidPosition);
         if (b < a) (a, b) = (b, a);
-        return (new Span(a, Math.Min(renderedSource.Length - a, Math.Max(1, b - a + 1))), Error.None);
+        return (new Span(a, Math.Min(editorSource.Length - a, Math.Max(1, b - a + 1))), Error.None);
     }
+    static string NormalizeLines(string text) => text.Replace("\r\n", "\n").Replace("\r", "\n");
+
     internal static void SelfTest()
     {
         const string music = "c'4 d'4\n<e' g'>2\n";
@@ -63,6 +65,15 @@ internal static class ScoreSourceMapper
         if (wrappedResult.Failure != Error.None ||
             wrappedResult.Range?.Start != wrapped.IndexOf("c'4", StringComparison.Ordinal))
             throw new Exception("ScoreSourceMapper: fenced LilyPond source coordinate incorrect.");
+        string windowsSource = music.Replace("\n", "\r\n");
+        var lineEndings = Map(windowsSource, music, new(2, 1), new(2, 2));
+        if (lineEndings.Range is not { Start: 8, Length: 2 })
+            throw new InvalidOperationException("ScoreSourceMapper: native editor newline normalization rejected.");
+        var reverseEndings = Map(music, windowsSource, new(2, 1), new(2, 2));
+        if (reverseEndings.Range is not { Start: 9, Length: 2 })
+            throw new InvalidOperationException("ScoreSourceMapper: CRLF editor offsets incorrect.");
+        if (Map(windowsSource, music.Replace("d'4", "e'4"), new(1, 1), new(1, 1)).Failure != Error.StaleSource)
+            throw new InvalidOperationException("ScoreSourceMapper: changed music accepted after newline normalization.");
         if (Map(music, music, new(2,2), new(1,1)).Range is not {Start:0})
             throw new InvalidOperationException("ScoreSourceMapper: reverse range rejected.");
     }

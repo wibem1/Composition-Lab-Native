@@ -9,6 +9,13 @@ final class TopAlignedDocumentView: NSView {
 final class MainViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
     private let providerPop = NSPopUpButton()
     private let modelPop = NSPopUpButton()
+    private let modelCatalog = NativeModelCatalogStore()
+    private var modelCatalogGeneration = 0
+
+    private func modelsForProvider(_ provider: Provider) -> [(String, String)] {
+        let catalog = modelCatalog.models(for: provider)
+        return catalog.isEmpty ? provider.models : catalog.map { ($0.id, $0.name) }
+    }
     private let effortPop = NSPopUpButton()
     private let keyField = NSSecureTextField()
         private let keyLabel = NSTextField(labelWithString: "API-Key")
@@ -33,6 +40,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private var settings = Storage.shared.loadSettings()
     private var history = Storage.shared.loadHistory()
     private var lastConcept = ""
+    private var lastPortableMetadata: [String: JSONValue] = [:]
     private var lastScore: Score?
     private var lastMidi: Data?
     private var lastProvider: Provider?
@@ -119,9 +127,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private var musicChatCompositionContextOverride: String = ""
     private var projectName = "Unbenannt"
     private var projectURL: URL?
-    private var reaperBridgeTimer: Timer?
-    private var lastReaperBridgeDate: Date?
-    private var lastStudioProBridgeDate: Date?
     private let v65ProjectLabel = NSTextField(labelWithString: "Projekt: Unbenannt")
     private let notationPlayerVolume = NSSlider(value: 0.80, minValue: 0.10, maxValue: 1.0, target: nil, action: nil)
     private let notationPlayerTempoField = NSTextField(string: "120")
@@ -153,14 +158,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         view.window?.minSize = NSSize(width:900,height:680)
         view.window?.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
 
-        // Vorhandene Bridge-Dateien sind beim Programmstart nur Altbestand.
-        // Sie dürfen nicht erneut die aktuelle Komposition im Player überschreiben.
-        // Erst eine spätere Änderung der Übergabedatei gilt als neue DAW-Übergabe.
-        if reaperBridgeTimer == nil {
-            lastReaperBridgeDate = ReaperBridge.modificationDate()
-            lastStudioProBridgeDate = StudioProBridge.modificationDate()
-        }
-        startReaperBridgeWatcher()
         v309StartSessionAutosave()
     }
 
@@ -256,12 +253,11 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                     addHistory: false,
                     costUSD: item.costUSD,
                     inputTokens: item.inputTokens,
-                    outputTokens: item.outputTokens)
+                    outputTokens: item.outputTokens, metadata: item.extraFields)
             slotSelectionLoad = false
 
             promptView.string = preservedAssignment
             conceptView.string = preservedIdea
-            lastConcept = preservedIdea
             chatView.string = preservedChat
             musicChatCompositionContextOverride = preservedSourceContext
         }
@@ -269,139 +265,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         updatePieceSlotButtons()
         scheduleMusicXMLPreviewRefresh()
         status("Letzte Arbeitssitzung mit \(pieceSlots.compactMap { $0 }.count) Stück(en) wiederhergestellt.", good: true)
-    }
-
-    private func startReaperBridgeWatcher() {
-        guard reaperBridgeTimer == nil else { return }
-        let timer = Timer(timeInterval: 3.0,
-                          target: self,
-                          selector: #selector(reaperBridgeTimerFired(_:)),
-                          userInfo: nil,
-                          repeats: true)
-        timer.tolerance = 1.0
-        // Intentionally .default: bridge polling pauses while AppKit is tracking
-        // scroll wheels, sliders, menus and mouse drags. UI interaction wins.
-        RunLoop.main.add(timer, forMode: .default)
-        reaperBridgeTimer = timer
-    }
-
-    private var dawBridgeCheckInFlight = false
-
-    @objc private func reaperBridgeTimerFired(_ timer: Timer) {
-        // File-system access and bridge parsing must never block AppKit's main thread.
-        // The timer only launches a background check; UI/state updates return to main.
-        guard !dawBridgeCheckInFlight else { return }
-        dawBridgeCheckInFlight = true
-
-        let previousReaperDate = lastReaperBridgeDate
-        let previousStudioDate = lastStudioProBridgeDate
-
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            // Build immutable snapshots in the background. Swift 6 then does not
-            // see mutable captured variables crossing into the main-queue closure.
-            let reaperResult: (Date, Result<Score, Error>)? = {
-                guard let date = ReaperBridge.modificationDate(),
-                      previousReaperDate == nil || date > previousReaperDate! else { return nil }
-                return (date, Result { try ReaperBridge.loadScore() })
-            }()
-
-            let studioResult: (Date, Result<Score, Error>)? = {
-                guard let date = StudioProBridge.modificationDate(),
-                      previousStudioDate == nil || date > previousStudioDate! else { return nil }
-                return (date, Result { try StudioProBridge.loadScore() })
-            }()
-
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.dawBridgeCheckInFlight = false
-
-                if let (date, result) = reaperResult {
-                    self.lastReaperBridgeDate = date
-                    switch result {
-                    case .success(let score):
-                        self.importedReferenceScore = score
-                        self.importedReferenceName = "REAPER: " + score.ti
-                        self.lastConcept = ""
-                        self.conceptView.string = ""
-                        self.install(score: score, concept: "", provider: self.provider, model: self.model, addHistory: false)
-                        self.conceptView.string = ""
-                        self.workspaceSegment.selectedSegment = 0
-                        self.workspaceChanged()
-                        NSApp.activate(ignoringOtherApps: true)
-                        self.view.window?.makeKeyAndOrderFront(nil)
-                        self.status("REAPER-Vorlage übernommen – \(score.tr.reduce(0) { $0 + $1.nt.count }) Noten.", good: true)
-                    case .failure(let error):
-                        self.status("REAPER-Übergabe fehlgeschlagen: \(error.localizedDescription)", good: false)
-                    }
-                }
-
-                if let (date, result) = studioResult {
-                    self.lastStudioProBridgeDate = date
-                    switch result {
-                    case .success(let score):
-                        self.importedReferenceScore = score
-                        self.importedReferenceName = "Studio Pro: " + score.ti
-                        self.lastConcept = ""
-                        self.conceptView.string = ""
-                        self.install(score: score, concept: "", provider: self.provider, model: self.model, addHistory: false)
-                        self.conceptView.string = ""
-                        self.workspaceSegment.selectedSegment = 0
-                        self.workspaceChanged()
-                        NSApp.activate(ignoringOtherApps: true)
-                        self.view.window?.makeKeyAndOrderFront(nil)
-                        self.status("Studio-Pro-Vorlage übernommen – \(score.tr.reduce(0) { $0 + $1.nt.count }) Noten.", good: true)
-                    case .failure(let error):
-                        self.status("Studio-Pro-Übergabe fehlgeschlagen: \(error.localizedDescription)", good: false)
-                    }
-                }
-            }
-        }
-    }
-
-    private func checkReaperBridge() {
-        // Nur Dateien verarbeiten, die sich seit dem Start/letzten Empfang geändert haben.
-        guard let date = ReaperBridge.modificationDate() else { return }
-        if let last = lastReaperBridgeDate, date <= last { return }
-        lastReaperBridgeDate = date
-        do {
-            let score = try ReaperBridge.loadScore()
-            importedReferenceScore = score
-            importedReferenceName = "REAPER: " + score.ti
-            lastConcept = ""
-            conceptView.string = ""
-            install(score: score, concept: "", provider: provider, model: model, addHistory: false)
-            conceptView.string = ""
-            selectWorkspace(0)
-            workspaceSegment.selectedSegment = 0
-            NSApp.activate(ignoringOtherApps: true)
-            view.window?.makeKeyAndOrderFront(nil)
-            status("REAPER-Vorlage übernommen – \(score.tr.reduce(0) { $0 + $1.nt.count }) Noten.", good: true)
-        } catch {
-            status("REAPER-Übergabe fehlgeschlagen: \(error.localizedDescription)", good: false)
-        }
-    }
-
-    private func checkStudioProBridge() {
-        // Nur Dateien verarbeiten, die sich seit dem Start/letzten Empfang geändert haben.
-        guard let date = StudioProBridge.modificationDate() else { return }
-        if let last = lastStudioProBridgeDate, date <= last { return }
-        lastStudioProBridgeDate = date
-        do {
-            let score = try StudioProBridge.loadScore()
-            importedReferenceScore = score
-            importedReferenceName = "Studio Pro: " + score.ti
-            lastConcept = ""
-            conceptView.string = ""
-            install(score: score, concept: "", provider: provider, model: model, addHistory: false)
-            conceptView.string = ""
-            selectWorkspace(0)
-            workspaceSegment.selectedSegment = 0
-            NSApp.activate(ignoringOtherApps: true)
-            view.window?.makeKeyAndOrderFront(nil)
-            status("Studio-Pro-Vorlage übernommen – \(score.tr.reduce(0) { $0 + $1.nt.count }) Noten.", good: true)
-        } catch {
-            status("Studio-Pro-Übergabe fehlgeschlagen: \(error.localizedDescription)", good: false)
-        }
     }
 
     private func buildUI() {
@@ -1076,7 +939,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         if providerPop.numberOfItems == 0 { providerPop.addItems(withTitles: Provider.allCases.map(\.displayName)); providerPop.target = self; providerPop.action = #selector(providerChanged) }
         if effortPop.numberOfItems == 0 { effortPop.addItems(withTitles: Effort.allCases.map(\.displayName)) }
         let ai = NSTextField(labelWithString: "KI"); ai.font = .systemFont(ofSize: 12, weight: .semibold); row.addArrangedSubview(ai)
-        row.addArrangedSubview(providerPop); row.addArrangedSubview(modelPop); row.addArrangedSubview(effortPop); row.addArrangedSubview(NSView())
+        row.addArrangedSubview(providerPop); row.addArrangedSubview(modelPop)
+        let refreshModels = NSButton(title: "Modelle aktualisieren", target: self, action: #selector(refreshProviderModels))
+        row.addArrangedSubview(refreshModels); row.addArrangedSubview(effortPop); row.addArrangedSubview(NSView())
         func label(_ text: String) { row.addArrangedSubview(NSTextField(labelWithString: text)) }
         func field(_ f: NSTextField, _ placeholder: String, _ width: CGFloat) { f.placeholderString = placeholder; f.widthAnchor.constraint(equalToConstant: width).isActive = true; row.addArrangedSubview(f) }
         if measuresField.numberOfItems == 0 {
@@ -1508,6 +1373,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let data = try Data(contentsOf: url)
+            try CoreServices.validateWorkspace(data)
             let doc = try JSONDecoder().decode(V65ProjectDocument.self, from: data)
             guard doc.format == "composition-lab-v6-project" else {
                 throw NSError(domain: "CompositionLab.V65", code: 1,
@@ -1530,7 +1396,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 slotSelectionLoad = true
                 install(score: item.score, concept: item.concept, provider: item.provider, model: item.model,
                         addHistory: false, costUSD: item.costUSD,
-                        inputTokens: item.inputTokens, outputTokens: item.outputTokens)
+                        inputTokens: item.inputTokens, outputTokens: item.outputTokens, metadata: item.extraFields)
                 slotSelectionLoad = false
             }
             scheduleMusicXMLPreviewRefresh()
@@ -1764,7 +1630,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
               let score = lastScore else { return }
         let p = lastProvider ?? provider
         let m = lastModel ?? model
-        pieceSlots[activePieceSlot] = HistoryItem(id: UUID(),
+        pieceSlots[activePieceSlot] = HistoryItem(id: pieceSlots[activePieceSlot]?.id ?? UUID(),
                                                   time: Date(),
                                                   title: score.ti,
                                                   provider: p,
@@ -1774,7 +1640,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                                                   costUSD: lastCostUSD,
                                                   inputTokens: lastInputTokens,
                                                   outputTokens: lastOutputTokens,
-                                                  area: .composition)
+                                                  area: .composition,
+                                                  extraFields: lastPortableMetadata)
         updatePieceSlotButtons()
     }
 
@@ -1786,7 +1653,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         // user-editable working state. Merely browsing a piece slot must never
         // replace it with the historical concept stored in that slot.
         let preservedWorkingIdea = conceptView.string
-        let preservedLastConcept = lastConcept
         let preservedAssignment = promptView.string
         let preservedSourceContext = musicChatCompositionContextOverride
 
@@ -1805,13 +1671,12 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 addHistory: false,
                 costUSD: item.costUSD,
                 inputTokens: item.inputTokens,
-                outputTokens: item.outputTokens)
+                outputTokens: item.outputTokens, metadata: item.extraFields)
         slotSelectionLoad = false
 
         // install() intentionally loads the piece metadata for legacy workflows.
         // Restore the independent 3.x working state immediately afterwards.
         conceptView.string = preservedWorkingIdea
-        lastConcept = preservedLastConcept
         promptView.string = preservedAssignment
         musicChatCompositionContextOverride = preservedSourceContext
 
@@ -2170,9 +2035,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             providerPop.selectItem(at: pi)
             refillModels()
         }
-        if let mi = state.provider.models.firstIndex(where: { $0.0 == state.model }) {
-            modelPop.selectItem(at: mi)
-        }
+        settings.models[state.provider.rawValue] = state.model
+        refillModels()
         keyField.stringValue = SessionSecrets.shared.key(for: state.provider)
         status("\(state.score.ti) als letzter Player-Stand wiederhergestellt.", good: true)
     }
@@ -2181,7 +2045,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         if let i = Provider.allCases.firstIndex(of: settings.provider) { providerPop.selectItem(at:i) }
         refillModels()
         let pkey = settings.provider.rawValue
-        if let m = settings.models[pkey], let idx = settings.provider.models.firstIndex(where:{$0.0 == m}) { modelPop.selectItem(at:idx) }
         if let e = Effort(rawValue: settings.efforts[pkey] ?? "medium"),
            let idx = Effort.allCases.firstIndex(of:e) { effortPop.selectItem(at:idx) }
         measuresField.stringValue = settings.measures
@@ -2196,27 +2059,66 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
     private var provider: Provider { Provider.allCases[max(0,providerPop.indexOfSelectedItem)] }
     private var model: String {
-        let list = provider.models
-        guard !list.isEmpty else { return "" }
-        return list[max(0,min(modelPop.indexOfSelectedItem,list.count-1))].0
+        modelPop.selectedItem?.representedObject as? String ?? settings.models[provider.rawValue] ?? provider.models.first?.0 ?? ""
     }
     private var effort: Effort { Effort.allCases[max(0,effortPop.indexOfSelectedItem)] }
 
     private func refillModels() {
         modelPop.removeAllItems()
-        modelPop.addItems(withTitles: provider.models.map{$0.1})
+        var list = modelsForProvider(provider)
         let stored = settings.models[provider.rawValue]
-        if let stored, let idx = provider.models.firstIndex(where:{$0.0 == stored}) {
-            modelPop.selectItem(at:idx)
-        } else { modelPop.selectItem(at:0) }
+        // Imported projects can reference a model absent from today's catalog.
+        // Keep that exact ID selectable instead of silently changing the model.
+        if let stored, !stored.isEmpty, !list.contains(where: { $0.0 == stored }) { list.insert((stored, stored), at: 0) }
+        for (id, title) in list {
+            modelPop.addItem(withTitle: title)
+            modelPop.lastItem?.representedObject = id
+            modelPop.lastItem?.toolTip = modelCatalog.models(for: provider).first(where: { $0.id == id })?.details
+        }
+        if let stored, let item = modelPop.itemArray.first(where: { $0.representedObject as? String == stored }) { modelPop.select(item) }
+        else { modelPop.selectItem(at: 0) }
+        modelPop.target = self; modelPop.action = #selector(providerModelChanged)
         keyLabel.stringValue = "API-Key für \(provider.displayName)"
         keyField.placeholderString = "\(provider.displayName) API-Key"
     }
 
+    @objc private func providerModelChanged() { saveSettingsFromUI() }
+
+    @objc private func refreshProviderModels() {
+        let selectedProvider = provider
+        let key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { status("Bitte zuerst den API-Schlüssel dieses Providers eintragen.", good: false); return }
+        modelCatalogGeneration += 1
+        let generation = modelCatalogGeneration
+        let selectedModel = model
+        status("Vollständige Modellliste wird geladen …", good: true)
+        NativeModelCatalogClient().list(provider: selectedProvider, key: key) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self, self.modelCatalogGeneration == generation,
+                      self.provider == selectedProvider,
+                      self.keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) == key else { return }
+                switch result {
+                case .success(let models):
+                    self.modelCatalog.accept(models, for: selectedProvider)
+                    self.settings.models[selectedProvider.rawValue] = selectedModel
+                    self.refillModels()
+                    self.status("\(models.count) Modelle vollständig vom Provider geladen.", good: true)
+                case .failure(let error): self.status(error.localizedDescription, good: false)
+                }
+            }
+        }
+    }
+
     @objc private func providerChanged() {
-        saveSettingsFromUI()
+        if let oldModel = modelPop.selectedItem?.representedObject as? String { settings.models[settings.provider.rawValue] = oldModel }
+        settings.efforts[settings.provider.rawValue] = effort.rawValue
+        settings.provider = provider
+        modelCatalogGeneration += 1
         refillModels()
+        let selectedEffort = Effort(rawValue: settings.efforts[provider.rawValue] ?? "medium") ?? .medium
+        effortPop.selectItem(at: Effort.allCases.firstIndex(of: selectedEffort) ?? 1)
         keyField.stringValue = SessionSecrets.shared.key(for: provider)
+        Storage.shared.saveSettings(settings)
     }
 
     private func saveSettingsFromUI() {
@@ -2392,7 +2294,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     private func install(score:Score, concept:String, provider:Provider, model:String, addHistory:Bool = true,
-                         costUSD: Double? = nil, inputTokens: Int? = nil, outputTokens: Int? = nil) {
+                         costUSD: Double? = nil, inputTokens: Int? = nil, outputTokens: Int? = nil,
+                         metadata: [String: JSONValue] = [:]) {
+        lastPortableMetadata = metadata
         if addHistory, let requestedSlot = pendingCompositionSlot {
             activePieceSlot = max(0, min(requestedSlot, pieceSlots.count - 1))
             pendingCompositionSlot = nil
@@ -2404,26 +2308,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         lastInputTokens = inputTokens ?? 0
         lastOutputTokens = outputTokens ?? 0
         lastMidi = MIDIBuilder.build(score)
-        do {
-            try StudioProBridge.writeReturnScore(score)
-        } catch {
-            // Die Studio-Pro-Rückgabe ist eine Komfortfunktion und darf die Komposition nicht blockieren.
-            print("Studio Pro return JSON write failed: \(error.localizedDescription)")
-        }
-        if let midi = lastMidi {
-            do {
-                try StudioProBridge.writeReturnMIDI(midi)
-            } catch {
-                // Die Studio-Pro-Rückgabe ist eine Komfortfunktion und darf die Komposition nicht blockieren.
-                print("Studio Pro return MIDI write failed: \(error.localizedDescription)")
-            }
-        }
-        do {
-            try ReaperBridge.writeResult(score: score)
-        } catch {
-            // Die REAPER-Rückgabe ist eine Komfortfunktion und darf die Komposition nicht blockieren.
-            print("REAPER result bridge write failed: \(error.localizedDescription)")
-        }
         let displayBPM = max(20, min(300, Int(score.bpm.rounded())))
         playerTempoField.integerValue = displayBPM
         playerTempoStepper.integerValue = displayBPM
@@ -2466,7 +2350,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
             if !duplicate {
                 history.insert(HistoryItem(id:UUID(),time:Date(),title:score.ti,provider:provider,model:model,concept:concept,score:score,
-                                           costUSD:costUSD,inputTokens:inputTokens,outputTokens:outputTokens,area:.composition),at:0)
+                                           costUSD:costUSD,inputTokens:inputTokens,outputTokens:outputTokens,area:.composition,extraFields:metadata),at:0)
                 history = trimmedHistory(history)
                 Storage.shared.saveHistory(history)
                 refreshVisibleHistories()
@@ -3131,7 +3015,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private func currentCLABDocument() -> CompositionLabDocument? {
         guard let score = lastScore else { return nil }
         saveSettingsFromUI()
-        return CompositionLabDocument(
+        var document = CompositionLabDocument(
             title: score.ti,
             score: score,
             concept: lastConcept,
@@ -3155,6 +3039,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             inputTokens: lastInputTokens == 0 ? nil : lastInputTokens,
             outputTokens: lastOutputTokens == 0 ? nil : lastOutputTokens
         )
+        document.extraFields = lastPortableMetadata
+        return document
     }
 
     @objc private func saveCLABPressed() {
@@ -3216,9 +3102,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 providerPop.selectItem(at: pi)
                 refillModels()
             }
-            if let mi = p.models.firstIndex(where: { $0.0 == m }) {
-                modelPop.selectItem(at: mi)
-            }
+            settings.models[p.rawValue] = m
+            refillModels()
             keyField.stringValue = SessionSecrets.shared.key(for: p)
 
             install(score: doc.score,
@@ -3228,7 +3113,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                     addHistory: false,
                     costUSD: doc.costUSD,
                     inputTokens: doc.inputTokens,
-                    outputTokens: doc.outputTokens)
+                    outputTokens: doc.outputTokens, metadata: doc.extraFields)
 
             lastConcept = doc.concept
             lastProvider = doc.provider
@@ -3455,10 +3340,10 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         // Der gespeicherte Titel bleibt unverändert erhalten und wird durch install()
         // in "Aktuelle Komposition", Player, JSON/MusicXML/MIDI-Export übernommen.
         install(score:score, concept:h.concept, provider:h.provider, model:h.model, addHistory:false,
-                costUSD:h.costUSD, inputTokens:h.inputTokens, outputTokens:h.outputTokens)
+                costUSD:h.costUSD, inputTokens:h.inputTokens, outputTokens:h.outputTokens, metadata:h.extraFields)
 
         if let pi = Provider.allCases.firstIndex(of:h.provider) { providerPop.selectItem(at:pi); refillModels() }
-        if let mi = h.provider.models.firstIndex(where:{$0.0==h.model}) { modelPop.selectItem(at:mi) }
+        settings.models[h.provider.rawValue] = h.model; refillModels()
         keyField.stringValue = SessionSecrets.shared.key(for:h.provider)
 
         // Die rekonstruierten Editorwerte gelten als aktueller Arbeitsstand und
@@ -3801,7 +3686,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private func transferCompareResultToComposition(_ item: HistoryItem) {
         importedReferenceScore = item.score
         importedReferenceName = item.title
-        install(score: item.score, concept: item.concept, provider: item.provider, model: item.model, addHistory: false)
+        install(score: item.score, concept: item.concept, provider: item.provider, model: item.model, addHistory: false, metadata: item.extraFields)
         selectWorkspace(0)
         status("\(item.title) aus dem Vergleichslabor an die Kompositionsseite übergeben.", good: true)
     }

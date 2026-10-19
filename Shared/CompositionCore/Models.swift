@@ -1,6 +1,6 @@
 import Foundation
 
-enum Provider: String, CaseIterable, Codable {
+enum Provider: String, CaseIterable, Codable, Sendable {
     case gemini, anthropic, openai
 
     var displayName: String {
@@ -116,6 +116,8 @@ struct HistoryItem: Codable {
     var area: HistoryArea? = nil
 
     var effectiveArea: HistoryArea { area ?? .composition }
+    var extraFields: [String: JSONValue] = [:]
+
 }
 
 struct APICost {

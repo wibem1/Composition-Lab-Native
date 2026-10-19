@@ -46,6 +46,8 @@ struct CompositionLabDocument: Codable {
     var costUSD: Double?
     var inputTokens: Int?
     var outputTokens: Int?
+    var extraFields: [String: JSONValue] = [:]
+
 }
 
 struct CompositionLabBackupPayload: Codable {

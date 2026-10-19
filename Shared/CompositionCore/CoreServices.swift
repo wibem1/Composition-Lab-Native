@@ -5,6 +5,19 @@ import Foundation
 public enum CoreServices {
     public static let version = "4.0.0-alpha.12"
 
+    /// Stateless catalog boundary. State contains model metadata and cursors,
+    /// never keys; adapters supply a provider response only after HTTP success.
+    public static func modelCatalogStep(provider: String, stateJSON: Data? = nil, pageJSON: Data? = nil) throws -> Data {
+        guard let provider = Provider(rawValue: provider) else { throw APIError.badResponse("Unbekannter Provider.") }
+        var state = try stateJSON.map { try JSONDecoder().decode(ModelCatalogState.self, from: $0) }
+            ?? ModelCatalogState(provider: provider)
+        guard state.provider == provider else { throw APIError.badResponse("Provider der Modellseite stimmt nicht überein.") }
+        if let pageJSON { try state.consume(pageJSON) }
+        var response: [String: Any] = ["state": try JSONSerialization.jsonObject(with: JSONEncoder().encode(state))]
+        if !state.complete { response["request"] = state.request }
+        return try JSONSerialization.data(withJSONObject: response)
+    }
+
     public static func midi(scoreJSON: Data) throws -> Data {
         MIDIBuilder.build(try validatedScore(scoreJSON))
     }

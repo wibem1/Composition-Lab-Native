@@ -24,6 +24,11 @@ enum BridgeService {
         let title = obj["title"] as? String ?? "Import"
         switch operation {
         case "version": send(["ok": true, "version": CoreServices.version, "titleEcho": title])
+        case "model-catalog-step":
+            let result = try CoreServices.modelCatalogStep(provider: obj["provider"] as? String ?? "",
+                stateJSON: obj["state"] == nil ? nil : data("state"),
+                pageJSON: obj["page"] == nil ? nil : data("page"))
+            send(["ok": true, "catalog": try JSONSerialization.jsonObject(with: result)])
         case "recover-score":
             guard let response = obj["response"] as? String else { throw NSError(domain: "BridgeService", code: 6) }
             send(["ok": true, "score": try JSONSerialization.jsonObject(with: CoreServices.recoverScore(response: response))])

@@ -1,6 +1,8 @@
 # Composition Lab – Entwicklungs- und Modulhandbuch
 
-Stand: 16.10.2026 · Entwicklungszweig `v4-cross-platform` · Windows V4.14 + weitere, **noch ungeprüfte** Änderungen
+Stand: 19.10.2026 · Entwicklungszweig `v4-cross-platform` · Arbeit an 4.2, **nicht freigegeben**
+
+Aktuelle Befunde und Freigabesperren: [V4.2-AUDIT.md](V4.2-AUDIT.md).
 
 ## Zweck und Gültigkeit
 
@@ -111,3 +113,25 @@ Keine Modultrennung nur zur Kosmetik: `partial MainForm` in mehreren Dateien ist
 - **Dokumentationsänderung, neue Version, Freigabestatus**
 
 **Grundsatz:** Erst Architektur und Datenfluss verstehen, dann simulieren und Probleme klären, danach implementieren, testen, dokumentieren und veröffentlichen. Der musikalische Bestand bleibt durch Referenzstücke und Format-Fixtures geschützt.
+
+
+## 19.10.2026 – gemeinsame Katalog- und Dateimodule
+
+- `Shared/CompositionCore/ModelCatalog.swift`: `ModelCatalogState(provider)`;
+  `request` liefert URL und Headernamen ohne Schlüssel; `consume(Data)` validiert
+  eine JSON-Seite, aktualisiert Modelle und Cursor oder wirft einen Fehler.
+  Keine Datei-/UI-Zugriffe. `CoreServices.modelCatalogStep` ist die JSON-Grenze
+  für Windows; Mac verwendet dieselbe Zustandsmaschine im nativen HTTP-Adapter.
+- `PortableMetadata.swift`: `JSONValue`, flache Codable-Erweiterungen für
+  `HistoryItem` und `CompositionLabDocument`. Pflichtfelder bleiben typisiert;
+  unbekannte Felder bleiben durch Laden und Speichern erhalten. Bekannte Felder
+  können nicht durch Erweiterungen überschrieben werden.
+- `Sources/ModelCatalogAdapter.swift`: ausschließlich Mac-Katalogcache,
+  keine geheimen Zugangsdaten. Anzeige und Auswahl bleiben AppKit-Aufgabe.
+- `ScoreSourceMapper`: akzeptiert ausschließlich identischen Text oder reine
+  Zeilenenden-Unterschiede. Rückgabe sind Positionen im tatsächlichen Editor.
+- REAPER-/Studio-Pro-Dateiwächter und automatische Rückgaben entfernt; normale
+  Datei- und MIDI-Gerätefunktionen unverändert.
+- Vorabnachweis: vorhandene grüne Kerntests in Actions `39317627348`;
+  Regressionen für Zeilenenden, Dateierweiterungen und Katalogseiten ergänzt.
+  Plattformübergreifende CI-Abnahme und Funktionsgleichheit noch offen.

@@ -143,9 +143,12 @@ internal sealed partial class MainForm
                 """);
             if (clickResult != "\"sent\"")
                 throw new Exception("SVG-Note konnte nicht markiert und an den Editor übergeben werden: " + clickResult);
-            await Task.Delay(200);
+            // WebView messages cross a process boundary; wait for the observable
+            // result instead of assuming a fixed 200 ms delivery time on CI.
+            for (int i = 0; i < 100 && (tabs.SelectedIndex != 0 || composition.SelectionLength < 1); i++)
+                await Task.Delay(50);
             if (tabs.SelectedIndex != 0 || composition.SelectionLength < 1)
-                throw new Exception("SVG-Notenauswahl landet nicht im LilyPond-Editor.");
+                throw new Exception($"SVG-Notenauswahl landet nicht im LilyPond-Editor. Tab={tabs.SelectedIndex}, Auswahl={composition.SelectionLength}, Status={status.Text}");
             // Regression for mouse click-and-drag: two linked notes must become
             // a visible multi-selection, not merely receive an invisible click.
             tabs.SelectedIndex = 1;
