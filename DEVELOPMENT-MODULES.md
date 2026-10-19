@@ -187,3 +187,10 @@ sie bauen bei jedem Commit nicht mehr dieselbe Anwendung doppelt. Native Mac-
 Tests prüfen auch zwei verschiedene Modellkennungen mit demselben Anzeigenamen.
 Die Auswahl zeigt tatsächliche Kennungen, statt gleich benannte Einträge zu
 verlieren oder unbeabsichtigt das Modell zu wechseln.
+
+
+Die Sichtkontrolle der nativen CI-Bilder zeigte ein zu schmales Mac-Modellfeld.
+Die Modellaktualisierung liegt deshalb im nativen Menü `Technisches`; der
+Auswahlbutton behält genügend Breite. Der Mac-Funktionstest kontrolliert die
+reale Control-Geometrie zusätzlich zur korrekten Modellkennung. Windows-Layout
+und gemeinsame Musikverarbeitung sind von dieser UI-Korrektur unabhängig.

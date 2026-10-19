@@ -948,10 +948,11 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         if effortPop.numberOfItems == 0 { effortPop.addItems(withTitles: Effort.allCases.map(\.displayName)) }
         let ai = NSTextField(labelWithString: "KI"); ai.font = .systemFont(ofSize: 12, weight: .semibold); row.addArrangedSubview(ai)
         row.addArrangedSubview(providerPop); row.addArrangedSubview(modelPop)
+        modelPop.widthAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
         modelPop.widthAnchor.constraint(lessThanOrEqualToConstant: 280).isActive = true
         modelPop.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let refreshModels = NSButton(title: "Modelle aktualisieren", target: self, action: #selector(refreshProviderModels))
-        row.addArrangedSubview(refreshModels); row.addArrangedSubview(effortPop); row.addArrangedSubview(NSView())
+        modelPop.toolTip = "Vollständige Modellliste über Technisches → KI-Modelle aktualisieren laden."
+        row.addArrangedSubview(effortPop); row.addArrangedSubview(NSView())
         func label(_ text: String) { row.addArrangedSubview(NSTextField(labelWithString: text)) }
         func field(_ f: NSTextField, _ placeholder: String, _ width: CGFloat) { f.placeholderString = placeholder; f.widthAnchor.constraint(equalToConstant: width).isActive = true; row.addArrangedSubview(f) }
         if measuresField.numberOfItems == 0 {
@@ -2112,6 +2113,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     @objc private func providerModelChanged() { saveSettingsFromUI() }
+
+    @objc func menuRefreshModels() { refreshProviderModels() }
 
     @objc private func refreshProviderModels() {
         let selectedProvider = provider
@@ -4158,6 +4161,8 @@ extension MainViewController {
                     try require(self.modelPop.numberOfItems == 2 && self.model == "native-model-a", "Gleich benannte Provider-Modelle gehen in der Mac-Auswahl verloren.")
                     self.modelPop.selectItem(at: 1)
                     try require(self.model == "native-model-b", "Modellauswahl verwendet nicht die tatsächliche Kennung.")
+                    self.view.layoutSubtreeIfNeeded()
+                    try require(self.modelPop.bounds.width >= 160, "Das Modellfeld ist trotz erfolgreicher Modellabfrage unlesbar schmal.")
                     self.pendingCompositionSlot = 0
                     self.install(score: work.score, concept: source, provider: .gemini, model: "offline-test", metadata: work.metadata)
                     let originalMidi = self.lastMidi

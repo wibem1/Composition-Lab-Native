@@ -189,6 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         let technicalItem = NSMenuItem(title: "Technisches", action: nil, keyEquivalent: "")
         let technical = NSMenu(title: "Technisches")
+        technical.addItem(withTitle: "KI-Modelle aktualisieren", action: #selector(MainViewController.menuRefreshModels), keyEquivalent: "")
         technical.addItem(withTitle: "API-Schlüssel …", action: #selector(MainViewController.menuAPIKeys), keyEquivalent: "")
         technical.addItem(withTitle: "MIDI-Ausgabe …", action: #selector(MainViewController.menuMIDIOutput), keyEquivalent: "")
         technical.addItem(NSMenuItem.separator())
