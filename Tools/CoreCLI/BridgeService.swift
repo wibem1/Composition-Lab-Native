@@ -24,6 +24,12 @@ enum BridgeService {
         let title = obj["title"] as? String ?? "Import"
         switch operation {
         case "version": send(["ok": true, "version": CoreServices.version, "titleEcho": title])
+        case "build-assignment":
+            send(["ok": true, "assignment": try CoreServices.buildAssignment(obj["assignment"] as? String ?? "",
+                parametersJSON: obj["parameters"] == nil ? nil : data("parameters"))])
+        case "playback-midi":
+            send(["ok": true, "data": try CoreServices.playbackMIDICopy(bytes(), velocityFactor: obj["velocityFactor"] as? Double ?? 1,
+                targetBPM: obj["targetBPM"] as? Double).base64EncodedString()])
         case "interpret-composition":
             send(["ok": true, "interpretation": try JSONSerialization.jsonObject(with: CoreServices.interpretComposition(obj["source"] as? String ?? ""))])
         case "source-selection":

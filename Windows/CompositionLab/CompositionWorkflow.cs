@@ -29,6 +29,13 @@ internal sealed partial class MainForm
         try
         {
             StoreKey(); pending = new CancellationTokenSource(); SetBusy(true);
+            if (makeMusic)
+            {
+                var built = await core.RunAsync(new JsonObject { ["operation"] = "build-assignment", ["assignment"] = instruction,
+                    ["parameters"] = new JsonObject { ["ensemble"] = ensemble.Text, ["measures"] = measures.Text,
+                        ["meter"] = meter.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text } }, pending.Token);
+                request["assignment"] = built["assignment"]!.DeepClone();
+            }
             chat.AppendText("Du: " + userText + "\n\n");
             SetStatus(makeMusic ? "KI komponiert …" : "KI antwortet …");
             var response = await core.RunAsync(new JsonObject { ["operation"] = makeMusic ? "compose-source" : "chat",
@@ -46,7 +53,8 @@ internal sealed partial class MainForm
                 if (locallyImported == null)
                 {
                     chat.AppendText("KI: Vollständige Originalantwort gesichert. Das Format ist nicht lokal lesbar; keine automatische zweite KI-Anfrage.\n\n");
-                    composition.Text = result["composition"]!.GetValue<string>();
+                    if (Current == null) composition.Text = result["composition"]!.GetValue<string>();
+                    else chat.AppendText("Originalantwort: " + result["composition"]!.GetValue<string>() + "\n\n");
                     cost.Text = "Anfrage ca. $" + result["estimatedCostUSD"]!.GetValue<double>().ToString("0.0000");
                     SetStatus("Original gesichert; zur Notendarstellung ist eine ausdrücklich beauftragte Übertragung erforderlich.");
                     SaveLocalState();
@@ -142,7 +150,7 @@ internal sealed partial class MainForm
     {
         if (destination < 0 || destination >= documents.Length || documents[destination] != null) throw new InvalidOperationException("Der Ziel-Slot ist nicht mehr frei; die fertige Komposition bleibt in der Diagnose erhalten.");
         var document = CreateDocument(result["score"]!.DeepClone().AsObject(), result["composition"]!.GetValue<string>(), userText);
-        foreach (string field in new[] { "directLilyPond", "sourceMidiData", "octaveReview", "originalLilyPond" }) if (result[field] != null) document[field] = result[field]!.DeepClone();
+        foreach (string field in new[] { "directLilyPond", "sourceMidiData", "octaveReview", "originalLilyPond", "reasoning" }) if (result[field] != null) document[field] = result[field]!.DeepClone();
         // Validate playback before replacing state; an invalid translation never occupies a slot.
         await core.RunAsync(new JsonObject { ["operation"] = "midi", ["score"] = document["score"]!.DeepClone() });
         document["provider"] = selectedProvider; document["model"] = selectedModel;

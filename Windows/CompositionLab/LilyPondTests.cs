@@ -34,7 +34,7 @@ internal sealed partial class MainForm
             }
             \score { \new PianoStaff << \new Staff { \upper } \new Staff { \lower } >> \layout {} \midi {} }
             """;
-        foreach (string unsafeSource in new[] { @"\score { c4 } #(system ""anything"")", @"\include ""private.ly"" \score { c4 }", @"\score { c4 } $(ly:gulp-file ""private"")" })
+        foreach (string unsafeSource in new[] { @"\bookOutputName ""outside"" \score { { c4 } }", @"\score { c4 } #(system ""anything"")", @"\include ""private.ly"" \score { c4 }", @"\score { c4 } $(ly:gulp-file ""private"")" })
         {
             bool failed = false; try { await LilyPondCompiler.PrepareAsync(unsafeSource); } catch (InvalidDataException) { failed = true; }
             if (!failed) throw new Exception("Ausführbarer LilyPond-Code wird nicht abgefangen.");
@@ -48,6 +48,14 @@ internal sealed partial class MainForm
             throw new Exception("LilyPond SVG enthält keine Point-and-Click-Quelltextverweise.");
         var cached = await Engraver.CompileAsync(source);
         if (!cached.Cached || !cached.Midi.SequenceEqual(generated.Midi) || !cached.Pages.SequenceEqual(generated.Pages)) throw new Exception("LilyPond-Cache verändert Musik oder Seiten.");
+        var recoveryRoot = Path.Combine(output, "Cache-Recovery");
+        var cacheProbe = new LilyPondCompiler(recoveryRoot);
+        var cacheOriginal = await cacheProbe.CompileAsync(source);
+        var cachedMidi = Directory.GetFiles(recoveryRoot, "score.midi", SearchOption.AllDirectories).Single();
+        await File.WriteAllTextAsync(cachedMidi, "corrupt cache fixture");
+        var recoveredCache = await cacheProbe.CompileAsync(source);
+        if (recoveredCache.Cached || !recoveredCache.Midi.SequenceEqual(cacheOriginal.Midi))
+            throw new Exception("Ein beschädigter Notensatzcache wird nicht originalgetreu neu aufgebaut.");
         var noMidi = await Engraver.CompileAsync("\\version \"2.24.0\"\n\\score { { c'4 d' e' f' } }");
         if (noMidi.Midi.Length < 14 || noMidi.Pages.Length == 0) throw new Exception("LilyPond ohne expliziten MIDI-Block bleibt stumm.");
         var separate = await Engraver.CompileAsync("\\version \"2.24.0\"\n\\score { { c'4 d' e' f' } \\layout {} }\n\\score { { c'4 d' e' f' } \\midi {} }");

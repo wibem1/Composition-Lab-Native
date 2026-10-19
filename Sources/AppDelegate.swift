@@ -160,6 +160,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         file.addItem(withTitle: "MIDI-Vorlage löschen", action: #selector(MainViewController.menuClearImportedMIDI), keyEquivalent: "")
         file.addItem(NSMenuItem.separator())
         file.addItem(withTitle: "MIDI sichern …", action: #selector(MainViewController.menuSaveMIDI), keyEquivalent: "m")
+        file.addItem(withTitle: "LilyPond sichern …", action: #selector(MainViewController.menuSaveLilyPond), keyEquivalent: "")
+        file.addItem(withTitle: "An Hacklily übergeben", action: #selector(MainViewController.menuOpenHacklily), keyEquivalent: "")
         file.addItem(withTitle: "JSON sichern …", action: #selector(MainViewController.menuSaveJSON), keyEquivalent: "j")
         fileItem.submenu = file
         main.addItem(fileItem)
@@ -181,6 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let c = NSMenuItem(title: "Mit gewählter KI komponieren", action: #selector(MainViewController.menuCompose), keyEquivalent: "\r")
         c.keyEquivalentModifierMask = [.command]
         comp.addItem(c)
+        comp.addItem(withTitle: "Gesicherte Originalantwort übernehmen", action: #selector(MainViewController.menuRecoverOriginal), keyEquivalent: "")
         compItem.submenu = comp
         main.addItem(compItem)
 

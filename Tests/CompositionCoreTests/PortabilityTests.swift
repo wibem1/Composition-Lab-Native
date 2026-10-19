@@ -64,4 +64,26 @@ final class PortabilityTests: XCTestCase {
         let wrongProvider = try JSONEncoder().encode(ModelCatalogState(provider: .gemini))
         XCTAssertThrowsError(try CoreServices.modelCatalogStep(provider: "openai", stateJSON: wrongProvider))
     }
+    func testPortableWorkspaceRetainsExtensionsAndChat() throws {
+        var workspace = CompositionWorkspace(name: "Über die Grenze", activeSlot: 0, slots: [piece(), nil], settings: AppSettings(), history: [piece()])
+        workspace.chat = "Unveränderter Chat"; workspace.concept = "Quellentwurf"
+        workspace.extraFields = ["version": .number(1), "futureWorkspaceField": .object(["source": .string("Original")])]
+        let data = try JSONEncoder().encode(workspace)
+        try CoreServices.validateWorkspace(data)
+        let restored = try JSONDecoder().decode(CompositionWorkspace.self, from: data)
+        XCTAssertEqual(restored.chat, workspace.chat)
+        XCTAssertEqual(restored.extraFields["futureWorkspaceField"], workspace.extraFields["futureWorkspaceField"])
+        XCTAssertEqual(restored.slots.count, 2)
+        XCTAssertNil(restored.slots[1])
+    }
+
+    func testAssignmentUsesOnlyVisibleUserParameters() throws {
+        let original = "  Ein freies Stück\nmit zwei Stimmen.  "
+        XCTAssertEqual(try CoreServices.buildAssignment(original), original)
+        let empty = try JSONEncoder().encode(["measures": "", "tempo": " ", "key": ""])
+        XCTAssertEqual(try CoreServices.buildAssignment(original, parametersJSON: empty), original)
+        let supplied = try JSONEncoder().encode(["measures": "48", "tempo": "80", "key": "d-Moll"])
+        XCTAssertEqual(try CoreServices.buildAssignment(original, parametersJSON: supplied), original + "\n\nTakte: 48\nTempo: 80\nTonart: d-Moll")
+    }
+
 }

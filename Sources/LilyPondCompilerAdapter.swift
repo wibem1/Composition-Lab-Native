@@ -22,7 +22,10 @@ final class NativeLilyPondCompiler {
         let hash = SHA256.hash(data: Data(("2.26.0-point-and-click-v1\n" + prepared).utf8)).map { String(format: "%02x", $0) }.joined()
         let final = root.appendingPathComponent(hash, isDirectory: true)
         let fm = FileManager.default
-        if fm.fileExists(atPath: final.appendingPathComponent("complete").path) { return try read(final) }
+        if fm.fileExists(atPath: final.appendingPathComponent("complete").path) {
+            do { return try read(final) }
+            catch { try fm.removeItem(at: final) }
+        }
         #if arch(arm64)
         let architecture = "arm64"
         #else

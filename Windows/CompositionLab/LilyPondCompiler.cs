@@ -33,7 +33,11 @@ internal sealed class LilyPondCompiler(string cacheRoot)
         string? temporary = null;
         try
         {
-            if (File.Exists(Path.Combine(final, "complete"))) return Read(final, true, 0);
+            if (File.Exists(Path.Combine(final, "complete")))
+            {
+                try { return Read(final, true, 0); }
+                catch (Exception e) when (e is IOException or InvalidDataException) { Directory.Delete(final, true); }
+            }
             var executable = Path.Combine(AppContext.BaseDirectory, "LilyPond", "bin", "lilypond.exe");
             if (!File.Exists(executable)) throw new FileNotFoundException("Der mitgelieferte LilyPond-Notensatz fehlt. Bitte das gesamte ZIP in einen neuen Ordner entpacken.");
             Directory.CreateDirectory(cacheRoot);

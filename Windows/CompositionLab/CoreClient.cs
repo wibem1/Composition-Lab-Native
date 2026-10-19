@@ -13,6 +13,7 @@ internal sealed class CoreClient
     public async Task<JsonObject> RunAsync(JsonObject request, CancellationToken cancellation = default,
                                           Action<string>? progress = null)
     {
+        cancellation.ThrowIfCancellationRequested();
         var exe = Path.Combine(AppContext.BaseDirectory, "Core", "composition-lab-core.exe");
         if (!File.Exists(exe)) throw new FileNotFoundException("Der gemeinsame Kern fehlt im Ordner Core. Bitte das gesamte ZIP entpacken.");
         using var process = new Process { StartInfo = new ProcessStartInfo(exe, "service")

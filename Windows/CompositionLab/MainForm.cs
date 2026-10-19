@@ -269,6 +269,7 @@ internal sealed partial class MainForm : Form
                 meter.Text = state["meter"]?.GetValue<string>() ?? "";
                 if (state["history"] is JsonArray savedHistory) foreach (var item in savedHistory.OfType<JsonObject>()) pieceHistory.Add(item.DeepClone().AsObject()); RefreshHistory();
                 projectName = state["projectName"]?.GetValue<string>() ?? "Unbenannt";
+                workspaceExtensions = state["workspaceExtensions"]?.DeepClone().AsObject() ?? new JsonObject();
                 if (state["notation"] is JsonArray notationState && notationState.Count == 9) { updatingNotation = true; for (int i = 0; i < 9; i++) notationSettings[i].SelectedIndex = Math.Clamp(notationState[i]!.GetValue<int>(), 0, notationSettings[i].Items.Count - 1); splitBeats.Checked = state["splitBeats"]?.GetValue<bool>() ?? true; updatingNotation = false; notationOptions = BuildNotationOptions(); }
                 assignment.Text = state["assignment"]?.GetValue<string>() ?? assignment.Text;
                 measures.Text = state["measures"]?.GetValue<string>() ?? "";
@@ -295,6 +296,7 @@ internal sealed partial class MainForm : Form
                 ["slots"] = new JsonArray(documents.Select(d => d?.DeepClone()).ToArray()), ["chat"] = chat.Text,
                 ["diagnostic"] = lastDiagnostic?.DeepClone(), ["pendingComposition"] = pendingComposition?.DeepClone(), ["provider"] = activeProvider,
                 ["models"] = JsonSerializer.SerializeToNode(models), ["assignment"] = assignment.Text,
+                ["workspaceExtensions"] = workspaceExtensions.DeepClone(),
                 ["slotDrafts"] = JsonSerializer.SerializeToNode(slotDrafts), ["mainSplitRatio"] = mainSplitRatio, ["editableIdea"] = editableIdea, ["meter"] = meter.Text, ["projectName"] = projectName, ["history"] = new JsonArray(pieceHistory.Select(d => d.DeepClone()).ToArray()), ["notation"] = new JsonArray(notationSettings.Select(c => (JsonNode?)JsonValue.Create(c.SelectedIndex)).ToArray()), ["automaticRegisterReview"] = automaticRegisterReview, ["splitBeats"] = splitBeats.Checked,
                 ["measures"] = measures.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text, ["ensemble"] = ensemble.Text };
             AtomicFile.WriteText(Path.Combine(dataDirectory, "workspace.json"), state.ToJsonString());

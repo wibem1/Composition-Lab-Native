@@ -15,7 +15,7 @@ final class LilyPondSourceTests: XCTestCase {
         XCTAssertTrue(result.hasSuffix("\\layout { }\n\n\\midi { }\n}\n"))
     }
     func testUnsafeAndIncompleteSourcesFail() throws {
-        for source in ["\\score { c4 } #(system \"anything\")", "\\include \"private.ly\" \\score { c4 }", "\\score { c4 } $(ly:gulp-file \"private\")", "\\score { { c4 }"] {
+        for source in ["\\bookOutputName \"outside\" \\score { { c4 } }", "\\score { c4 } #(system \"anything\")", "\\include \"private.ly\" \\score { c4 }", "\\score { c4 } $(ly:gulp-file \"private\")", "\\score { { c4 }"] {
             XCTAssertThrowsError(try LilyPondSource.prepare(source))
         }
     }

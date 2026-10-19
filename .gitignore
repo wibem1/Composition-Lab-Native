@@ -61,3 +61,5 @@ Windows/TestResults/
 Composition-Lab-*.zip
 
 .build-lilypond/
+
+__pycache__/

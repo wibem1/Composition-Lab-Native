@@ -26,8 +26,8 @@ enum LilyPondSource {
         let notation = masked as String
         let allowed = try NSRegularExpression(pattern: #"##[tf]\b|#\(set-global-staff-size\s+\d+(?:\.\d+)?\s*\)"#)
         let checked = allowed.stringByReplacingMatches(in: notation, range: NSRange(location: 0, length: masked.length), withTemplate: " ")
-        guard match(#"\\(?:include|includeSpecial|applyContext|applyOutput|displayScheme|scheme|load)\b|\$|#(?!#[tf]\b|[-+]?\d+(?:\.\d+)?)"#, in: checked) == nil else {
-            throw APIError.badResponse("Die LilyPond-Datei enthält externe Dateien oder ausführbare Scheme-Ausdrücke. Für die direkte Ausgabe bitte reine Notation verwenden.")
+        guard match(#"\\(?:include|includeSpecial|bookOutputName|bookOutputSuffix|applyContext|applyOutput|displayScheme|scheme|load)\b|\$|#(?!#[tf]\b|[-+]?\d+(?:\.\d+)?)"#, in: checked) == nil else {
+            throw APIError.badResponse("Die LilyPond-Datei enthält externe Dateien, veränderte Ausgabepfade oder ausführbare Scheme-Ausdrücke. Für die direkte Ausgabe bitte reine Notation verwenden.")
         }
         guard let score = match(#"\\score\s*\{"#, in: notation) else { throw APIError.badResponse("Kein vollständiger LilyPond-Score vorhanden.") }
         let units = Array(notation.utf16)

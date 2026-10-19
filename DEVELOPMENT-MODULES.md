@@ -158,3 +158,25 @@ Keine Modultrennung nur zur Kosmetik: `partial MainForm` in mehreren Dateien ist
 - Der CLI-Service liefert für alle Domainfehler denselben JSON-Fehlerumschlag.
   Der Windows-Adapter unterscheidet damit ungültige Provider-Seiten von einem
   fehlenden oder abgestürzten Kern. Nachweis: echter Adapter/Kern-Offline-Test.
+
+### Abschließende Härtung des überprüfbaren Entwicklungsstands
+
+- Gemeinsamer `CompositionWorkspace`-Vertrag ersetzt die private zweite Mac-
+  Definition. Projekt-/History-Erweiterungen bleiben in beiden Adaptern erhalten;
+  strukturierte Felder gewinnen bei Namenskonflikten. Chat, ursprüngliche Quelle,
+  angewendete Quelle, Entwurf und Qualitätsoption werden getrennt bewahrt.
+- `buildAssignment` überträgt nur ausgefüllte, vom Nutzer vorgegebene Parameter.
+  Leere Felder erzwingen keine unsichtbaren 32 Takte, 4/4 oder 96 BPM mehr.
+- `PlaybackMIDICopy`: `make(Data, velocityFactor: Double, targetBPM: Double?)`
+  liefert eine neue MIDI-Datei. Anschlagsstärken dürfen skaliert und Tempoereignisse
+  proportional angepasst werden; Notenticks, Note-Offs, Kanäle und Controller
+  bleiben erhalten. Originaldaten werden nicht verändert. Fehlerhafte Streams
+  und ungültige Faktoren führen zu einer Ausnahme, nicht zu erfundenen Noten.
+- Mac kann Originalantworten erneut lokal übernehmen, LilyPond speichern und
+  vollständigen Quelltext an Hacklily übergeben. Diese Aktionen fragen keine KI an.
+- Ungültige Importe wechseln vor der Validierung keinen Mac-Slot. Ungelesene
+  KI-Antworten werden nicht als Entwurf an eine fremde vorhandene Partitur gehängt.
+- Beschädigte Compiler-Caches werden neu erzeugt. Regression mit realem LilyPond,
+  einschließlich unverändertem MIDI, Abbruch und beschädigtem Cache, lokal bestanden.
+- Automatische Tests unterscheiden weiterhin lokale Kern-/Adapterprüfungen,
+  native GUI-Prüfungen und die nicht ersetzte praktische Hör-/Geräteabnahme.

@@ -130,3 +130,32 @@ extension CompositionLabDocument {
         for (name, value) in extraFields where !Self.recordFields.contains(name) { try c.encode(value, forKey: RecordKey(name)) }
     }
 }
+
+extension CompositionWorkspace {
+    private static let recordFields: Set<String> = ["format", "name", "activeSlot", "slots", "settings", "history", "concept", "chat"]
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: RecordKey.self)
+        format = try c.decode(String.self, forKey: RecordKey("format"))
+        name = try c.decode(String.self, forKey: RecordKey("name"))
+        activeSlot = try c.decode(Int.self, forKey: RecordKey("activeSlot"))
+        slots = try c.decode([HistoryItem?].self, forKey: RecordKey("slots"))
+        settings = try c.decode(AppSettings.self, forKey: RecordKey("settings"))
+        history = try c.decode([HistoryItem].self, forKey: RecordKey("history"))
+        concept = try c.decodeIfPresent(String.self, forKey: RecordKey("concept"))
+        chat = try c.decodeIfPresent(String.self, forKey: RecordKey("chat"))
+        extraFields = [:]
+        for key in c.allKeys where !Self.recordFields.contains(key.stringValue) { extraFields[key.stringValue] = try c.decode(JSONValue.self, forKey: key) }
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: RecordKey.self)
+        try c.encode(format, forKey: RecordKey("format"))
+        try c.encode(name, forKey: RecordKey("name"))
+        try c.encode(activeSlot, forKey: RecordKey("activeSlot"))
+        try c.encode(slots, forKey: RecordKey("slots"))
+        try c.encode(settings, forKey: RecordKey("settings"))
+        try c.encode(history, forKey: RecordKey("history"))
+        try c.encodeIfPresent(concept, forKey: RecordKey("concept"))
+        try c.encodeIfPresent(chat, forKey: RecordKey("chat"))
+        for (name, value) in extraFields where !Self.recordFields.contains(name) { try c.encode(value, forKey: RecordKey(name)) }
+    }
+}

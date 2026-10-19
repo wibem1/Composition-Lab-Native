@@ -12,7 +12,7 @@ internal static class ProjectWorkspaceCodec
         string name, JsonObject settings, string editorText,
         IReadOnlyList<JsonObject?> documents, int activeSlot,
         IReadOnlyList<JsonObject> history, string chatText,
-        string fallbackProvider, string fallbackModel)
+        string fallbackProvider, string fallbackModel, JsonObject? extensions = null)
     {
         if (documents.Count == 0 || activeSlot < 0 || activeSlot >= documents.Count)
             throw new ArgumentOutOfRangeException(nameof(activeSlot));
@@ -20,7 +20,8 @@ internal static class ProjectWorkspaceCodec
         // Never parent a node in two documents. History records must be detached.
         JsonNode? EncodePiece(JsonObject? doc) => doc is null ? null :
             ProjectPieceCodec.ToHistory(doc, fallbackProvider, fallbackModel);
-        return new JsonObject
+        var result = extensions?.DeepClone().AsObject() ?? new JsonObject();
+        var fields = new JsonObject
         {
             ["format"] = "composition-lab-v6-project", ["version"] = 1,
             ["savedAt"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 978307200,
@@ -31,13 +32,18 @@ internal static class ProjectWorkspaceCodec
             ["history"] = new JsonArray(history.Select(h => EncodePiece(h)).ToArray()),
             ["chat"] = chatText
         };
+        foreach (var field in fields.ToArray()) result[field.Key] = field.Value?.DeepClone();
+        return result;
     }
     internal static void SelfTest()
     {
         var source = new JsonObject { ["title"] = "Probe", ["score"] = new JsonObject { ["ti"] = "Probe" }, ["concept"] = "c'4" };
         JsonObject?[] slots = [source, null];
         var settings = new JsonObject { ["provider"] = "gemini" };
-        var encoded = Encode("Test", settings, "c'4", slots, 0, new[] { source }, "", "gemini", "modell");
+        var extensions = new JsonObject { ["futureWorkspaceField"] = new JsonObject { ["source"] = "Unverändert" }, ["name"] = "Falscher Name" };
+        var encoded = Encode("Test", settings, "c'4", slots, 0, new[] { source }, "", "gemini", "modell", extensions);
+        if (encoded["name"]?.GetValue<string>() != "Test" || encoded["futureWorkspaceField"]?.ToJsonString() != extensions["futureWorkspaceField"]?.ToJsonString())
+            throw new InvalidOperationException("ProjectWorkspaceCodec: extension preservation or typed field precedence broken.");
         if (encoded["slots"]?[0]?["score"]?["ti"]?.GetValue<string>() != "Probe" ||
             encoded["slots"]?[1] != null || encoded["activeSlot"]?.GetValue<int>() != 0 ||
             encoded["history"]?.AsArray().Count != 1)

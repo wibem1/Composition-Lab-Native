@@ -59,3 +59,15 @@ struct CompositionLabBackupPayload: Codable {
     var apiKeys: [String:String]
 }
 
+
+struct CompositionWorkspace: Codable {
+    var format = "composition-lab-v6-project"
+    var name: String
+    var activeSlot: Int
+    var slots: [HistoryItem?]
+    var settings: AppSettings
+    var history: [HistoryItem]
+    var concept: String? = nil
+    var chat: String? = nil
+    var extraFields: [String: JSONValue] = [:]
+}

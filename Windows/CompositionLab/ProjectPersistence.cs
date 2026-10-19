@@ -6,12 +6,13 @@ namespace CompositionLab;
 // Portable project serialization and loading, separate from menu/layout construction.
 internal sealed partial class MainForm
 {
+    JsonObject workspaceExtensions = new();
 
     async Task SaveProjectAsync()
     {
         using var dialog = new SaveFileDialog { Filter = "Composition Lab Arbeitsplatz|*.clabproject", FileName = SafeName(projectName) + ".clabproject", OverwritePrompt = true }; if (dialog.ShowDialog(this) != DialogResult.OK) return;
         var settings = new JsonObject { ["provider"] = activeProvider, ["models"] = JsonSerializer.SerializeToNode(models), ["efforts"] = new JsonObject(), ["measures"] = measures.Text, ["meter"] = meter.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text, ["ensemble"] = ensemble.Text, ["prompt"] = assignment.Text, ["zoomPercent"] = 100 };
-        var project = ProjectWorkspaceCodec.Encode(projectName, settings, composition.Text, documents, slots.SelectedIndex, pieceHistory, chat.Text, activeProvider, SelectedModelId);
+        var project = ProjectWorkspaceCodec.Encode(projectName, settings, composition.Text, documents, slots.SelectedIndex, pieceHistory, chat.Text, activeProvider, SelectedModelId, workspaceExtensions);
         await core.RunAsync(new JsonObject { ["operation"] = "validate-workspace", ["document"] = project.DeepClone() }); AtomicFile.WriteText(dialog.FileName, project.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
     JsonObject ToHistory(JsonObject document) => ProjectPieceCodec.ToHistory(document, activeProvider, SelectedModelId);
@@ -54,6 +55,8 @@ internal sealed partial class MainForm
         if (!testMode && MessageBox.Show(this, "Aktuellen Arbeitsplatz ersetzen?",
             "Projekt laden", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
 
+        workspaceExtensions = project.DeepClone().AsObject();
+        foreach (string name in new[] { "format", "version", "savedAt", "name", "activeSlot", "slots", "settings", "history", "concept", "chat" }) workspaceExtensions.Remove(name);
         var settings = project["settings"]!.AsObject();
         if (settings["models"] is JsonObject savedModels)
             foreach (var pair in savedModels)

@@ -20,6 +20,10 @@ public enum CoreServices {
 
     /// Interpret a finished answer locally. Never calls a provider, repairs
     /// music or falls back to a paid technical translation.
+    public static func playbackMIDICopy(_ original: Data, velocityFactor: Double, targetBPM: Double? = nil) throws -> Data {
+        try PlaybackMIDICopy.make(original, velocityFactor: velocityFactor, targetBPM: targetBPM)
+    }
+
     public static func interpretComposition(_ original: String) throws -> Data {
         if let source = try? LilyPondSource.extract(original), source.contains("\\score") {
             return try JSONSerialization.data(withJSONObject: ["kind": "lilypond", "source": source])
@@ -76,10 +80,21 @@ public enum CoreServices {
     }
 
     public static func validateWorkspace(_ data: Data) throws {
-        struct Workspace: Decodable { let format: String; let name: String; let activeSlot: Int; let slots: [HistoryItem?]; let settings: AppSettings; let history: [HistoryItem] }
-        let workspace = try JSONDecoder().decode(Workspace.self, from: data)
+        let workspace = try JSONDecoder().decode(CompositionWorkspace.self, from: data)
         guard workspace.format == "composition-lab-v6-project", (0..<10).contains(workspace.activeSlot), workspace.slots.count <= 10 else { throw APIError.badResponse("Ungültiger Arbeitsplatz.") }
         for item in workspace.slots.compactMap({ $0 }) + workspace.history { try ScoreValidation.validate(item.score) }
+    }
+
+    /// Include only musical parameters the user actually supplied. Empty UI
+    /// fields must not silently impose a 32-bar, 4/4, 96-BPM composition.
+    public static func buildAssignment(_ assignment: String, parametersJSON: Data? = nil) throws -> String {
+        let parameters = try parametersJSON.map { try JSONDecoder().decode([String: String].self, from: $0) } ?? [:]
+        let labels = [("ensemble", "Besetzung"), ("measures", "Takte"), ("meter", "Taktart"), ("tempo", "Tempo"), ("key", "Tonart")]
+        let supplied = labels.compactMap { key, label -> String? in
+            guard let value = parameters[key], !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return label + ": " + value
+        }
+        return assignment + (supplied.isEmpty ? "" : "\n\n" + supplied.joined(separator: "\n"))
     }
 
     public static func compositionPrompt(assignment: String) -> String {

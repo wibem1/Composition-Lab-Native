@@ -1,3 +1,36 @@
+# Aktuelle Architektur
+
+Die historischen Abschnitte unten beschreiben die frühen V4-Alphas.
+Maßgeblich sind [DEVELOPMENT-MODULES.md](DEVELOPMENT-MODULES.md) und
+[V4.2-AUDIT.md](V4.2-AUDIT.md). Die Oberflächen werden nicht angeglichen.
+
+```mermaid
+flowchart TD
+    Mac["Mac · AppKit"] --> Core["Gemeinsamer Swift-Kern"]
+    Win["Windows · WinForms"] --> CLI["CoreCLI · JSON über stdin/stdout"]
+    CLI --> Core
+    Core --> Catalog["KI und Modellkatalog"]
+    Core --> Formats["Score, MIDI und MusicXML"]
+    Core --> Documents["CLAB und Workspace-Verträge"]
+    Core --> Source["LilyPond-Quelle und Auswahl"]
+    Mac --> MacRender["Mac-Compileradapter"]
+    Win --> WinRender["Windows-Compileradapter"]
+    MacRender --> Engraver["LilyPond 2.26.0"]
+    WinRender --> Engraver
+    Engraver --> Output["Original-MIDI und gemeinsame SVG-Vorlage"]
+```
+
+Der Kern enthält keine AppKit-/WinForms-Fenster und keine DAW-Dateiwächter.
+Die Oberflächen besitzen ihre nativen Controls, Schlüsselablagen und Player.
+Anfragen und Quelltextbearbeitungen übernehmen Ergebnisse erst nach Validierung;
+Quellrevision und Ziel-Slot dürfen sich zwischen Start und Übernahme nicht ändern.
+Die gemeinsame Playback-Kopie verändert ausschließlich Anschlagsstärken und
+Tempi für den Player. Exportdaten bleiben unverändert, Tempoverläufe bleiben
+relativ erhalten. Die weitere Entkopplung der großen UI-Controller und noch
+fehlende Plattformfunktionen sind ausdrücklich nicht als abgeschlossen markiert.
+
+---
+
 # Composition Lab 4.0 – gemeinsame Mac-/Windows-Basis
 
 Stand: 2026-10-13 · 4.0.0-alpha.5 · Build 4005
