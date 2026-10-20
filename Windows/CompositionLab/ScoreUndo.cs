@@ -2,49 +2,40 @@ using System.Text.Json.Nodes;
 
 namespace CompositionLab;
 
-// Undo/redo for committed score refreshes, independent of textbox edit history.
-// Snapshots are per slot; a different piece invalidates the relevant history.
 internal sealed partial class MainForm
 {
-    readonly Stack<(int Slot, JsonObject Snapshot)> scoreUndo = new();
-    readonly Stack<(int Slot, JsonObject Snapshot)> scoreRedo = new();
-
-    void SaveScoreUndoSnapshot(JsonObject document)
+    JsonObject? scoreRevisionState;
+    JsonArray RevisionSlots()
+    {
+        var slots = new JsonArray();
+        foreach (var document in documents)
+            slots.Add(document == null ? null : new JsonObject { ["identity"] = document["revisionIdentity"]?.DeepClone() ?? JsonValue.Create(""), ["document"] = document.DeepClone() });
+        return slots;
+    }
+    async Task SaveScoreUndoSnapshotAsync(JsonObject document)
     {
         int slot = documents.IndexOfReference(document);
         if (slot < 0) return;
-        scoreUndo.Push((slot, document.DeepClone().AsObject()));
-        if (scoreUndo.Count > 25)
-        {
-            var newest = scoreUndo.ToArray().Take(25).Reverse().ToArray();
-            scoreUndo.Clear();
-            foreach (var entry in newest) scoreUndo.Push(entry);
-        }
-        scoreRedo.Clear();
+        document["revisionIdentity"] ??= JsonValue.Create(Guid.NewGuid().ToString());
+        var result = await core.RunAsync(new JsonObject { ["operation"] = "score-revision", ["request"] = new JsonObject {
+            ["operation"] = "push", ["state"] = scoreRevisionState?.DeepClone(), ["slots"] = RevisionSlots(), ["slot"] = slot } });
+        scoreRevisionState = result["revision"]!["state"]!.DeepClone().AsObject();
     }
-
     async Task UndoScoreAsync(bool redo)
     {
         if (busy) throw new InvalidOperationException("Bitte die laufende Komposition abwarten.");
-        var source = redo ? scoreRedo : scoreUndo;
-        var destination = redo ? scoreUndo : scoreRedo;
-        if (source.Count == 0)
-        {
-            SetStatus(redo ? "Keine Partituränderung zum Wiederholen." : "Keine Partituränderung zum Rückgängigmachen.");
-            return;
-        }
-        var entry = source.Peek();
-        if (entry.Slot < 0 || entry.Slot >= documents.Length || documents[entry.Slot] == null)
-            throw new InvalidOperationException("Das Stück dieser Änderung ist nicht mehr vorhanden.");
-        source.Pop();
-        destination.Push((entry.Slot, documents[entry.Slot]!.DeepClone().AsObject()));
-        documents[entry.Slot] = entry.Snapshot.DeepClone().AsObject();
-        refreshingSlots = true;
-        try { slots.SelectedIndex = entry.Slot; }
-        finally { refreshingSlots = false; }
-        RefreshSlots();
-        SaveLocalState();
-        await DisplayCurrentAsync();
-        SetStatus(redo ? "Vorherige Partituränderung wiederhergestellt." : "Partituränderung rückgängig gemacht.");
+        SetBusy(true);
+        try {
+        var result = await core.RunAsync(new JsonObject { ["operation"] = "score-revision", ["request"] = new JsonObject {
+            ["operation"] = redo ? "redo" : "undo", ["state"] = scoreRevisionState?.DeepClone(), ["slots"] = RevisionSlots() } });
+        var revision = result["revision"]!.AsObject();
+        scoreRevisionState = revision["state"]!.DeepClone().AsObject();
+        if (revision["slot"] == null) { SetStatus("Keine weitere Partituränderung vorhanden."); return; }
+        int slot = revision["slot"]!.GetValue<int>();
+        documents[slot] = revision["document"]!.DeepClone().AsObject();
+        refreshingSlots = true; try { slots.SelectedIndex = slot; } finally { refreshingSlots = false; }
+        RefreshSlots(); SaveLocalState(); await DisplayCurrentAsync();
+        SetStatus(redo ? "Partituränderung wiederhergestellt." : "Partituränderung rückgängig gemacht.");
+        } finally { SetBusy(false); }
     }
 }

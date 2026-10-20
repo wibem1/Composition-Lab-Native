@@ -10,6 +10,8 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: read
+env:
+  COMPOSITION_LAB_BACKUP_FIXTURE: ${{ github.workspace }}/Tests/CompositionCoreTests/Fixtures/backup-compatibility.json
 jobs:
   core:
     strategy:
@@ -38,19 +40,19 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           bash 'Build Native App.command'
-          test -x 'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0'
-          lipo 'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0' -verify_arch x86_64 arm64
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' 'Composition Lab 4.0.app/Contents/Info.plist')" = 'de.klangwerke.compositionlab.native.v4'
-          COMPOSITION_LAB_TEST_DOMAIN=de.klangwerke.compositionlab.ci 'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0' --native-self-test "$PWD/Mac-TestResults"
+          test -x 'Composition Lab 4.2.app/Contents/MacOS/Composition Lab 4.2'
+          lipo 'Composition Lab 4.2.app/Contents/MacOS/Composition Lab 4.2' -verify_arch x86_64 arm64
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' 'Composition Lab 4.2.app/Contents/Info.plist')" = 'de.klangwerke.compositionlab.native.v4'
+          COMPOSITION_LAB_TEST_DOMAIN=de.klangwerke.compositionlab.ci 'Composition Lab 4.2.app/Contents/MacOS/Composition Lab 4.2' --native-self-test "$PWD/Mac-TestResults"
           test -s Mac-TestResults/result.json
-          'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0' --capture-gui-reference "$PWD/Mac-GUI-Reference"
+          'Composition Lab 4.2.app/Contents/MacOS/Composition Lab 4.2' --capture-gui-reference "$PWD/Mac-GUI-Reference"
           test -s Mac-GUI-Reference/Mac-Main.png
-          ditto -c -k --keepParent 'Composition Lab 4.0.app' Composition-Lab-4.0-alpha.12-Mac.zip
+          ditto -c -k --keepParent 'Composition Lab 4.2.app' Composition-Lab-4.2-Mac.zip
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
         with:
-          name: Composition-Lab-4.0-alpha.12-Mac
-          path: Composition-Lab-4.0-alpha.12-Mac.zip
+          name: Composition-Lab-4.2-Mac
+          path: Composition-Lab-4.2-Mac.zip
           if-no-files-found: error
       - name: Build Windows desktop and test bundled runtime
         if: runner.os == 'Windows'
@@ -59,8 +61,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
-          name: Composition-Lab-V4.14-Windows-x64
-          path: Composition-Lab-V4.14-Windows-x64.zip
+          name: Composition-Lab-4.2-Windows-x64
+          path: Composition-Lab-4.2-Windows-x64.zip
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'Windows'

@@ -255,8 +255,8 @@ internal sealed partial class MainForm
     {
         var transport = new Transport(); transports.Add(transport); var row = MacRow(true);
         slotTips.SetToolTip(transport.Loop, "Wiederholung ein-/ausschalten (Loop)");
-        var play = AddButton(row, "▶", PlayAsync); play.AutoSize = false; play.Size = new Size(36, 26);
-        var stop = AddButton(row, "■", () => { player.Stop(); return Task.CompletedTask; }); stop.AutoSize = false; stop.Size = new Size(36, 26); row.Controls.Add(transport.Loop); row.Controls.Add(transport.Time); row.Controls.Add(transport.Position);
+        var play = AddButton(row, "▶ / Ⅱ", PlayAsync); play.AutoSize = false; play.Size = new Size(36, 26);
+        var stop = AddButton(row, "■", () => { playbackSettingsGeneration++; player.Stop(); return Task.CompletedTask; }); stop.AutoSize = false; stop.Size = new Size(36, 26); row.Controls.Add(transport.Loop); row.Controls.Add(transport.Time); row.Controls.Add(transport.Position);
         row.Controls.Add(MacLabel("Tempo")); row.Controls.Add(transport.Tempo); row.Controls.Add(MacLabel("Lautstärke (Windows)")); row.Controls.Add(transport.Volume);
         transport.Loop.CheckedChanged += (_, _) => { loopPlaying = transport.Loop.Checked; foreach (var other in transports) if (other != transport) other.Loop.Checked = loopPlaying; };
         transport.Position.Scroll += (_, _) => { if (player.Loaded && !seekUpdating) { player.Seek(transport.Position.Value / 1000d); UpdateTransport(); } };
@@ -357,7 +357,7 @@ internal sealed partial class MainForm
     }
     async Task PlayAsync()
     {
-        if (player.Loaded) { player.Play(); return; }
+        if (player.Loaded) { if (player.Mode == "playing") player.Pause(); else player.Play(); return; }
         await ReloadPlaybackCopyAsync(true);
     }
     void UpdateTransport()
@@ -560,6 +560,8 @@ internal sealed partial class MainForm
         var file = new ToolStripMenuItem("Datei"); menu.Items.Add(file);
         Action(file, "Projekt öffnen …", LoadProjectAsync);
         Action(file, "Projekt speichern …", SaveProjectAsync);
+        Action(file, "Verschlüsseltes Backup speichern …", ExportBackupAsync);
+        Action(file, "Verschlüsseltes Backup laden …", ImportBackupAsync);
         file.DropDownItems.Add(new ToolStripSeparator());
         Action(file, "Musikdatei importieren …", () => OpenAsync());
         Action(file, "Diagnose importieren …", ImportDiagnosticAsync);
@@ -596,6 +598,8 @@ internal sealed partial class MainForm
         });
         Action(music, "Anfrage abbrechen", () => { pending?.Cancel(); return Task.CompletedTask; });
 
+        Action(music, "Experimentallabor …", () => ShowLaboratory(false));
+        Action(music, "Vergleichslabor …", () => ShowLaboratory(true));
         var settings = new ToolStripMenuItem("Einstellungen"); menu.Items.Add(settings);
         Action(settings, "API-Schlüssel …", ShowKeys);
         Action(settings, "MIDI-Ausgabe …", ShowMidiOutput);
@@ -633,25 +637,16 @@ internal sealed partial class MainForm
 
     void ShowDevelopmentInfo()
     {
-        const string information = "Composition Lab für Windows – V4.14\r\n" +
-            "Entwicklungsstand: 16.10.2026\r\n\r\n" +
-            "FUNKTIONSFÄHIG (automatisiert geprüft)\r\n" +
-            "• KI-Komposition und Chat, dynamische Modellwahl\r\n" +
-            "• 10 Stückplätze, Projekt- und CLAB-Speicherung\r\n" +
-            "• LilyPond-Originalnoten und MIDI-Ausgabe\r\n" +
-            "• Bearbeiten/Aktualisieren, LilyPond- und MusicXML-Export\r\n" +
-            "• Diagnoseimport zur Wiederherstellung fertiger Antworten\r\n\r\n" +
-            "VERHALTEN BEI FEHLERN\r\n" +
-            "• Fehlgeschlagene automatische Oktavkorrektur blockiert die Originalausgabe nicht.\r\n" +
-            "• Warnungen und Originalquelle bleiben in der Diagnose erhalten.\r\n\r\n" +
-            "BEKANNTE GRENZEN\r\n" +
-            "• Praktischer Test auf deinem Windows-Rechner steht noch aus.\r\n" +
-            "• MIDI-Klang hängt vom Windows-Ausgabegerät ab.\r\n" +
-            "• MusicXML bildet LilyPond-Spezialnotation nur teilweise ab.\r\n" +
-            "• Mac-Backup und Soundfont-Auswahl sind noch nicht vollständig portiert.\r\n\r\n" +
-            "Gemeinsamer Entwicklungszweig: v4-cross-platform\r\n" +
-            "Diagnose und Tests: Hilfe → Diagnosedatei sichern.";
-        using var window = new Form { Text = "Composition Lab – Entwicklungsstand V4.14", StartPosition = FormStartPosition.CenterParent,
+        const string information = "Composition Lab Native 4.2 · Build 4200 · 20.10.2026\r\n\r\n" +
+            "Gemeinsame musikalische Dienste; eigenständige native Windows-Oberfläche.\r\n\r\n" +
+            "Komposition und MusicChat, dynamische Modelle, zehn Slots, CLAB und Projekte.\r\n" +
+            "Lokales LilyPond, Original-MIDI, Quelltextauswahl, Oktavprüfung und Partitur-Undo/Redo.\r\n" +
+            "Vergleichs-/Experimentallabor, verschlüsselte Mac-/Windows-Backups und MIDI-Ausgangswahl.\r\n\r\n" +
+            "Praktische Grenzen: MIDI-Klang hängt vom System und Ausgabegerät ab.\r\n" +
+            "MusicXML bildet LilyPond-Spezialnotation nur teilweise ab. Kosten sind Schätzungen.\r\n" +
+            "Oktavwarnungen verändern die Musik ohne ausdrücklichen Auftrag nicht.\r\n\r\n" +
+            "Prüfstand und verbleibende Grenzen: V4.2-AUDIT.md im Repository.";
+        using var window = new Form { Text = "Composition Lab – Entwicklungsstand 4.2", StartPosition = FormStartPosition.CenterParent,
             ClientSize = new Size(640, 535), MinimumSize = new Size(490, 370), Font = Font, BackColor = StudioTheme.Canvas };
         var details = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
             Dock = DockStyle.Fill, Text = information, BorderStyle = BorderStyle.None, BackColor = Color.White,

@@ -137,13 +137,14 @@ enum BackupCrypto {
 
     static func decrypt(_ data: Data, password: String) throws -> CompositionLabBackupPayload {
         guard let env = try? JSONDecoder().decode(CompositionLabBackupEnvelope.self, from:data),
-              env.format == "composition-lab-native-backup",
-              let salt = Data(base64Encoded:env.salt),
+              env.format == "composition-lab-native-backup", env.version == 1,
+              let salt = Data(base64Encoded:env.salt), salt.count == 16,
               let combined = Data(base64Encoded:env.combined),
               let box = try? AES.GCM.SealedBox(combined:combined)
         else { throw BackupCryptoError.invalidFile }
         do {
             let plain = try AES.GCM.open(box, using:key(password:password, salt:salt))
+            try CoreServices.validateBackup(plain)
             return try JSONDecoder().decode(CompositionLabBackupPayload.self, from:plain)
         } catch { throw BackupCryptoError.badPassword }
     }

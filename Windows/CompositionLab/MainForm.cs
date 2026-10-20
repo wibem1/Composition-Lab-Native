@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.14";
+    const string Version = "4.2.0";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -256,6 +256,7 @@ internal sealed partial class MainForm : Form
                     for (int i = 0; i < Math.Min(10, list.Count); i++) documents[i] = list[i]?.DeepClone().AsObject();
                 automaticRegisterReview = state["automaticRegisterReview"]?.GetValue<bool>() ?? false;
                 player.OutputDevice = state["midiOutputDevice"]?.GetValue<int>() ?? -1;
+                compositionReference = state["compositionReference"]?.DeepClone().AsObject();
                 dialogueSourceSlots = state["dialogueSourceSlots"]?.AsArray().Select(n => n!.GetValue<int>()).Where(n => n is >= 1 and <= 10).ToArray() ?? [];
                 chat.Text = state["chat"]?.GetValue<string>() ?? "";
                 lastDiagnostic = state["diagnostic"]?.DeepClone().AsObject();
@@ -298,7 +299,7 @@ internal sealed partial class MainForm : Form
                 ["slots"] = new JsonArray(documents.Select(d => d?.DeepClone()).ToArray()), ["chat"] = chat.Text,
                 ["diagnostic"] = lastDiagnostic?.DeepClone(), ["pendingComposition"] = pendingComposition?.DeepClone(), ["provider"] = activeProvider,
                 ["models"] = JsonSerializer.SerializeToNode(models), ["assignment"] = assignment.Text,
-                ["workspaceExtensions"] = workspaceExtensions.DeepClone(),
+                ["workspaceExtensions"] = workspaceExtensions.DeepClone(), ["compositionReference"] = compositionReference?.DeepClone(),
                 ["slotDrafts"] = JsonSerializer.SerializeToNode(slotDrafts), ["mainSplitRatio"] = mainSplitRatio, ["editableIdea"] = editableIdea, ["meter"] = meter.Text, ["projectName"] = projectName, ["history"] = new JsonArray(pieceHistory.Select(d => d.DeepClone()).ToArray()), ["notation"] = new JsonArray(notationSettings.Select(c => (JsonNode?)JsonValue.Create(c.SelectedIndex)).ToArray()), ["automaticRegisterReview"] = automaticRegisterReview, ["midiOutputDevice"] = player.OutputDevice, ["dialogueSourceSlots"] = new JsonArray(dialogueSourceSlots.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()), ["splitBeats"] = splitBeats.Checked,
                 ["measures"] = measures.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text, ["ensemble"] = ensemble.Text };
             AtomicFile.WriteText(Path.Combine(dataDirectory, "workspace.json"), state.ToJsonString());
@@ -349,7 +350,7 @@ internal sealed partial class MainForm : Form
         const string probe = "ÄÖÜ äöü ß – musikalischer Dialog";
         var version = await core.RunAsync(new JsonObject { ["operation"] = "version", ["title"] = probe });
         if (version["titleEcho"]?.GetValue<string>() != probe) throw new Exception("UTF-8-Prozesskommunikation beschädigt.");
-        if (version["version"]?.GetValue<string>() != "4.0.0-alpha.12") throw new Exception("Falscher Kern.");
+        if (version["version"]?.GetValue<string>() != "4.2.0") throw new Exception("Falscher Kern.");
         var fixture = JsonNode.Parse("""{"ti":"Windows Starttest","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,0,1],[1,1,64,80,0,1],[2,2,67,80,0,1]]}]}""")!.AsObject();
         documents[0] = CreateDocument(fixture, "Automatischer Test ohne KI-Kosten."); RefreshSlots();
         await DisplayCurrentAsync();
@@ -463,6 +464,7 @@ internal sealed partial class MainForm : Form
         if (!webReady) throw new Exception("Native WebView2-Testumgebung fehlt.");
         await RunLilyPondTestsAsync(output);
         await RunRegisterReviewTestsAsync(output);
+        await RunLaboratoryTestsAsync(output);
         var navigationReady = new TaskCompletionSource<bool>();
         string scrollTestPath = Path.Combine(output, "NativeScrollTest.html");
         AtomicFile.WriteText(scrollTestPath, "<!doctype html><html><body style='margin:0'><div style='height:2400px;background:linear-gradient(white,#8ac)'>Native Notenvorschau · Scrolltest</div></body></html>");

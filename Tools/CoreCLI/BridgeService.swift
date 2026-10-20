@@ -25,8 +25,20 @@ enum BridgeService {
         switch operation {
         case "version": send(["ok": true, "version": CoreServices.version, "titleEcho": title])
         case "build-assignment":
-            send(["ok": true, "assignment": try CoreServices.buildAssignment(obj["assignment"] as? String ?? "",
-                parametersJSON: obj["parameters"] == nil ? nil : data("parameters"))])
+            let assignment = CoreServices.visibleAssignment(chat: obj["chatInput"] as? String ?? "", idea: obj["idea"] as? String ?? "", fallback: obj["assignment"] as? String ?? "")
+            send(["ok": true, "assignment": try CoreServices.buildAssignment(assignment,
+                parametersJSON: obj["parameters"] == nil ? nil : data("parameters"), sourceJSON: obj["source"] == nil || obj["source"] is NSNull ? nil : data("source"))])
+        case "validate-backup":
+            try CoreServices.validateBackup(data("document")); send(["ok": true])
+        case "score-revision":
+            send(["ok": true, "revision": try JSONSerialization.jsonObject(with: ScoreRevisionStore.step(data("request")))])
+        case "lab-prompt":
+            send(["ok": true, "prompt": try LaboratoryWorkflow.prompt(kind: obj["kind"] as? String ?? "", task: obj["task"] as? String ?? "",
+                first: obj["first"] as? String ?? "", second: obj["second"] as? String ?? "", measures: obj["measures"] as? Int ?? 4,
+                tempo: obj["tempo"] as? String ?? "", ensemble: obj["ensemble"] as? String ?? "", style: obj["style"] as? String ?? "")])
+        case "validate-motif":
+            try LaboratoryWorkflow.validateMotif(scoreJSON: data("score"), measures: obj["measures"] as? Int ?? 4)
+            send(["ok": true])
         case "register-review":
             let issues = try RegisterReview.inspect(scoreJSON: data("score"))
             send(["ok": true, "issues": try JSONSerialization.jsonObject(with: issues), "instruction": RegisterReview.instruction])

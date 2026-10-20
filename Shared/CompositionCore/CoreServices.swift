@@ -1,9 +1,16 @@
 import Foundation
 
+/// Owns one request's transport, so cancellation cannot stop another laboratory.
+public final class CoreRequestHandle {
+    private let client: APIClient
+    init(client: APIClient) { self.client = client }
+    public func cancel() { client.cancel() }
+}
+
 /// Small public boundary for desktop clients. JSON preserves the existing score
 /// and CLAB wire format; AppKit and Windows APIs never enter this module.
 public enum CoreServices {
-    public static let version = "4.0.0-alpha.12"
+    public static let version = "4.2.0"
 
     /// Stateless catalog boundary. State contains model metadata and cursors,
     /// never keys; adapters supply a provider response only after HTTP success.
@@ -79,6 +86,13 @@ public enum CoreServices {
         try ScoreValidation.validate(document.score)
     }
 
+    public static func validateBackup(_ data: Data) throws {
+        let payload = try JSONDecoder().decode(CompositionLabBackupPayload.self, from: data)
+        guard payload.format == "composition-lab-native-backup-payload", payload.version == 1,
+              payload.apiKeys.keys.allSatisfy({ Provider(rawValue: $0) != nil }) else { throw APIError.badResponse("Ungültiges Backupformat.") }
+        for item in payload.history { try ScoreValidation.validate(item.score) }
+    }
+
     public static func validateWorkspace(_ data: Data) throws {
         let workspace = try JSONDecoder().decode(CompositionWorkspace.self, from: data)
         guard workspace.format == "composition-lab-v6-project", (0..<10).contains(workspace.activeSlot), workspace.slots.count <= 10 else { throw APIError.badResponse("Ungültiger Arbeitsplatz.") }
@@ -87,14 +101,24 @@ public enum CoreServices {
 
     /// Include only musical parameters the user actually supplied. Empty UI
     /// fields must not silently impose a 32-bar, 4/4, 96-BPM composition.
-    public static func buildAssignment(_ assignment: String, parametersJSON: Data? = nil) throws -> String {
+    public static func visibleAssignment(chat: String, idea: String, fallback: String) -> String {
+        [chat, idea, fallback].first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) ?? ""
+    }
+
+    public static func buildAssignment(_ assignment: String, parametersJSON: Data? = nil, sourceJSON: Data? = nil) throws -> String {
         let parameters = try parametersJSON.map { try JSONDecoder().decode([String: String].self, from: $0) } ?? [:]
         let labels = [("ensemble", "Besetzung"), ("measures", "Takte"), ("meter", "Taktart"), ("tempo", "Tempo"), ("key", "Tonart")]
         let supplied = labels.compactMap { key, label -> String? in
             guard let value = parameters[key], !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
             return label + ": " + value
         }
-        return assignment + (supplied.isEmpty ? "" : "\n\n" + supplied.joined(separator: "\n"))
+        var result = assignment + (supplied.isEmpty ? "" : "\n\n" + supplied.joined(separator: "\n"))
+        if let sourceJSON {
+            guard let source = try JSONSerialization.jsonObject(with: sourceJSON) as? [String: Any], let score = source["score"] else { throw APIError.badResponse("Die gewählte Vorlage enthält keine Partitur.") }
+            _ = try validatedScore(JSONSerialization.data(withJSONObject: score))
+            result += "\n\nVORHANDENES MUSIKALISCHES MATERIAL AUS " + (source["name"] as? String ?? "importierter Vorlage") + ":\n" + String(decoding: sourceJSON, as: UTF8.self)
+        }
+        return result
     }
 
     public static func compositionPrompt(assignment: String) -> String {
@@ -167,15 +191,18 @@ public enum CoreServices {
         } catch { completion(.failure(error)) }
     }
 
+    @discardableResult
     public static func chat(requestJSON: Data, apiKey: String, compositionOnly: Bool = false,
-                            completion: @escaping (Result<Data, Error>) -> Void) {
+                            completion: @escaping (Result<Data, Error>) -> Void) -> CoreRequestHandle {
+        let client = APIClient()
+        let handle = CoreRequestHandle(client: client)
         do {
             let dto = try JSONDecoder().decode(RequestDTO.self, from: requestJSON)
             guard !dto.assignment.isEmpty, !apiKey.isEmpty else { throw APIError.emptyResponse }
             let options = try JSONSerialization.jsonObject(with: requestJSON) as? [String: Any] ?? [:]
             let dialogue = !compositionOnly && options["mode"] as? String == "dialogue"
             let prompt = dialogue ? WorkspaceDialogue.prompt(message: dto.assignment, workspace: options["workspace"] as? String ?? "{}") : dto.assignment
-            APIClient.shared.call(provider: dto.provider, model: dto.model, key: apiKey,
+            client.call(provider: dto.provider, model: dto.model, key: apiKey,
                 effort: dto.effort, purpose: compositionOnly ? "composition" : "music-chat", system: ComposerPrompts.system, user: prompt,
                 wantJSON: dialogue) { result in
                 completion(result.flatMap { response in Result {
@@ -195,6 +222,7 @@ public enum CoreServices {
                 } })
             }
         } catch { completion(.failure(error)) }
+        return handle
     }
 
     private struct RequestDTO: Decodable {

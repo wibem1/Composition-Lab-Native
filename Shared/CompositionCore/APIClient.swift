@@ -83,6 +83,8 @@ final class APIClient {
         return URLSession(configuration: cfg)
     }()
 
+    func cancel() { session.invalidateAndCancel() }
+
     typealias Completion = (Result<LLMResponse, Error>) -> Void
 
     func call(provider: Provider, model: String, key: String, effort: Effort, purpose: String,

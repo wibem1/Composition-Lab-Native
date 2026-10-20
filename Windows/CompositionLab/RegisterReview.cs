@@ -15,11 +15,12 @@ internal sealed partial class MainForm
     // Only the repair transport is replaced in offline tests; compilation and
     // validation exercise the same paths as a real composition.
     Func<JsonObject, CancellationToken, Task<JsonObject>>? registerRepairTransport;
-    const string PitchEncodingHint = "Wenn du LilyPond ausgibst: Verwende explizite absolute Oktavlagen statt durchlaufendem \\relative. Prüfe die tatsächlich klingenden Lagen jedes Instruments. Klavier: A0 bis C8 (MIDI 21–108). Vermeide unbeabsichtigtes Auf- oder Abwandern um Oktaven; 8va/8vb ändert nur die Darstellung.";
+    string registerRepairInstruction = "";
 
     async Task<JsonArray> RegisterIssuesAsync(JsonObject score, string music)
     {
         var result = await core.RunAsync(new JsonObject { ["operation"] = "register-review", ["score"] = score.DeepClone() });
+        registerRepairInstruction = result["instruction"]!.GetValue<string>();
         return result["issues"]!.DeepClone().AsArray();
     }
 
@@ -48,7 +49,7 @@ internal sealed partial class MainForm
             try
             {
                 SetStatus("Oktavfehler erkannt. KI korrigiert ausschließlich die klingenden Oktavlagen …");
-                string instruction = "Korrigiere ausschließlich unbeabsichtigte Oktavlagen im folgenden vollständigen LilyPond-Stück. Keine neue Komposition. Erhalte alle Noten, Tonklassen, Rhythmen, Taktarten, Tempi, Stimmenreihenfolge, Instrumente, Artikulation, Dynamik und musikalische Abschnitte exakt. Behebe auch die damit zusammenhängende Auf-/Abwanderung innerhalb des Klaviers. Keine einzelne Note blind in einen Zielbereich falten: Wähle zusammenhängende musikalische Phrasen und passende Handlagen. Keine Änderung durch ottava (das behebt klingende Fehler nicht). Gib nur den vollständigen korrigierten LilyPond-Code mit expliziten absoluten Tonhöhen ohne \\relative aus. Klavierumfang MIDI 21–108; extreme Lagen nur wenn musikalisch begründet, keine fortschreitende Oktavwanderung.\nBefund (Beats in Vierteln, Tonhöhen als MIDI):\n" + issues.ToJsonString() + "\nORIGINAL:\n" + ExtractLilyPond(music);
+                string instruction = registerRepairInstruction + "\nBEFUND:\n" + issues.ToJsonString() + "\nORIGINAL:\n" + ExtractLilyPond(music);
                 var request = new JsonObject { ["assignment"] = instruction, ["provider"] = source["provider"]?.DeepClone() ?? JsonValue.Create(activeProvider),
                     ["model"] = source["model"]?.DeepClone() ?? JsonValue.Create(SelectedModelId), ["effort"] = source["reasoning"]?.DeepClone() ?? JsonValue.Create("medium") };
                 review["request"] = request.DeepClone(); review["repairAICalls"] = 1;

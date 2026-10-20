@@ -6,7 +6,8 @@ Arbeitszweig: `v4-cross-platform`. **Version 4.2 ist noch nicht freigegeben.**
 Mac und Windows verwenden denselben Swift-Kern mit eigenständigen nativen
 Oberflächen (AppKit bzw. WinForms). Gemeinsame Module übernehmen KI-Zugriff,
 Modellkatalog, Formaterkennung, MIDI/MusicXML, portable Dokumente, LilyPond-
-Quellprüfung und die Zuordnung von SVG-Noten zum Editor.
+Quellprüfung und die Zuordnung von SVG-Noten zum Editor. Gemeinsame Dienste
+regeln außerdem MusicChat, Labore, Oktavprüfung und Partiturrevisionen.
 
 Der Hauptkompositionsweg bewahrt die Originalantwort. LilyPond wird lokal mit
 mitgeliefertem 2.26.0 gesetzt; unbekannte Formate lösen keine ungefragte zweite
@@ -19,11 +20,11 @@ REAPER-/Studio-Pro-Dateibrücken sind entfernt; normale Ein-/Ausgaben bleiben.
 - [Builds und native Tests](https://github.com/wibem1/Composition-Lab-Native/actions)
 - Kerntests: `swift test`
 - Mac-Build: `bash 'Build Native App.command'` (Intel und Apple Silicon)
-- Mac-Funktionstest: `COMPOSITION_LAB_TEST_DOMAIN=de.klangwerke.compositionlab.ci 'Composition Lab 4.0.app/Contents/MacOS/Composition Lab 4.0' --native-self-test /tmp/CompositionLab-Test`
+- Mac-Funktionstest: `COMPOSITION_LAB_TEST_DOMAIN=de.klangwerke.compositionlab.ci 'Composition Lab 4.2.app/Contents/MacOS/Composition Lab 4.2' --native-self-test /tmp/CompositionLab-Test`
 - Windows-Bundle und GUI-Tests: `pwsh Windows/Build.ps1` nach `swift build -c release`
 
-Die alten Installationsnamen und Datenpfade bleiben während der Entwicklung
-stabil. Ein grüner Build bedeutet bestandene automatische Prüfungen; noch offene
+Die bisherigen Datenpfade und Bundle-IDs bleiben stabil. Pakete und Apps sind
+eindeutig mit 4.2 bezeichnet. Ein grüner Build bedeutet bestandene automatische Prüfungen; noch offene
 Funktionsunterschiede stehen im aktuellen Audit. Es gibt keinen 4.2-Release-Tag.
 
 Die nachfolgende historische Dokumentation beschreibt 3.5.3 und frühere Stände.

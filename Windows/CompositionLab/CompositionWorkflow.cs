@@ -9,7 +9,7 @@ internal sealed partial class MainForm
     async Task RequestAIAsync(bool makeMusic)
     {
         if (busy) return;
-        if (makeMusic) assignment.Text = composition.Text.Length > 0 ? composition.Text : assignment.Text;
+        if (makeMusic) assignment.Text = !string.IsNullOrWhiteSpace(chatInput.Text) ? chatInput.Text : composition.Text.Length > 0 ? composition.Text : assignment.Text;
         string inputText = makeMusic ? assignment.Text : chatInput.Text;
         if (string.IsNullOrWhiteSpace(inputText)) { SetStatus("Bitte einen Auftrag eingeben.", true); return; }
         if (string.IsNullOrWhiteSpace(apiKey.Text)) { SetStatus("Bitte API-Schlüssel eingeben.", true); return; }
@@ -32,7 +32,7 @@ internal sealed partial class MainForm
             StoreKey(); pending = new CancellationTokenSource(); SetBusy(true);
             if (makeMusic)
             {
-                var built = await core.RunAsync(new JsonObject { ["operation"] = "build-assignment", ["assignment"] = instruction,
+                var built = await core.RunAsync(new JsonObject { ["operation"] = "build-assignment", ["assignment"] = instruction, ["chatInput"] = chatInput.Text, ["idea"] = composition.Text, ["source"] = compositionReference?.DeepClone(),
                     ["parameters"] = new JsonObject { ["ensemble"] = ensemble.Text, ["measures"] = measures.Text,
                         ["meter"] = meter.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text } }, pending.Token);
                 request["assignment"] = built["assignment"]!.GetValue<string>() + DialogueSourceMaterial();

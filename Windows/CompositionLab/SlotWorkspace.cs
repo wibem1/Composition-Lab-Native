@@ -64,6 +64,7 @@ internal sealed partial class MainForm
             var score = document["score"]!.DeepClone();
             var midi = await core.RunAsync(new JsonObject { ["operation"] = "midi", ["score"] = score });
             if (!workspaceRevisions.IsCurrent(generation)) return;
+            if (currentMidi == null && document["sourceMidiData"] is JsonValue original && original.TryGetValue<string>(out var encoded)) currentMidi = Convert.FromBase64String(encoded);
             currentMidi ??= Convert.FromBase64String(midi["data"]!.GetValue<string>());
             var xml = await core.RunAsync(new JsonObject { ["operation"] = "musicxml", ["score"] = score.DeepClone(), ["options"] = notationOptions?.DeepClone() });
             if (!workspaceRevisions.IsCurrent(generation)) return;
@@ -148,8 +149,10 @@ internal sealed partial class MainForm
             var response = await core.RunAsync(new JsonObject { ["operation"] = midi ? "import-midi" : "import-musicxml",
                 ["data"] = Convert.ToBase64String(data), ["title"] = Path.GetFileNameWithoutExtension(path) });
             document = CreateDocument(response["score"]!.DeepClone().AsObject(), "Import: " + Path.GetFileName(path));
-            if (!midi) document["originalMusicXMLData"] = Convert.ToBase64String(data);
+            if (midi) document["sourceMidiData"] = Convert.ToBase64String(data);
+            else document["originalMusicXMLData"] = Convert.ToBase64String(data);
         }
+        compositionReference = new JsonObject { ["name"] = document["title"]?.DeepClone(), ["score"] = document["score"]!.DeepClone() };
         documents[destination] = document; RememberPiece(document); RefreshSlots(); slots.SelectedIndex = destination;
         await DisplayCurrentAsync(); currentPath = Path.GetExtension(path).Equals(".clab", StringComparison.OrdinalIgnoreCase) ? path : null;
         SaveLocalState(); SetStatus("Datei geladen.");

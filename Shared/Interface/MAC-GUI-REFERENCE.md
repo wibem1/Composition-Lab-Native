@@ -18,4 +18,5 @@ Die Ausführung `--capture-gui-reference OUTPUT` ist nur eine Build-Prüfung. Si
 
 Windows verwendet native Windows-Steuerelemente und Segoe UI. Apple-AppKit und die Systemschrift lassen sich nicht unverändert auf Windows ausführen. Systemdialoge, Menüleisten und Schrift-Rasterung sind deshalb plattformspezifisch. Der strukturelle Aufbau folgt der Mac-Quelle. Kleine Fenster dürfen den ursprünglichen Inhalt scrollen.
 
-Noch fehlende Plattformadapter: verschlüsselte Mac-Backups sowie Soundfont-/direkte MIDI-Ausgangswahl. Diese Menüaktionen erklären die Einschränkung statt einen falschen Erfolg zu melden. Die vollständige Mac-MusicChat-Aktionssteuerung ist noch nicht portiert; der vorhandene Windows-Chat bleibt erhalten. LilyPond/Hacklily befinden sich weiterhin im Dateimenü. Dies ist eine GUI-Portierung, noch keine vollständige Funktionsgleichheit.
+Aktueller Funktionsabgleich: siehe `V4.2-AUDIT.md`. Die historische Referenz
+legt keine identischen Betriebssystemdialoge fest.

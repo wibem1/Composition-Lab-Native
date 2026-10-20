@@ -194,3 +194,32 @@ Die Modellaktualisierung liegt deshalb im nativen Menü `Technisches`; der
 Auswahlbutton behält genügend Breite. Der Mac-Funktionstest kontrolliert die
 reale Control-Geometrie zusätzlich zur korrekten Modellkennung. Windows-Layout
 und gemeinsame Musikverarbeitung sind von dieser UI-Korrektur unabhängig.
+
+## Gemeinsame Dienste in 4.2 (20.10.2026)
+
+Die früheren Zielbeschreibungen oben sind historische Umbauplanung. Verbindlich
+für den 4.2-Kandidaten ist die Modultabelle in `V4.2-AUDIT.md`.
+
+- `RegisterReview.inspect/validateRepair`: gemeinsame musikalische Regeln statt
+  der früheren Windows-Implementierung. Native Adapter besitzen ausschließlich
+  Provider-/Compiler-/UI-Ablauf; keine automatische KI-Korrektur.
+- `WorkspaceDialogue.prompt/decode`: gemeinsamer Ideen-/Quellenvertrag. Eine
+  Dialogidee ist ein Entwurf und überschreibt nicht das gespeicherte Original.
+- `LaboratoryWorkflow.prompt/validateMotif`: gemeinsame Analyse-, Vergleichs-,
+  Routing-, Revisions- und Motivaufträge. Beide nativen Labore bleiben isoliert,
+  bis der Nutzer das Ergebnis ausdrücklich übernimmt.
+- `ScoreRevisionStore.step`: JSON-Transaktion `push/undo/redo`, maximal 25
+  Einträge; vollständige Dokumente einschließlich Erweiterungen. Eine andere
+  Stückidentität an demselben Slot wird nicht überschrieben.
+- `CoreServices.visibleAssignment/buildAssignment`: sichtbarer Auftrag und nur
+  ausgefüllte Parameter; ausdrücklich importierte Referenz als eigene Eingabe.
+- `CoreRequestHandle`: ein Auftrag besitzt seinen Transport und kann ohne
+  Abbruch fremder Laboranfragen storniert werden.
+- `PortableBackupCrypto` (Windows) und `BackupCrypto` (Mac): OS-Crypto-Adapter
+  für das bestehende v1-Format, gemeinsame Payloadvalidierung. Ein unabhängig
+  erzeugtes AES-GCM-Fixture prüft Entschlüsselung/Unicode/Schlüsselinhalt auf
+  beiden Systemen; Roundtrip und falsches Passwort werden nativ geprüft.
+
+Native Prozess-, Geräte-, Crypto- und UI-Adapter sind absichtlich getrennt.
+Die gemeinsame Domänenlogik wird nicht in zwei Sprachen nachimplementiert.
+Alle zusätzlichen Änderungen müssen erneut die vollständige Matrix bestehen.

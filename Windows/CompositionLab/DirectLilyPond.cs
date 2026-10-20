@@ -33,7 +33,9 @@ internal sealed partial class MainForm
             // A different slot or a new edit must never receive an older result.
             if (!ReferenceEquals(Current, document) || !workspaceRevisions.IsCurrent(generation) || composition.Text != editorText)
             { SetStatus("Der Quelltext oder das Stück wurde inzwischen geändert. Bitte erneut aktualisieren."); return; }
-            SaveScoreUndoSnapshot(document);
+            await SaveScoreUndoSnapshotAsync(document);
+            if (!ReferenceEquals(Current, document) || !workspaceRevisions.IsCurrent(generation) || composition.Text != editorText)
+            { SetStatus("Der Quelltext wurde inzwischen geändert. Bitte erneut aktualisieren."); return; }
             document["lilyPondSource"] = result["composition"]!.DeepClone();
             document["description"] = result["composition"]!.DeepClone();
             foreach (string field in new[] { "octaveReview", "originalLilyPond" }) if (result[field] != null) document[field] = result[field]!.DeepClone();

@@ -75,8 +75,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     // V6: zehn gleichberechtigte Stück-/Varianten-Slots.
     private var pieceSlots: [HistoryItem?] = [HistoryItem?](repeating: nil, count: 10)
     private var activePieceSlot: Int = 0
-    private var scoreUndo: [(slot: Int, item: HistoryItem)] = []
-    private var scoreRedo: [(slot: Int, item: HistoryItem)] = []
+    private var scoreRevisionState: [String: Any]?
+    private var nativeRequestHandle: CoreRequestHandle?
+    private var nativeDialogueClient: APIClient?
     private var pendingCompositionSlot: Int?
     private var slotSelectionLoad = false
     private var mainPieceSlotButtons: [NSButton] = []
@@ -104,7 +105,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private var midiOutputWindowController: NSWindowController?
     private let playerTimeLabel = NSTextField(labelWithString: "0:00 / 0:00")
     private let playerProgress = NSSlider(value: 0, minValue: 0, maxValue: 1, target: nil, action: nil)
-    private let playerVolume = NSSlider(value: 0.80, minValue: 0.10, maxValue: 1.0, target: nil, action: nil)
+    private let playerVolume = NSSlider(value: 0.80, minValue: 0, maxValue: 1.0, target: nil, action: nil)
     private let playerTempoField = NSTextField(string: "120")
     private let playerTempoStepper = NSStepper()
     private let playerLoopButton = NSButton(title: "↻ Loop", target: nil, action: nil)
@@ -136,7 +137,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private var projectName = "Unbenannt"
     private var projectURL: URL?
     private let v65ProjectLabel = NSTextField(labelWithString: "Projekt: Unbenannt")
-    private let notationPlayerVolume = NSSlider(value: 0.80, minValue: 0.10, maxValue: 1.0, target: nil, action: nil)
+    private let notationPlayerVolume = NSSlider(value: 0.80, minValue: 0, maxValue: 1.0, target: nil, action: nil)
     private let notationPlayerTempoField = NSTextField(string: "120")
     private let notationPlayerLoopButton = NSButton(title: "↻ Loop", target: nil, action: nil)
 
@@ -1735,7 +1736,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         let task = "Komponiere ein prägnantes musikalisches Motiv von \(bars) Takten als Ausgangspunkt für eine spätere Komposition. Übernimm die aktuell gewählte Besetzung, Tonart, Taktart und das Tempo."
         promptView.string = task
         conceptView.string = "\(bars) Takte · \(meterField.stringValue) · \(tempoField.stringValue) BPM · \(musicalKeyField.stringValue) · \(ensembleField.stringValue)\n\nKurzes, eigenständiges Motiv; musikalische Ausarbeitung erfolgt erst mit Komponieren."
-        lastConcept = conceptView.string
         musicChatCompositionContextOverride = ""
         importedReferenceScore = nil
         importedReferenceName = nil
@@ -2192,29 +2192,15 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     private func basePrompt() -> String {
-        let visibleTask = chatInput.stringValue
-        let task = visibleTask.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? promptView.string : visibleTask
+        let task = CoreServices.visibleAssignment(chat: chatInput.stringValue, idea: conceptView.string, fallback: promptView.string)
         let parameters = ["ensemble": ensembleField.stringValue, "measures": measuresField.stringValue,
                           "meter": meterField.stringValue, "tempo": tempoField.stringValue, "key": musicalKeyField.stringValue]
-        var result = (try? CoreServices.buildAssignment(task, parametersJSON: JSONEncoder().encode(parameters))) ?? task
-        if !musicChatCompositionContextOverride.isEmpty {
-            result += "\n\nMUSICCHAT-ARBEITSMATERIAL:\n" + musicChatCompositionContextOverride
+        var source: Data?
+        if let reference = importedReferenceScore, let score = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(reference)) {
+            source = try? JSONSerialization.data(withJSONObject: ["name": importedReferenceName ?? "importierte Vorlage", "score": score])
         }
-        if let reference = importedReferenceScore {
-            let source = importedReferenceName ?? "importierte Vorlage"
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            if let data = try? encoder.encode(reference),
-               let json = String(data: data, encoding: .utf8) {
-                result += """
-
-                VORHANDENES MUSIKALISCHES MATERIAL AUS \(source):
-                Das folgende Material ist bereits vorhanden und gehört zum musikalischen Auftrag. Behandle es entsprechend dem freien Auftrag als Kontext, Ausgangsmaterial oder zu bearbeitende Musik. Erfinde keine technischen TARGET-/CONTEXT-Rollen.
-
-                \(json)
-                """
-            }
-        }
+        var result = (try? CoreServices.buildAssignment(task, parametersJSON: JSONEncoder().encode(parameters), sourceJSON: source)) ?? task
+        if !musicChatCompositionContextOverride.isEmpty { result += "\n\nMUSICCHAT-ARBEITSMATERIAL:\n" + musicChatCompositionContextOverride }
         return result
     }
 
@@ -2256,7 +2242,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         let request: [String: Any] = ["assignment": assignment, "provider": p.rawValue, "model": m, "effort": effort.rawValue]
         guard let data = try? JSONSerialization.data(withJSONObject: request) else { nativeRequestInFlight = false; return }
         status("KI komponiert …", good: true)
-        CoreServices.chat(requestJSON: data, apiKey: key, compositionOnly: true) { [weak self] response in
+        nativeRequestHandle = CoreServices.chat(requestJSON: data, apiKey: key, compositionOnly: true) { [weak self] response in
             DispatchQueue.main.async {
                 guard let self, self.nativeRequestGeneration == generation else { return }
                 switch response {
@@ -2377,17 +2363,20 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         let generation = nativeWorkspaceGeneration, slot = activePieceSlot
         let original = lastConcept, metadata = lastPortableMetadata
         let p = lastProvider ?? provider, m = lastModel ?? model
+        nativeRequestGeneration += 1
+        let requestGeneration = nativeRequestGeneration
         nativeRequestInFlight = true
         NativeLocalCompositionService(compiler: localCompiler).interpret(text) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
+                guard self.nativeRequestGeneration == requestGeneration else { return }
                 self.nativeRequestInFlight = false
                 guard self.nativeWorkspaceGeneration == generation, self.activePieceSlot == slot, self.conceptView.string == text else { return }
                 switch result {
                 case .success(.some(let work)):
                     var updated = metadata
                     for (key, value) in work.metadata { updated[key] = value }
-                    self.saveScoreUndoSnapshot()
+                    guard self.saveScoreUndoSnapshot() else { return }
                     self.install(score: work.score, concept: original, provider: p, model: m, addHistory: false,
                         costUSD: self.lastCostUSD, inputTokens: self.lastInputTokens, outputTokens: self.lastOutputTokens, metadata: updated)
                     self.conceptView.string = text
@@ -2403,33 +2392,44 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         }
     }
 
-    private func saveScoreUndoSnapshot() {
-        guard let item = pieceSlots[activePieceSlot] else { return }
-        scoreUndo.append((activePieceSlot, item))
-        if scoreUndo.count > 25 { scoreUndo.removeFirst(scoreUndo.count - 25) }
-        scoreRedo.removeAll()
+    private func revisionStep(_ operation: String) throws -> [String: Any] {
+        let slots: [Any] = try pieceSlots.map { item in
+            guard let item else { return NSNull() }
+            return ["identity": item.id.uuidString, "document": try JSONSerialization.jsonObject(with: JSONEncoder().encode(item))] as [String: Any]
+        }
+        var request: [String: Any] = ["operation": operation, "slots": slots, "slot": activePieceSlot]
+        if let state = scoreRevisionState { request["state"] = state }
+        let result = try JSONSerialization.jsonObject(with: ScoreRevisionStore.step(JSONSerialization.data(withJSONObject: request))) as! [String: Any]
+        scoreRevisionState = result["state"] as? [String: Any]
+        return result
     }
-
+    private func saveScoreUndoSnapshot() -> Bool {
+        do { _ = try revisionStep("push"); return true }
+        catch { status(error.localizedDescription, good: false); return false }
+    }
     @objc func menuUndoScore() { restoreScoreRevision(redo: false) }
     @objc func menuRedoScore() { restoreScoreRevision(redo: true) }
     private func restoreScoreRevision(redo: Bool) {
         guard !nativeRequestInFlight else { status("Bitte die laufende Anfrage abwarten.", good: false); return }
-        guard let entry = redo ? scoreRedo.last : scoreUndo.last else { status("Keine weitere Partituränderung vorhanden.", good: true); return }
-        guard pieceSlots.indices.contains(entry.slot), let current = pieceSlots[entry.slot], current.id == entry.item.id else {
-            if redo { scoreRedo.removeLast() } else { scoreUndo.removeLast() }
-            status("Das ursprüngliche Stück ist nicht mehr vorhanden.", good: false); return
-        }
-        captureCurrentInActiveSlot()
-        if redo { scoreRedo.removeLast(); scoreUndo.append((entry.slot, current)) }
-        else { scoreUndo.removeLast(); scoreRedo.append((entry.slot, current)) }
-        activePieceSlot = entry.slot
-        pieceSlots[entry.slot] = entry.item
-        let item = entry.item
-        install(score: item.score, concept: item.concept, provider: item.provider, model: item.model,
-            addHistory: false, costUSD: item.costUSD, inputTokens: item.inputTokens, outputTokens: item.outputTokens, metadata: item.extraFields)
-        if case .string(let assignment)? = item.extraFields["assignment"] { promptView.string = assignment }
-        v309SaveSessionMemory()
-        status(redo ? "Partituränderung wiederhergestellt." : "Partituränderung rückgängig gemacht.", good: true)
+        do {
+            let result = try revisionStep(redo ? "redo" : "undo")
+            guard let slot = result["slot"] as? Int, let value = result["document"] else { status("Keine weitere Partituränderung vorhanden.", good: true); return }
+            let item = try JSONDecoder().decode(HistoryItem.self, from: JSONSerialization.data(withJSONObject: value))
+            captureCurrentInActiveSlot(); activePieceSlot = slot; pieceSlots[slot] = item
+            install(score: item.score, concept: item.concept, provider: item.provider, model: item.model,
+                addHistory: false, costUSD: item.costUSD, inputTokens: item.inputTokens, outputTokens: item.outputTokens, metadata: item.extraFields)
+            if case .string(let assignment)? = item.extraFields["assignment"] { promptView.string = assignment }
+            v309SaveSessionMemory()
+            status(redo ? "Partituränderung wiederhergestellt." : "Partituränderung rückgängig gemacht.", good: true)
+        } catch { status(error.localizedDescription, good: false) }
+    }
+
+    @objc func menuCancelRequest() {
+        nativeRequestGeneration += 1; nativeWorkspaceGeneration += 1
+        nativeRequestHandle?.cancel(); nativeRequestHandle = nil
+        nativeDialogueClient?.cancel(); nativeDialogueClient = nil
+        nativeRequestInFlight = false
+        status("Anfrage lokal abgebrochen. Letzte gültige Fassung bleibt erhalten.", good: true)
     }
 
     @objc func menuReviewRegisters() {
@@ -2440,31 +2440,38 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         var key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if key.isEmpty { key = SessionSecrets.shared.key(for: p) }
         let apiKey = key
+        nativeRequestGeneration += 1
+        let requestGeneration = nativeRequestGeneration
         nativeRequestInFlight = true
         status("Oktavlagen werden geprüft …", good: true)
         NativeRegisterRepairService(compiler: localCompiler).repair(source: source, transport: { instruction, done in
             guard !apiKey.isEmpty else { done(.failure(APIError.badResponse("Für die ausdrücklich angeforderte Oktavkorrektur fehlt der API-Schlüssel."))); return }
             do {
                 let request = try JSONSerialization.data(withJSONObject: ["assignment": instruction, "provider": p.rawValue, "model": m, "effort": e.rawValue])
-                CoreServices.chat(requestJSON: request, apiKey: apiKey) { result in
+                DispatchQueue.main.async {
+                guard self.nativeWorkspaceGeneration == generation else { done(.failure(APIError.badResponse("Anfrage abgebrochen."))); return }
+                self.nativeRequestHandle = CoreServices.chat(requestJSON: request, apiKey: apiKey) { result in
                     DispatchQueue.main.async {
+                        guard self.nativeRequestGeneration == requestGeneration else { done(.failure(APIError.badResponse("Anfrage abgebrochen."))); return }
                         if case .success(let data) = result, let diagnostic = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                             self.lastDiagnostic = diagnostic
                         }
                         done(result)
                     }
                 }
+                }
             } catch { done(.failure(error)) }
         }) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
+                guard self.nativeRequestGeneration == requestGeneration else { return }
                 self.nativeRequestInFlight = false
                 guard self.nativeWorkspaceGeneration == generation, self.activePieceSlot == slot, self.conceptView.string == source else { return }
                 switch result {
                 case .success(let work):
                     var updated = metadata
                     for (key, value) in work.metadata { updated[key] = value }
-                    self.saveScoreUndoSnapshot()
+                    guard self.saveScoreUndoSnapshot() else { return }
                     var cost = self.lastCostUSD, input = self.lastInputTokens, output = self.lastOutputTokens
                     if case .object(let review)? = work.metadata["octaveReview"], case .object(let response)? = review["response"] {
                         if case .number(let n)? = response["estimatedCostUSD"] { cost += n }
@@ -2518,7 +2525,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         let displayBPM = max(20, min(300, Int(initialBPM.rounded())))
         playerTempoField.integerValue = displayBPM
         playerTempoStepper.integerValue = displayBPM
-        if let midi = lastMidi { try? midiPlayer.load(score: score, data: midi, preserveOriginal: metadata["sourceMidiData"] != nil) }
+        midiPlayer.stop()
+        reloadMainPlayerForPlaybackSettings(errorPrefix: "Player konnte nicht geladen werden")
         updatePlayerTime()
         var info = "\(score.ti)\n\(Int(score.bpm)) BPM · \(score.k) · \(score.tr.count) Spur(en)\n\(score.sm)"
         if let costUSD = costUSD { info += "\nAPI-Kosten ca.: \(APICost.display(costUSD))" }
@@ -2616,41 +2624,20 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         updatePlayerTime()
     }
 
-    private func scoreWithVolume(_ score: Score, factor: Double) -> Score {
-        var sc = score
-        sc.tr = sc.tr.map { tr in
-            var t = tr
-            t.nt = tr.nt.map { n in
-                var x = n
-                if x.count > 3 { x[3] = max(1, min(127, x[3] * factor)) }
-                return x
-            }
-            return t
-        }
-        return sc
-    }
-
     private func reloadMainPlayerForPlaybackSettings(errorPrefix: String) {
         guard let score = lastScore else { return }
         let wasPlaying = midiPlayer.isPlaying
         let fraction = midiPlayer.duration > 0 ? midiPlayer.position / midiPlayer.duration : 0
-        var adjusted = scoreWithVolume(score, factor: playerVolume.doubleValue)
-        var bpm = playerTempoField.integerValue
-        if bpm <= 0 { bpm = Int(score.bpm.rounded()) }
-        bpm = max(20, min(300, bpm))
-        playerTempoField.integerValue = bpm
-        playerTempoStepper.integerValue = bpm
-        adjusted.bpm = Double(bpm)
+        let bpm = max(20, min(400, playerTempoField.integerValue > 0 ? playerTempoField.integerValue : Int(score.bpm.rounded())))
+        playerTempoField.integerValue = bpm; playerTempoStepper.integerValue = bpm
         do {
-            let preserveOriginal = lastPortableMetadata["sourceMidiData"] != nil
-            let data: Data
-            if preserveOriginal { data = try PlaybackMIDICopy.make(lastMidi ?? Data(), velocityFactor: playerVolume.doubleValue, targetBPM: Double(bpm)) }
-            else { data = MIDIBuilder.build(adjusted) }
-            try midiPlayer.load(score: adjusted, data: data, preserveOriginal: preserveOriginal)
+            let original = lastPortableMetadata["sourceMidiData"] != nil ? (lastMidi ?? Data()) : MIDIBuilder.build(score, endPaddingSeconds: 3)
+            let data = try PlaybackMIDICopy.make(original, velocityFactor: playerVolume.doubleValue, targetBPM: Double(bpm))
+            try midiPlayer.load(score: score, data: data, preserveOriginal: true)
             midiPlayer.seek(fraction: fraction)
             if wasPlaying { midiPlayer.play(); startPlayerTimer() }
             updatePlayerTime()
-        } catch { status("\(errorPrefix): \(error.localizedDescription)", good:false) }
+        } catch { status(errorPrefix + ": " + error.localizedDescription, good: false) }
     }
 
     @objc private func playerTempoStepperChanged() {
@@ -2783,124 +2770,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         return text
     }
 
-    private func executeMusicChatRevision(targetSlot oneBased: Int,
-                                          sourceSlots: [Int],
-                                          task: String,
-                                          replyLead: String?,
-                                          provider p: Provider,
-                                          model m: String,
-                                          effort e: Effort,
-                                          key: String) {
-        let targetIndex = oneBased - 1
-        guard targetIndex >= 0, targetIndex < pieceSlots.count, let targetItem = pieceSlots[targetIndex] else {
-            appendChat(p.displayName, "Welches vorhandene Stück soll ich bearbeiten?")
-            status("MusicChat braucht einen eindeutigen Ziel-Slot.", good: false)
-            return
-        }
-        if let lead = replyLead?.trimmingCharacters(in: .whitespacesAndNewlines), !lead.isEmpty {
-            appendChat(p.displayName, lead)
-        }
-
-        var materialSlots = sourceSlots
-        if !materialSlots.contains(oneBased) { materialSlots.append(oneBased) }
-        let sourceText = musicChatSourceMaterial(materialSlots)
-        let revisionPrompt = """
-        \(ComposerPrompts.technical)
-
-        Du arbeitest im Composition Lab mit mehreren gleichzeitig verfügbaren Stücken.
-        Bearbeite ausschließlich das als ZIEL bezeichnete Stück. Andere angegebene Slots sind Vergleichs- oder Quellenmaterial.
-        Wenn der Nutzer nur eine Teiländerung verlangt, bewahre alle nicht verlangten musikalischen Eigenschaften möglichst unverändert.
-
-        AKTUELLE RAHMENBEDINGUNGEN:
-        Takte: \(measuresField.stringValue)
-        Taktart: \(meterField.stringValue)
-        Tempo: \(tempoField.stringValue)
-        Tonart: \(musicalKeyField.stringValue)
-        Besetzung: \(ensembleField.stringValue)
-
-        ZIEL: Stück \(oneBased) – \(targetItem.title)
-
-        ARBEITSMATERIAL:
-        \(sourceText)
-
-        NUTZER-AUFTRAG:
-        \(task)
-
-        Antworte ausschließlich mit einem JSON-Objekt im Format:
-        {"reply":"kurze Antwort an den Nutzer", "concept": null ODER "vollständige neue Kompositionsidee", "score": vollständige bearbeitete Partitur}
-        """
-
-        lastDiagnostic = [
-            "format": "composition-lab-native-diagnostic",
-            "engineBuild": ComposerPrompts.engineBuild,
-            "interface": "macOS AppKit",
-            "interfaceVersion": "4.0.0-alpha.1",
-            "entryPoint": "musicchat-context-revise",
-            "stage": "revision-request",
-            "targetSlot": oneBased,
-            "sourceSlots": materialSlots,
-            "resolvedTask": task,
-            "revisionPrompt": revisionPrompt
-        ]
-        status("KI bearbeitet Stück \(oneBased) …", good: true)
-
-        APIClient.shared.call(provider: p, model: m, key: key, effort: e,
-                              purpose: "MainViewController.executeMusicChatRevision", system: ComposerPrompts.system, user: revisionPrompt, wantJSON: true) { [weak self] result in
-            switch result {
-            case .failure(let error):
-                DispatchQueue.main.async {
-                    if var d = self?.lastDiagnostic {
-                        d["stage"] = "revision-failed"
-                        d["error"] = error.localizedDescription
-                        self?.lastDiagnostic = d
-                    }
-                    self?.appendChat("Fehler", error.localizedDescription)
-                    self?.status("Fehler: \(error.localizedDescription)", good: false)
-                }
-            case .success(let response):
-                do {
-                    let data = try WorkspaceDialogue.decode(response.text)
-                    let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
-                    let reply = object["reply"] as? String ?? "Bearbeitung abgeschlossen."
-                    let concept = (object["concept"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard let scoreObject = object["score"], !(scoreObject is NSNull) else {
-                        throw NSError(domain: "CompositionLab.MusicChat", code: 2,
-                                      userInfo: [NSLocalizedDescriptionKey: "Die KI hat keine bearbeitete Partitur zurückgegeben."])
-                    }
-                    let scoreData = try JSONSerialization.data(withJSONObject: scoreObject)
-                    let score = try JSONDecoder().decode(Score.self, from: scoreData)
-                    let cost = APICost.estimate(provider: p, model: m,
-                                                inputTokens: response.inputTokens,
-                                                outputTokens: response.outputTokens)
-                    DispatchQueue.main.async {
-                        guard let self else { return }
-                        self.activePieceSlot = targetIndex
-                        self.pendingCompositionSlot = targetIndex
-                        self.install(score: score,
-                                     concept: (concept?.isEmpty == false ? concept! : targetItem.concept),
-                                     provider: p,
-                                     model: m,
-                                     costUSD: cost,
-                                     inputTokens: response.inputTokens,
-                                     outputTokens: response.outputTokens)
-                        self.appendChat(p.displayName, reply)
-                        if var d = self.lastDiagnostic {
-                            d["stage"] = "revision-completed"
-                            d["response"] = response.text
-                            self.lastDiagnostic = d
-                        }
-                        self.status("Stück \(oneBased) wurde bearbeitet. · API-Kosten ca. \(APICost.display(cost))", good: true)
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        self?.appendChat("Fehler", error.localizedDescription)
-                        self?.status("Fehler: \(error.localizedDescription)", good: false)
-                    }
-                }
-            }
-        }
-    }
-
     @objc private func chatPressed() {
         guard !nativeRequestInFlight else { status("Bitte die laufende Anfrage abwarten.", good: false); return }
         let msg = chatInput.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2937,16 +2806,20 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             "workspaceContext": workspace,
             "dialoguePrompt": dialoguePrompt
         ]
+        nativeRequestGeneration += 1
+        let generation = nativeRequestGeneration
         nativeRequestInFlight = true
+        let client = APIClient(); nativeDialogueClient = client
         status("KI denkt im MusicChat mit …", good: true)
 
-        APIClient.shared.call(provider: p, model: m, key: key, effort: e,
+        client.call(provider: p, model: m, key: key, effort: e,
                               purpose: "MainViewController.chatPressed", system: ComposerPrompts.system,
                               user: dialoguePrompt,
                               wantJSON: true) { [weak self] result in
             switch result {
             case .failure(let error):
                 DispatchQueue.main.async {
+                    guard self?.nativeRequestGeneration == generation else { return }
                     self?.nativeRequestInFlight = false
                     if var d = self?.lastDiagnostic {
                         d["stage"] = "dialogue-failed"
@@ -2988,6 +2861,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
                     DispatchQueue.main.async {
                         guard let self else { return }
+                        guard self.nativeRequestGeneration == generation else { return }
                         self.nativeRequestInFlight = false
                         let answer = (reply?.isEmpty == false) ? reply! : "Ich habe den musikalischen Zusammenhang aufgenommen."
                         self.appendChat(p.displayName, answer)
@@ -3033,7 +2907,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                     }
                 } catch {
                     DispatchQueue.main.async {
-                        self?.nativeRequestInFlight = false
+                        guard self?.nativeRequestGeneration == generation else { return }
+                    self?.nativeRequestInFlight = false
                         if var d = self?.lastDiagnostic {
                             d["stage"] = "dialogue-decode-failed"
                             d["rawResponse"] = response.text
@@ -3102,7 +2977,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             // Ein alter Impuls darf deshalb nicht mit der neuen Vorlage vermischt werden.
             lastConcept = ""
             conceptView.string = ""
-            install(score: score, concept: "", provider: provider, model: model, addHistory: false)
+            install(score: score, concept: "", provider: provider, model: model, addHistory: false, metadata: ["sourceMidiData": .string(data.base64EncodedString())])
             conceptView.string = ""
             selectWorkspace(0)
             workspaceSegment.selectedSegment = 0
@@ -3740,41 +3615,11 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         }
 
         let p = provider, m = model, e = effort
-        let tempo = r.tempo.isEmpty ? "96" : r.tempo
-        let ensemble = r.ensemble.isEmpty ? "frei" : r.ensemble
-        let stylePrefix = r.style.isEmpty ? "" : "Stil / Charakter: \(r.style)\n"
-        let assignment = """
-        MODUS: MUSIKALISCHES MOTIV / KEIMZELLE
-        Besetzung: \(ensemble)
-        Exakte Länge: \(r.measures) Takte
-        Taktart: 4/4
-        Tempo: \(tempo) BPM
-        Tonart: frei
-
-        Auftrag:
-        \(stylePrefix)\(r.task)
-        """
-
-        // Das Experimentallabor besitzt bewusst einen eigenen Ein-Schritt-Pfad.
-        // Es ruft weder conceptPrompt() noch die normale Compose-Pipeline auf.
-        // Ergebnis ist ausschließlich eine kurze, in sich offene Keimzelle.
-        let motifPrompt = """
-        \(ComposerPrompts.technical)
-
-        AUFGABE: ERZEUGE NUR EIN KURZES MUSIKALISCHES MOTIV / EINE KEIMZELLE.
-
-        \(assignment)
-
-        VERBINDLICH:
-        - Erzeuge exakt \(r.measures) Takte musikalisches Ausgangsmaterial, kein vollständiges Stück.
-        - Keine Einleitung, Durchführung, Reprise, Coda oder sonstige Großform ergänzen.
-        - Das Material soll prägnant genug sein, um später wiedererkannt, variiert und entwickelt zu werden.
-        - Der Titel bezeichnet das Motiv/die Keimzelle, nicht ein fertiges Werk.
-        - Die JSON-Partitur endet spätestens am Ende von Takt \(r.measures).
-        - Dies ist Experimentalmaterial. Es darf die aktuelle Hauptkomposition nicht verändern.
-
-        Gib ausschließlich die JSON-Partitur dieser Keimzelle aus.
-        """
+        let assignment = r.task
+        guard let motifPrompt = try? LaboratoryWorkflow.prompt(kind: "motif", task: r.task,
+            measures: r.measures, tempo: r.tempo, ensemble: r.ensemble, style: r.style) else {
+            window?.setStatus("Ungültiger Motivauftrag.", good: false); return
+        }
 
         window?.setStatus("KI erzeugt Motiv / Keimzelle …", good: true)
         APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e, purpose: "MainViewController.generateExperiment.motif",
@@ -3789,23 +3634,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                     let data = try APIClient.shared.extractJSON(response.text)
                     let score = try JSONDecoder().decode(Score.self, from: data)
 
-                    // Harte Sicherheitsgrenze nur für den Labor-Datenweg:
-                    // Ein Modell darf durch einen zu langen Score nicht versehentlich
-                    // wieder ein ganzes Stück in das Experimentallabor einschleusen.
-                    let beatsPerBar = Double(max(1, score.ts.n)) * 4.0 / Double(max(1, score.ts.d))
-                    let maxAllowedBeat = Double(r.measures) * beatsPerBar + 0.0001
-                    let hasOverflow = score.tr.contains { track in
-                        track.nt.contains { note in
-                            guard note.count >= 2 else { return false }
-                            return note[0] + max(0, note[1]) > maxAllowedBeat
-                        }
-                    }
-                    guard !hasOverflow else {
-                        DispatchQueue.main.async {
-                            window?.setStatus("Motiv verworfen: KI lieferte mehr als \(r.measures) Takte. Die Hauptkomposition blieb unverändert.", good: false)
-                        }
-                        return
-                    }
+                    try LaboratoryWorkflow.validateMotif(scoreJSON: JSONEncoder().encode(score), measures: r.measures)
 
                     DispatchQueue.main.async {
                         guard let self = self else { return }
@@ -3921,13 +3750,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         guard !apiKey.isEmpty else { window?.setDialogText("API-Key für \(provider.displayName) fehlt."); return }
         let p=provider,m=model,e=effort
         let enc=JSONEncoder(); let ja=(try? String(data:enc.encode(a.score),encoding:.utf8)) ?? ""; let jb=(try? String(data:enc.encode(b.score),encoding:.utf8)) ?? ""
-        let user="""
-        VERGLEICHE A UND B MUSIKALISCH.
-        A: \(a.title)\nImpuls: \(a.concept)\nMIDI-JSON: \(ja)
-        B: \(b.title)\nImpuls: \(b.concept)\nMIDI-JSON: \(jb)
-
-        Beurteile knapp: Charakter, motivische Arbeit, Harmonik, Rhythmik, Form, Eigenständigkeit und welche Fassung musikalisch überzeugender ist. Begründe konkret.
-        """
+        let user = (try? LaboratoryWorkflow.prompt(kind: "compare", task: "", first: a.concept + "\n" + ja, second: b.concept + "\n" + jb)) ?? ""
         APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,purpose: "MainViewController.compare", system:"Du bist ein musikalischer Analytiker und vergleichst zwei MIDI-Kompositionen sachlich und konkret.",user:user,wantJSON:false){ [weak window] result in DispatchQueue.main.async { switch result { case .failure(let err):window?.setDialogText("Fehler: \(err.localizedDescription)");case .success(let r):window?.setDialogText(r.text) } } }
     }
 
@@ -3947,25 +3770,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         let enc = JSONEncoder()
         let ja = (try? String(data: enc.encode(a.score), encoding: .utf8)) ?? ""
         let jb = (try? String(data: enc.encode(b.score), encoding: .utf8)) ?? ""
-        let user = """
-        MUSIK A: \(a.title)
-        Impuls A: \(a.concept)
-        MIDI-JSON A: \(ja)
-
-        MUSIK B: \(b.title)
-        Impuls B: \(b.concept)
-        MIDI-JSON B: \(jb)
-
-        NUTZER:
-        \(text)
-        """
-        let system = """
-        Du bist der KI-Dialog im Vergleichslabor einer MIDI-Kompositions-App.
-        Entscheide anhand der Bedeutung der Nutzereingabe:
-        - Wenn der Nutzer eine neue, veränderte, kombinierte, fortgesetzte oder sonstwie neu zu komponierende musikalische Fassung aus A und/oder B verlangt, antworte AUSSCHLIESSLICH mit [[COMPOSE]].
-        - Wenn der Nutzer nur analysieren, vergleichen, fragen, diskutieren oder eine Einschätzung erhalten möchte, antworte normal als musikalischer Gesprächspartner.
-        WICHTIG: Erzeuge in diesem Dialog niemals Python-Code, MIDI-Binärdaten, Base64, ein MIDI-Skript oder Anweisungen zum Erzeugen einer Datei. Behaupte auch nicht, dass du keine Binärdatei anhängen kannst. Die App erzeugt MIDI selbst.
-        """
+        let user = (try? LaboratoryWorkflow.prompt(kind: "route", task: text, first: a.concept + "\n" + ja, second: b.concept + "\n" + jb)) ?? ""
+        let system = ComposerPrompts.system
         APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
                               purpose: "MainViewController.routeCompareDialog", system: system, user: user, wantJSON: false) { [weak self, weak window] result in
             DispatchQueue.main.async {
@@ -3986,39 +3792,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         }
     }
 
-    private func chatCompare(a: HistoryItem, b: HistoryItem, question: String, window: CompareLabWindowController?) {
-        var apiKey = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if apiKey.isEmpty { apiKey = SessionSecrets.shared.key(for: provider); if !apiKey.isEmpty { keyField.stringValue = apiKey } }
-        if !apiKey.isEmpty { SessionSecrets.shared.set(apiKey, for: provider) }
-        guard !apiKey.isEmpty else { window?.setDialogText("API-Key für \(provider.displayName) fehlt."); return }
-        let p = provider, m = model, e = effort
-        let enc = JSONEncoder()
-        let ja = (try? String(data: enc.encode(a.score), encoding: .utf8)) ?? ""
-        let jb = (try? String(data: enc.encode(b.score), encoding: .utf8)) ?? ""
-        let user = """
-        MUSIK A: \(a.title)
-        Impuls A: \(a.concept)
-        MIDI-JSON A: \(ja)
-
-        MUSIK B: \(b.title)
-        Impuls B: \(b.concept)
-        MIDI-JSON B: \(jb)
-
-        FRAGE / WUNSCH:
-        \(question)
-        """
-        APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
-                              purpose: "MainViewController.chatCompare", system: "Du bist ein musikalischer Analyse- und Kompositionspartner. Besprich zwei vorliegende MIDI-Kompositionen konkret und musikalisch. Antworte zunächst als Gesprächspartner und erzeuge in diesem Dialog keine JSON-Partitur.",
-                              user: user, wantJSON: false) { [weak window] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .failure(let err): window?.setDialogText("Fehler: \(err.localizedDescription)")
-                case .success(let r): window?.setDialogText(r.text)
-                }
-            }
-        }
-    }
-
     private func createCompareResult(a: HistoryItem, b: HistoryItem, instruction: String, window: CompareLabWindowController?) {
         var apiKey = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if apiKey.isEmpty { apiKey = SessionSecrets.shared.key(for: provider); if !apiKey.isEmpty { keyField.stringValue = apiKey } }
@@ -4029,50 +3802,21 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         let enc = JSONEncoder()
         let ja = (try? String(data: enc.encode(a.score), encoding: .utf8)) ?? ""
         let jb = (try? String(data: enc.encode(b.score), encoding: .utf8)) ?? ""
-        let assignment = """
-        Zwei vorhandene Kompositionen sind Ausgangsmaterial.
-
-        A: \(a.title)
-        Impuls A: \(a.concept)
-        MIDI-JSON A: \(ja)
-
-        B: \(b.title)
-        Impuls B: \(b.concept)
-        MIDI-JSON B: \(jb)
-
-        Auftrag:
-        \(instruction)
-        """
-
+        guard let assignment = try? LaboratoryWorkflow.prompt(kind: "revision", task: instruction,
+            first: a.concept + "\n" + ja, second: b.concept + "\n" + jb) else { return }
         APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
-                              purpose: "MainViewController.createCompareResult", system: ComposerPrompts.system,
-                              user: ComposerPrompts.compositionPrompt(assignment),
-                              wantJSON: false) { [weak window] first in
-            switch first {
-            case .failure(let err): DispatchQueue.main.async { window?.setDialogText("Fehler: \(err.localizedDescription)") }
-            case .success(let concept):
-                let prompt = """
-                AUFTRAG:
-                \(assignment)
-
-                MUSIKALISCHE VORSTELLUNG:
-                \(concept.text)
-
-                \(ComposerPrompts.technical)
-
-                \(self.titleAvoidanceInstruction())
-                """
-                APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
-                                      purpose: "MainViewController.createCompareResult", system: ComposerPrompts.system, user: prompt, wantJSON: true) { second in
-                    switch second {
-                    case .failure(let err): DispatchQueue.main.async { window?.setDialogText("Fehler: \(err.localizedDescription)") }
-                    case .success(let response):
-                        do {
-                            let data = try APIClient.shared.extractJSON(response.text)
-                            let score = try JSONDecoder().decode(Score.self, from: data)
-                            DispatchQueue.main.async { window?.setGeneratedResult(score: score, concept: concept.text, provider: p, model: m) }
-                        } catch {
-                            DispatchQueue.main.async { window?.setDialogText("Fehler: \(error.localizedDescription)") }
+            purpose: "comparison-revision", system: ComposerPrompts.system, user: assignment, wantJSON: false) { [weak self, weak window] result in
+            switch result {
+            case .failure(let error): DispatchQueue.main.async { window?.setDialogText(error.localizedDescription) }
+            case .success(let response):
+                guard let self else { return }
+                NativeLocalCompositionService(compiler: self.localCompiler).interpret(response.text) { result in
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(.some(let work)):
+                            window?.setGeneratedResult(score: work.score, concept: response.text, provider: p, model: m, metadata: work.metadata)
+                        case .success(nil): window?.setDialogText("Originalantwort erhalten, aber nicht lokal lesbar: " + response.text)
+                        case .failure(let error): window?.setDialogText(error.localizedDescription + "\nOriginalantwort:\n" + response.text)
                         }
                     }
                 }
@@ -4199,6 +3943,36 @@ extension JSONEncoder {
 // preferences domain. It exercises the real AppKit/WebKit/engraver path offline.
 extension MainViewController {
     func runNativeSelfTest(output: String, completion: @escaping (Error?) -> Void) {
+        do {
+            guard let path = ProcessInfo.processInfo.environment["COMPOSITION_LAB_BACKUP_FIXTURE"] else { throw APIError.badResponse("Backup-Kompatibilitätsfixture fehlt.") }
+            let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as! [String: Any]
+            let password = fixture["password"] as! String
+            let envelope = try JSONSerialization.data(withJSONObject: fixture["envelope"]!)
+            let payload = try BackupCrypto.decrypt(envelope, password: password)
+            guard payload.apiKeys["anthropic"] == "OFFLINE-TEST-NOT-A-REAL-KEY", payload.settings.prompt == "Test 𝄞" else { throw APIError.badResponse("Backup-Austausch verliert Daten.") }
+            let encrypted = try BackupCrypto.encrypt(payload, password: password)
+            _ = try BackupCrypto.decrypt(encrypted, password: password)
+            do { _ = try BackupCrypto.decrypt(envelope, password: "wrong"); throw APIError.badResponse("Falsches Backup-Passwort akzeptiert.") }
+            catch BackupCryptoError.badPassword { }
+        } catch { completion(error); return }
+        let bad = "\\version \"2.24.0\"\n\\score { { c''''4 e''''4 g''''4 c'''''4 } \\layout {} \\midi {} }"
+        let good = "\\version \"2.24.0\"\n\\score { { c''4 e''4 g''4 c'''4 } \\layout {} \\midi {} }"
+        var calls = 0
+        NativeRegisterRepairService(compiler: localCompiler).repair(source: bad, transport: { _, done in
+            calls += 1
+            done(Result { try JSONSerialization.data(withJSONObject: ["text": good, "estimatedCostUSD": 0.03]) })
+        }) { result in
+            DispatchQueue.main.async {
+                do {
+                    let work = try result.get()
+                    guard calls == 1, work.score.tr.flatMap({ $0.nt }).allSatisfy({ $0[2] < 96 }),
+                          work.metadata["originalLilyPond"] == .string(bad) else { throw APIError.badResponse("Native Oktavkorrektur nicht geprüft.") }
+                    self.runNativeWorkspaceSelfTest(output: output, completion: completion)
+                } catch { completion(error) }
+            }
+        }
+    }
+    private func runNativeWorkspaceSelfTest(output: String, completion: @escaping (Error?) -> Void) {
         let source = "\\version \"2.24.0\"\n\\header { title = \"Native Original\" tagline = ##f }\n\\score { \\new PianoStaff << \\new Staff { \\time 4/4 \\tempo 4 = 96 c'4 d' e' f' } \\new Staff { \\clef bass c4 d e f } >> \\layout {} \\midi {} }\n"
         func require(_ condition: Bool, _ message: String) throws { if !condition { throw APIError.badResponse(message) } }
         func waitFor(_ attempts: Int = 600, condition: @escaping () -> Bool, then action: @escaping () -> Void) {
@@ -4265,7 +4039,7 @@ extension MainViewController {
                                                     let restored = try JSONDecoder().decode(CompositionLabDocument.self, from: doc)
                                                     try require(restored.extraFields["lilyPondSource"] == .string(edited), "Mac-CLAB verliert angewendete Quelle.")
                                                     let report: [String: Any] = ["passed": true, "interface": "AppKit/WebKit", "offline": true,
-                                                        "checks": ["local-original", "duplicate-model-names", "svg-to-editor", "empty-slot", "source-edit", "invalid-edit-rollback", "failed-import-rollback", "clab-metadata", "original-midi", "playback-copy", "score-undo-redo"]]
+                                                        "checks": ["local-original", "duplicate-model-names", "svg-to-editor", "empty-slot", "source-edit", "invalid-edit-rollback", "failed-import-rollback", "clab-metadata", "original-midi", "playback-copy", "score-undo-redo", "explicit-register-repair", "portable-encrypted-backup"]]
                                                     try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
                                                     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: output).appendingPathComponent("result.json"))
                                                     completion(nil)

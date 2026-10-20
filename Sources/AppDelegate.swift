@@ -187,6 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         comp.addItem(c)
         comp.addItem(withTitle: "Gesicherte Originalantwort übernehmen", action: #selector(MainViewController.menuRecoverOriginal), keyEquivalent: "")
         comp.addItem(withTitle: "Oktavlagen prüfen und korrigieren", action: #selector(MainViewController.menuReviewRegisters), keyEquivalent: "")
+        comp.addItem(withTitle: "Anfrage abbrechen", action: #selector(MainViewController.menuCancelRequest), keyEquivalent: ".")
         compItem.submenu = comp
         main.addItem(compItem)
 

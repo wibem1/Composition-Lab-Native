@@ -5,6 +5,7 @@ namespace CompositionLab;
 internal sealed partial class MainForm
 {
     int[] dialogueSourceSlots = [];
+    JsonObject? compositionReference;
     string DialogueWorkspace()
     {
         var index = new JsonArray();
@@ -27,6 +28,7 @@ internal sealed partial class MainForm
         if (dialogue["compositionAssignment"] is JsonValue a && a.TryGetValue<string>(out var task) && !string.IsNullOrWhiteSpace(task)) assignment.Text = task;
         if (dialogue["compositionIdea"] is JsonValue b && b.TryGetValue<string>(out var idea) && !string.IsNullOrWhiteSpace(idea)) composition.Text = idea;
         dialogueSourceSlots = dialogue["sourceSlots"]!.AsArray().Select(n => n!.GetValue<int>()).ToArray();
+        if (dialogueSourceSlots.Length == 0 && dialogue["compositionAssignment"] is JsonValue) compositionReference = null;
         SaveLocalState();
     }
     string DialogueSourceMaterial()
