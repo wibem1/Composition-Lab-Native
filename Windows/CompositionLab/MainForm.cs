@@ -10,7 +10,7 @@ namespace CompositionLab;
 
 internal sealed partial class MainForm : Form
 {
-    const string Version = "4.2.0";
+    const string Version = "4.2.1";
     readonly CoreClient core = new();
     readonly MidiPlayer player = new();
     readonly string dataDirectory;
@@ -35,7 +35,7 @@ internal sealed partial class MainForm : Form
     readonly ComboBox measures = new() { Width = 55, DropDownStyle = ComboBoxStyle.DropDown, AutoCompleteMode = AutoCompleteMode.None };
     readonly TextBox tempo = new() { Width = 55 };
     readonly TextBox musicalKey = new() { Width = 90 };
-    readonly TextBox ensemble = new() { Width = 130, Text = "Klavier" };
+    readonly TextBox ensemble = new() { Width = 130, PlaceholderText = "optional" };
     readonly CheckBox useSource = new() { Text = "Aktuelles Stück als Vorlage", AutoSize = true };
     readonly Button compose = new StudioButton() { Text = "Komponieren", AutoSize = true, Primary = true };
     readonly Button send = new StudioButton() { Text = "Chat", AutoSize = true };
@@ -278,7 +278,7 @@ internal sealed partial class MainForm : Form
                 measures.Text = state["measures"]?.GetValue<string>() ?? "";
                 tempo.Text = state["tempo"]?.GetValue<string>() ?? "";
                 musicalKey.Text = state["key"]?.GetValue<string>() ?? "";
-                ensemble.Text = state["ensemble"]?.GetValue<string>() ?? "Klavier";
+                ensemble.Text = state["ensemble"]?.GetValue<string>() ?? "";
             }
         }
         catch (Exception e) { SetStatus("Gespeicherter Stand konnte nicht geladen werden: " + e.Message, true); }
@@ -350,7 +350,7 @@ internal sealed partial class MainForm : Form
         const string probe = "ÄÖÜ äöü ß – musikalischer Dialog";
         var version = await core.RunAsync(new JsonObject { ["operation"] = "version", ["title"] = probe });
         if (version["titleEcho"]?.GetValue<string>() != probe) throw new Exception("UTF-8-Prozesskommunikation beschädigt.");
-        if (version["version"]?.GetValue<string>() != "4.2.0") throw new Exception("Falscher Kern.");
+        if (version["version"]?.GetValue<string>() != "4.2.1") throw new Exception("Falscher Kern.");
         var fixture = JsonNode.Parse("""{"ti":"Windows Starttest","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,0,1],[1,1,64,80,0,1],[2,2,67,80,0,1]]}]}""")!.AsObject();
         documents[0] = CreateDocument(fixture, "Automatischer Test ohne KI-Kosten."); RefreshSlots();
         await DisplayCurrentAsync();
@@ -429,6 +429,16 @@ internal sealed partial class MainForm : Form
         await AcceptCompositionAsync(translatedResult, freeDestination, "Schon fertiges Stück", "openai", "test");
         if (slots.SelectedIndex != freeDestination || documents[freeDestination]?["concept"]?.GetValue<string>() != finishedMusic || currentMidi == null || Encoding.ASCII.GetString(currentMidi, 0, 4) != "MThd") throw new Exception("Chat-Komposition ohne aktiven Slot oder MIDI.");
         if (documents[0]!.ToJsonString() != occupiedBefore) throw new Exception("Chat-Komposition überschreibt vorhandenes Stück.");
+        // Exercise the actual Compose handler: stale settings must never recompose notation.
+        string preservedPiece = documents[0]!.ToJsonString();
+        string finishedDuo = "\\version \"2.24.0\"\n\\score { << \\new Staff { \\set Staff.midiInstrument = \"violin\" c''4 d'' e'' f'' } \\new PianoStaff << \\new Staff { g'4 a' b' c'' } \\new Staff { \\clef bass c4 d e f } >> >> \\layout {} \\midi {} }";
+        composition.Text = finishedDuo; chatInput.Clear(); ensemble.Text = "Klavier"; apiKey.Clear();
+        int localDestination = documents.FirstFreeIndex();
+        await RequestAIAsync(true);
+        if (documents[localDestination]?["concept"]?.GetValue<string>() != finishedDuo ||
+            documents[localDestination]?["score"]?["tr"]?.AsArray().Sum(t => t!["nt"]!.AsArray().Count) != 12 ||
+            lastDiagnostic?["compositionAICalls"]?.GetValue<int>() != 0 || documents[0]!.ToJsonString() != preservedPiece)
+            throw new Exception("Fertige Violin-/Klavierpartitur nicht unverändert ohne API-Key lokal übernommen.");
         // Synthetic demo music for visual QA; no user composition or real API call.
         documents[0] = CreateDocument(fixture.DeepClone().AsObject(), "Elegie im Abendlicht\n\n" + lily, "Ein ruhiges Klavierstück mit einer klaren musikalischen Idee.");
         documents[0]!["title"] = "Elegie im Abendlicht"; documents[0]!["ensemble"] = "Klavier";
@@ -662,7 +672,7 @@ internal sealed partial class MainForm : Form
         }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "portable AES-GCM backup compatibility, wrong password rejection, native laboratories and exact stored MIDI bytes", "shared register detection; explicit bounded octave repair, unchanged music validation, costs and rejection", "edited LilyPond refresh updates notation, MIDI, export source and persisted score; syntax errors retain last valid output", "bundled LilyPond compiles original pickup score into MIDI and SVG locally, cache and source preserved, page/zoom and workspace roundtrip", "model picker opens immediately, key acceptance loads models, cached selection without key prompt, session keys survive provider changes, inline HTTP error and cancelled credentials", "complete provider model catalogs with paginated Anthropic and Gemini responses, future and specialized models, safe failure, deduplication and cache persistence", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily direct source handoff, long source and Unicode roundtrip without clipboard", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "piece-specific editable descriptions load on slot selection and save without altering original music", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches restore previous scroll position, splitter and controls at every DPI", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "finished violin/piano notation Compose handler imports locally without key despite stale ensemble", "portable AES-GCM backup compatibility, wrong password rejection, native laboratories and exact stored MIDI bytes", "shared register detection; explicit bounded octave repair, unchanged music validation, costs and rejection", "edited LilyPond refresh updates notation, MIDI, export source and persisted score; syntax errors retain last valid output", "bundled LilyPond compiles original pickup score into MIDI and SVG locally, cache and source preserved, page/zoom and workspace roundtrip", "model picker opens immediately, key acceptance loads models, cached selection without key prompt, session keys survive provider changes, inline HTTP error and cancelled credentials", "complete provider model catalogs with paginated Anthropic and Gemini responses, future and specialized models, safe failure, deduplication and cache persistence", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily direct source handoff, long source and Unicode roundtrip without clipboard", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "piece-specific editable descriptions load on slot selection and save without altering original music", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches restore previous scroll position, splitter and controls at every DPI", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {

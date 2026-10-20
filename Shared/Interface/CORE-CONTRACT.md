@@ -9,7 +9,7 @@ werden nicht als Kommandozeilenargument oder temporäre Klartextdatei übergeben
 
 | Operation | Maßgebliche Eingaben | Nutzlast im Endergebnis |
 |---|---|---|
-| `build-assignment` | `assignment`, optional `chatInput`, `idea`, `parameters`, `source:{name,score}` | `assignment` |
+| `build-assignment` | `assignment`, optional `chatInput`, `idea`, `parameters`, `source:{name,score}` | `assignment`, optional `localSource` (unveränderte fertige Notation; lokal übernehmen, keine KI-Anfrage) |
 | `compose-source` | `apiKey`, `request:{assignment,provider,model,effort}` | `result` mit Original, Tokenzahlen, Kostenschätzung und gesendetem Auftrag |
 | `chat` | gleiche Eingaben, optional `request.mode:dialogue` und `workspace` | `result.text`, im Dialogmodus auch `result.dialogue` |
 | `interpret-composition` | `source` | `interpretation.kind`: `score`, `lilypond` oder `unrecognized`; keine KI |

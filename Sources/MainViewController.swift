@@ -2191,17 +2191,19 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         promptView.string = "Komponiere ein eigenständiges, musikalisch überzeugendes Stück."
     }
 
-    private func basePrompt() -> String {
-        let task = CoreServices.visibleAssignment(chat: chatInput.stringValue, idea: conceptView.string, fallback: promptView.string)
+    private func compositionInput() throws -> CoreServices.CompositionInput {
         let parameters = ["ensemble": ensembleField.stringValue, "measures": measuresField.stringValue,
                           "meter": meterField.stringValue, "tempo": tempoField.stringValue, "key": musicalKeyField.stringValue]
         var source: Data?
         if let reference = importedReferenceScore, let score = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(reference)) {
             source = try? JSONSerialization.data(withJSONObject: ["name": importedReferenceName ?? "importierte Vorlage", "score": score])
         }
-        var result = (try? CoreServices.buildAssignment(task, parametersJSON: JSONEncoder().encode(parameters), sourceJSON: source)) ?? task
+        let input = try CoreServices.compositionInput(chat: chatInput.stringValue, idea: conceptView.string, fallback: promptView.string,
+            parametersJSON: JSONEncoder().encode(parameters), sourceJSON: source)
+        if input.localSource != nil { return input }
+        var result = input.assignment
         if !musicChatCompositionContextOverride.isEmpty { result += "\n\nMUSICCHAT-ARBEITSMATERIAL:\n" + musicChatCompositionContextOverride }
-        return result
+        return CoreServices.CompositionInput(assignment: result, localSource: nil)
     }
 
     private func conceptDisplay(_ concept: String, provider: Provider, model: String) -> String {
@@ -2213,15 +2215,30 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         guard !nativeRequestInFlight else { status("Bitte die laufende Anfrage abwarten.", good: false); return }
         let p = provider, m = model
         let key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { status("Bitte API-Key für \(p.displayName) eingeben.", good: false); return }
         guard let destination = (pieceSlots[activePieceSlot] == nil ? activePieceSlot : pieceSlots.firstIndex(where: { $0 == nil })) else {
             status("Alle 10 Stück-Slots sind belegt. Bitte zuerst einen Slot freimachen.", good: false); return
         }
-        let assignment = basePrompt()
+        let input: CoreServices.CompositionInput
+        do { input = try compositionInput() }
+        catch { status(error.localizedDescription, good: false); return }
+        if input.localSource == nil && key.isEmpty { status("Bitte API-Key für \(p.displayName) eingeben.", good: false); return }
+        let assignment = input.assignment
         saveSettingsFromUI()
         nativeRequestGeneration += 1
         let generation = nativeRequestGeneration
         nativeRequestInFlight = true
+        if let original = input.localSource {
+            let diagnostic: [String: Any] = ["stage": "local-source-import", "composition": original, "assignment": original,
+                "interface": "macOS AppKit", "interfaceVersion": CoreServices.version, "estimatedCostUSD": 0.0,
+                "inputTokens": 0, "outputTokens": 0, "compositionAICalls": 0, "conversionAICalls": 0]
+            lastDiagnostic = diagnostic
+            if let saved = try? JSONSerialization.data(withJSONObject: diagnostic) {
+                AppPreferences.standard.set(saved, forKey: "CompositionLab.v4.pendingComposition")
+            }
+            status("Vorhandener Notentext wird lokal übernommen …", good: true)
+            acceptOriginalResponse(original, diagnostic: diagnostic, assignment: assignment, provider: p, model: m, destination: destination, generation: generation)
+            return
+        }
         let request: [String: Any] = ["assignment": assignment, "provider": p.rawValue, "model": m, "effort": effort.rawValue]
         guard let data = try? JSONSerialization.data(withJSONObject: request) else { nativeRequestInFlight = false; return }
         status("KI komponiert …", good: true)
@@ -3942,10 +3959,29 @@ extension MainViewController {
                     let work = try result.get()
                     guard calls == 1, work.score.tr.flatMap({ $0.nt }).allSatisfy({ $0[2] < 96 }),
                           work.metadata["originalLilyPond"] == .string(bad) else { throw APIError.badResponse("Native Oktavkorrektur nicht geprüft.") }
-                    self.runNativeWorkspaceSelfTest(output: output, completion: completion)
+                    self.runNativeInputSelfTest(output: output, completion: completion)
                 } catch { completion(error) }
             }
         }
+    }
+    private func runNativeInputSelfTest(output: String, completion: @escaping (Error?) -> Void) {
+        let source = "\\version \"2.24.0\"\n\\score { << \\new Staff { \\set Staff.midiInstrument = \"violin\" c''4 d'' e'' f'' } \\new PianoStaff << \\new Staff { g'4 a' b' c'' } \\new Staff { \\clef bass c4 d e f } >> >> \\layout {} \\midi {} }"
+        conceptView.string = source; chatInput.stringValue = ""; ensembleField.stringValue = "Klavier"; keyField.stringValue = ""
+        composePressed()
+        func check(_ attempts: Int) {
+            if nativeRequestInFlight {
+                guard attempts > 0 else { completion(APIError.badResponse("Zeitlimit bei lokaler Auftragsübernahme.")); return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { check(attempts - 1) }
+                return
+            }
+            guard lastConcept == source, lastScore?.tr.flatMap({ $0.nt }).count == 12,
+                  lastDiagnostic?["compositionAICalls"] as? Int == 0 else {
+                completion(APIError.badResponse("Fertige Violin-/Klavierpartitur wurde nicht ohne API-Key lokal übernommen.")); return
+            }
+            pieceSlots = Array(repeating: nil, count: 10); activePieceSlot = 0
+            runNativeWorkspaceSelfTest(output: output, completion: completion)
+        }
+        check(600)
     }
     private func runNativeWorkspaceSelfTest(output: String, completion: @escaping (Error?) -> Void) {
         let source = "\\version \"2.24.0\"\n\\header { title = \"Native Original\" tagline = ##f }\n\\score { \\new PianoStaff << \\new Staff { \\time 4/4 \\tempo 4 = 96 c'4 d' e' f' } \\new Staff { \\clef bass c4 d e f } >> \\layout {} \\midi {} }\n"
@@ -4016,7 +4052,7 @@ extension MainViewController {
                                                     let restored = try JSONDecoder().decode(CompositionLabDocument.self, from: doc)
                                                     try require(restored.extraFields["lilyPondSource"] == .string(edited), "Mac-CLAB verliert angewendete Quelle.")
                                                     let report: [String: Any] = ["passed": true, "interface": "AppKit/WebKit", "offline": true,
-                                                        "checks": ["local-original", "duplicate-model-names", "svg-to-editor", "empty-slot", "source-edit", "invalid-edit-rollback", "failed-import-rollback", "clab-metadata", "original-midi", "playback-copy", "score-undo-redo", "explicit-register-repair", "portable-encrypted-backup"]]
+                                                        "checks": ["finished-notation-compose-without-key", "local-original", "duplicate-model-names", "svg-to-editor", "empty-slot", "source-edit", "invalid-edit-rollback", "failed-import-rollback", "clab-metadata", "original-midi", "playback-copy", "score-undo-redo", "explicit-register-repair", "portable-encrypted-backup"]]
                                                     try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
                                                     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: output).appendingPathComponent("result.json"))
                                                     completion(nil)

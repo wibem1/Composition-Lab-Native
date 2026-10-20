@@ -12,7 +12,7 @@ internal sealed partial class MainForm
         if (makeMusic) assignment.Text = !string.IsNullOrWhiteSpace(chatInput.Text) ? chatInput.Text : composition.Text.Length > 0 ? composition.Text : assignment.Text;
         string inputText = makeMusic ? assignment.Text : chatInput.Text;
         if (string.IsNullOrWhiteSpace(inputText)) { SetStatus("Bitte einen Auftrag eingeben.", true); return; }
-        if (string.IsNullOrWhiteSpace(apiKey.Text)) { SetStatus("Bitte API-Schlüssel eingeben.", true); return; }
+        if (!makeMusic && string.IsNullOrWhiteSpace(apiKey.Text)) { SetStatus("Bitte API-Schlüssel eingeben.", true); return; }
         int destination = -1;
         if (makeMusic)
         {
@@ -35,6 +35,23 @@ internal sealed partial class MainForm
                 var built = await core.RunAsync(new JsonObject { ["operation"] = "build-assignment", ["assignment"] = instruction, ["chatInput"] = chatInput.Text, ["idea"] = composition.Text, ["source"] = compositionReference?.DeepClone(),
                     ["parameters"] = new JsonObject { ["ensemble"] = ensemble.Text, ["measures"] = measures.Text,
                         ["meter"] = meter.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text } }, pending.Token);
+                if (built["localSource"] is JsonValue localValue && localValue.TryGetValue<string>(out var original))
+                {
+                    var diagnostic = new JsonObject { ["stage"] = "local-source-import", ["composition"] = original,
+                        ["assignment"] = original, ["interface"] = "Windows WinForms", ["interfaceVersion"] = Version,
+                        ["estimatedCostUSD"] = 0d, ["inputTokens"] = 0, ["outputTokens"] = 0,
+                        ["compositionAICalls"] = 0, ["conversionAICalls"] = 0 };
+                    lastDiagnostic = diagnostic.DeepClone().AsObject(); UpdateDiagnostic();
+                    PreservePendingComposition(original, diagnostic, original, "", "");
+                    SetStatus("Vorhandener Notentext wird lokal übernommen …");
+                    var imported = await ImportAIResponseLocallyAsync(original, diagnostic, pending.Token)
+                        ?? throw new InvalidOperationException("Notentext lokal nicht lesbar. Original bleibt gesichert.");
+                    await AcceptCompositionAsync(imported, destination, original, "", "");
+                    lastDiagnostic = imported.DeepClone().AsObject(); UpdateDiagnostic();
+                    SetStatus("Notentext lokal übernommen. Keine KI-Anfrage."); SaveLocalState();
+                    return;
+                }
+                if (string.IsNullOrWhiteSpace(apiKey.Text)) { SetStatus("Bitte API-Schlüssel eingeben.", true); return; }
                 request["assignment"] = built["assignment"]!.GetValue<string>() + DialogueSourceMaterial();
             }
             chat.AppendText("Du: " + userText + "\n\n");

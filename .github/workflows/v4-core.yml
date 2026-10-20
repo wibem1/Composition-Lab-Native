@@ -85,7 +85,7 @@ jobs:
 
   release:
     needs: core
-    if: github.event_name == 'push' && github.ref == 'refs/heads/v4-cross-platform' && contains(github.event.head_commit.message, '[release 4.2]')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/v4-cross-platform' && contains(github.event.head_commit.message, '[release 4.2.1]')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -107,4 +107,4 @@ jobs:
           cd ReleasePackages
           sha256sum Composition-Lab-4.2-Mac.zip Composition-Lab-4.2-Windows-x64.zip > SHA256SUMS.txt
           cd ..
-          gh release create v4.2.0 ReleasePackages/Composition-Lab-4.2-Mac.zip ReleasePackages/Composition-Lab-4.2-Windows-x64.zip ReleasePackages/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Composition Lab Native 4.2' --notes-file VERSION-4.2.md
+          gh release create v4.2.1 ReleasePackages/Composition-Lab-4.2-Mac.zip ReleasePackages/Composition-Lab-4.2-Windows-x64.zip ReleasePackages/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Composition Lab Native 4.2.1' --notes-file VERSION-4.2.1.md

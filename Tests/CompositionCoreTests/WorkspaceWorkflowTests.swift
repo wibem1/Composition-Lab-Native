@@ -13,6 +13,25 @@ final class WorkspaceWorkflowTests: XCTestCase {
         XCTAssertTrue(prompt.hasPrefix("Variieren")); XCTAssertTrue(prompt.contains("Vorlage"))
         XCTAssertThrowsError(try CoreServices.buildAssignment("Test", sourceJSON: json(["name": "invalid"])))
     }
+    func testFinishedViolinAndPianoIsLocalDespiteStalePianoSetting() throws {
+        let source = "Erste Liebe – Violine und Klavier\n```lilypond\n\\version \"2.24.3\"\n\\score { << \\new Staff { c''4 } \\new PianoStaff << \\new Staff { c'4 } \\new Staff { c4 } >> >> }\n```"
+        let input = try CoreServices.compositionInput(chat: "", idea: source, fallback: "Komponiere", parametersJSON: json(["ensemble": "Klavier"]))
+        XCTAssertEqual(input.localSource, source)
+        XCTAssertEqual(input.assignment, source)
+        XCTAssertFalse(input.assignment.contains("Besetzung: Klavier"))
+        XCTAssertEqual(try CoreServices.compositionInput(chat: source, idea: "", fallback: "").localSource, source)
+    }
+    func testExplicitRevisionRetainsSourceAndUserParameters() throws {
+        let source = "\\score { \\new Staff { c'4 } }"
+        let input = try CoreServices.compositionInput(chat: "Übertrage für Klavier solo", idea: source, fallback: "Alt", parametersJSON: json(["ensemble": "Klavier"]))
+        XCTAssertNil(input.localSource)
+        XCTAssertTrue(input.assignment.hasPrefix("Übertrage für Klavier solo"))
+        XCTAssertTrue(input.assignment.contains("Besetzung: Klavier"))
+        XCTAssertTrue(input.assignment.contains(source))
+        let fresh = try CoreServices.compositionInput(chat: "Neue Fuge", idea: "Alte Idee", fallback: "Alt")
+        XCTAssertNil(fresh.localSource)
+        XCTAssertEqual(fresh.assignment, "Neue Fuge")
+    }
     func testBackupPayloadFixtureUsesPortableSettings() throws {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "backup-compatibility", withExtension: "json", subdirectory: "Fixtures"))
         let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]

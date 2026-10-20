@@ -25,9 +25,9 @@ enum BridgeService {
         switch operation {
         case "version": send(["ok": true, "version": CoreServices.version, "titleEcho": title])
         case "build-assignment":
-            let assignment = CoreServices.visibleAssignment(chat: obj["chatInput"] as? String ?? "", idea: obj["idea"] as? String ?? "", fallback: obj["assignment"] as? String ?? "")
-            send(["ok": true, "assignment": try CoreServices.buildAssignment(assignment,
-                parametersJSON: obj["parameters"] == nil ? nil : data("parameters"), sourceJSON: obj["source"] == nil || obj["source"] is NSNull ? nil : data("source"))])
+            let input = try CoreServices.compositionInput(chat: obj["chatInput"] as? String ?? "", idea: obj["idea"] as? String ?? "", fallback: obj["assignment"] as? String ?? "",
+                parametersJSON: obj["parameters"] == nil ? nil : data("parameters"), sourceJSON: obj["source"] == nil || obj["source"] is NSNull ? nil : data("source"))
+            send(["ok": true, "assignment": input.assignment, "localSource": input.localSource as Any? ?? NSNull()])
         case "validate-backup":
             try CoreServices.validateBackup(data("document")); send(["ok": true])
         case "score-revision":

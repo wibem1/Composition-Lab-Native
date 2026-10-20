@@ -10,7 +10,7 @@ public final class CoreRequestHandle {
 /// Small public boundary for desktop clients. JSON preserves the existing score
 /// and CLAB wire format; AppKit and Windows APIs never enter this module.
 public enum CoreServices {
-    public static let version = "4.2.0"
+    public static let version = "4.2.1"
 
     /// Stateless catalog boundary. State contains model metadata and cursors,
     /// never keys; adapters supply a provider response only after HTTP success.
@@ -105,6 +105,31 @@ public enum CoreServices {
     /// fields must not silently impose a 32-bar, 4/4, 96-BPM composition.
     public static func visibleAssignment(chat: String, idea: String, fallback: String) -> String {
         [chat, idea, fallback].first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) ?? ""
+    }
+
+    public struct CompositionInput {
+        public let assignment: String
+        public let localSource: String?
+    }
+
+    /// Finished notation is output, not a new creative instruction. Only a
+    /// separate task authorizes another model call; retain its source material.
+    public static func compositionInput(chat: String, idea: String, fallback: String,
+                                        parametersJSON: Data? = nil, sourceJSON: Data? = nil) throws -> CompositionInput {
+        func isNotation(_ text: String) -> Bool {
+            // Even malformed LilyPond must stay on the local error/recovery path.
+            if (try? LilyPondSource.extract(text))?.contains("\\score") == true { return true }
+            guard let data = try? interpretComposition(text),
+                  let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+            return value["kind"] as? String == "score"
+        }
+        let task = visibleAssignment(chat: chat, idea: idea, fallback: fallback)
+        if isNotation(task) { return CompositionInput(assignment: task, localSource: task) }
+        var assignment = try buildAssignment(task, parametersJSON: parametersJSON, sourceJSON: sourceJSON)
+        if !chat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, isNotation(idea) {
+            assignment += "\n\nVORHANDENER NOTENTEXT ZUM BEARBEITUNGSAUFTRAG:\n" + idea
+        }
+        return CompositionInput(assignment: assignment, localSource: nil)
     }
 
     public static func buildAssignment(_ assignment: String, parametersJSON: Data? = nil, sourceJSON: Data? = nil) throws -> String {
