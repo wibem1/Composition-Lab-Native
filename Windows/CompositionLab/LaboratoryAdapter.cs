@@ -89,9 +89,14 @@ internal sealed partial class MainForm
             var diagnostic = response["result"]!.AsObject();
             lastDiagnostic = diagnostic.DeepClone().AsObject(); UpdateDiagnostic(); SaveLocalState();
             string answer = diagnostic["text"]!.GetValue<string>();
+            if (kind == "route") {
+                var routed = await core.RunAsync(new JsonObject { ["operation"] = "lab-route", ["response"] = answer }, cancellation.Token);
+                if (!dialog.IsDisposed) output.AppendText("\nKI: " + routed["route"]!["reply"]!.GetValue<string>() + "\n");
+                if (routed["route"]!["compose"]!.GetValue<bool>()) await Ask("revision");
+                return;
+            }
             if (!dialog.IsDisposed) output.AppendText("\nKI: " + answer + "\n");
             if (kind is "compare" or "analysis") return;
-            if (kind == "route") { if (answer.Trim() == "[[COMPOSE]]") await Ask("revision"); return; }
             // Preserve paid original before any local interpretation can fail.
             var interpreted = await ImportAIResponseLocallyAsync(answer, diagnostic, cancellation.Token)
                 ?? throw new InvalidDataException("Originalantwort in Diagnose gesichert; Format ist nicht lokal lesbar.");

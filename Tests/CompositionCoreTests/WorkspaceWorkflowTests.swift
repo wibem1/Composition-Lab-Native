@@ -30,6 +30,12 @@ final class WorkspaceWorkflowTests: XCTestCase {
         XCTAssertThrowsError(try WorkspaceDialogue.decode("{\"reply\":\"\"}"))
         XCTAssertTrue(WorkspaceDialogue.prompt(message: "Neue Idee", workspace: "{}" ).contains("erzeugt keine Partitur"))
     }
+    func testLaboratoryRoutingDoesNotExposeControlMarkers() {
+        let route = LaboratoryWorkflow.routeResponse("  [[COMPOSE]]\n")
+        XCTAssertTrue(route.compose); XCTAssertFalse(route.reply.contains("[[COMPOSE]]"))
+        XCTAssertFalse(LaboratoryWorkflow.routeResponse("Was bedeutet [[COMPOSE]]?").compose)
+        XCTAssertEqual(LaboratoryWorkflow.routeResponse("Antwort").reply, "Antwort")
+    }
     func testLaboratoryContractsAndMotifBounds() throws {
         let score = Score(ti: "Motiv", bpm: 96, ts: .init(n: 4, d: 4), k: "C major", sm: "", tr: [.init(nm: "Piano", ch: 0, pg: 0, nt: [[0, 4, 60, 80]], ct: nil, ev: nil)])
         try LaboratoryWorkflow.validateMotif(scoreJSON: JSONEncoder().encode(score), measures: 1)
