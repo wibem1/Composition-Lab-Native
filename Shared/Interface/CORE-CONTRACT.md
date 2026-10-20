@@ -17,7 +17,6 @@ werden nicht als Kommandozeilenargument oder temporäre Klartextdatei übergeben
 | `source-selection` | `rendered`, `editor`, Quellpunkte | `selection:{start,length,error}` in UTF-16 |
 | `register-review` | `score` | `issues`, gemeinsamer Korrekturauftrag `instruction` |
 | `validate-register-repair` | `before`, `after`, `source` | nur Erfolg oder fachlicher Fehler |
-| `lab-route` | `response` | `route:{compose,reply}`; interne Steuerzeichen werden nicht im Dialog gezeigt |
 | `lab-prompt` | `kind`, `task`, optional `first`, `second`, `measures`, `tempo`, `ensemble`, `style` | `prompt`; führt keine KI aus |
 | `validate-motif` | `score`, `measures` | Erfolg oder fachlicher Fehler |
 | `score-revision` | `request:{operation,state?,slots,slot?}` | `revision:{state,slot?,document?}` |

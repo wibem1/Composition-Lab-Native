@@ -32,8 +32,6 @@ enum BridgeService {
             try CoreServices.validateBackup(data("document")); send(["ok": true])
         case "score-revision":
             send(["ok": true, "revision": try JSONSerialization.jsonObject(with: ScoreRevisionStore.step(data("request")))])
-        case "lab-route":
-            send(["ok": true, "route": try JSONSerialization.jsonObject(with: JSONEncoder().encode(LaboratoryWorkflow.routeResponse(obj["response"] as? String ?? "")))])
         case "lab-prompt":
             send(["ok": true, "prompt": try LaboratoryWorkflow.prompt(kind: obj["kind"] as? String ?? "", task: obj["task"] as? String ?? "",
                 first: obj["first"] as? String ?? "", second: obj["second"] as? String ?? "", measures: obj["measures"] as? Int ?? 4,

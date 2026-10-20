@@ -3755,9 +3755,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 case .failure(let err):
                     window?.setDialogText("Fehler: \(err.localizedDescription)")
                 case .success(let r):
-                    let routed = LaboratoryWorkflow.routeResponse(r.text)
-                    let answer = routed.reply
-                    if routed.compose {
+                    let answer = r.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if answer.contains("[[COMPOSE]]") {
                         window?.beginGeneratedResult()
                         self.createCompareResult(a: a, b: b, instruction: text, window: window)
                     } else {

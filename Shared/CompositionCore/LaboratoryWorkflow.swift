@@ -2,16 +2,7 @@ import Foundation
 
 /// Shared laboratory policy. A laboratory result is isolated until explicitly
 /// transferred; analysis must not create or replace a composition.
-public struct LaboratoryRoute: Codable {
-    public let compose: Bool
-    public let reply: String
-}
-
 public enum LaboratoryWorkflow {
-    public static func routeResponse(_ text: String) -> LaboratoryRoute {
-        let compose = text.trimmingCharacters(in: .whitespacesAndNewlines) == "[[COMPOSE]]"
-        return LaboratoryRoute(compose: compose, reply: compose ? "Die neue musikalische Fassung wird erzeugt …" : text)
-    }
     public static func prompt(kind: String, task: String, first: String = "", second: String = "",
                               measures: Int = 4, tempo: String = "", ensemble: String = "", style: String = "") throws -> String {
         let material = "MUSIK A:\n" + first + "\n\nMUSIK B:\n" + second + "\n\nNUTZER:\n" + task
