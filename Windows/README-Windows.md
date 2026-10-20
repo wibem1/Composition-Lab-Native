@@ -1,14 +1,14 @@
 # Windows 4.2
 
 Aktuelle Funktionen, Tests und Grenzen: [V4.2-AUDIT.md](../V4.2-AUDIT.md).
-Das ZIP vollständig entpacken und `Composition Lab 4.2.exe` starten.
+Das ZIP vollständig entpacken und `Composition Lab 4.2.4.exe` starten.
 Backups können mit der Mac-Version ausgetauscht werden; aktuelle Stückplätze
 werden separat als Arbeitsplatz gespeichert. Die folgenden Abschnitte enthalten
 auch historische Versionsbeschreibungen.
 
 # Composition Lab Native · Windows · V4.1 · 16.10.2026
 
-Das gesamte ZIP in einen neuen Ordner entpacken und `Composition Lab 4.2.exe`
+Das gesamte ZIP in einen neuen Ordner entpacken und `Composition Lab 4.2.4.exe`
 starten. Die Unterordner `Core`, `LilyPond` und `Notices` beibehalten. .NET,
 Swift und LilyPond müssen nicht zusätzlich installiert werden. Voraussetzung:
 Windows 10/11 auf Intel/AMD 64 Bit und Microsoft Edge WebView2 Runtime.
