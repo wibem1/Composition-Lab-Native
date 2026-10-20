@@ -2508,6 +2508,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         nativeWorkspaceGeneration += 1
         lastPortableMetadata = metadata
         lastLilyPondOutput = nil
+        // Invalidate the previous SVG before asynchronous compilation can finish.
+        musicXMLPreview.setMusicXML(nil)
         if addHistory, let requestedSlot = pendingCompositionSlot {
             activePieceSlot = max(0, min(requestedSlot, pieceSlots.count - 1))
             pendingCompositionSlot = nil
@@ -3988,7 +3990,7 @@ extension MainViewController {
         func require(_ condition: Bool, _ message: String) throws { if !condition { throw APIError.badResponse(message) } }
         func waitFor(_ attempts: Int = 600, condition: @escaping () -> Bool, then action: @escaping () -> Void) {
             if condition() { action(); return }
-            guard attempts > 0 else { completion(APIError.badResponse("Zeitlimit im nativen Mac-Funktionstest.")); return }
+            guard attempts > 0 else { completion(APIError.badResponse("Zeitlimit im nativen Mac-Funktionstest. Vorschau: \(self.musicXMLPreview.originalPreviewIsReady), Auswahl: \(self.conceptView.selectedRange().length), Anfrage: \(self.nativeRequestInFlight)")); return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { waitFor(attempts - 1, condition: condition, then: action) }
         }
         NativeLocalCompositionService(compiler: localCompiler).interpret(source) { [weak self] result in
