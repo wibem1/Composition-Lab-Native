@@ -13,6 +13,7 @@ flowchart TD
     Core --> Formats["Score, MIDI und MusicXML"]
     Core --> Documents["CLAB und Workspace-Verträge"]
     Core --> Source["LilyPond-Quelle und Auswahl"]
+    Core --> Workflows["Dialoge, Labore, Oktavprüfung und Revisionen"]
     Mac --> MacRender["Mac-Compileradapter"]
     Win --> WinRender["Windows-Compileradapter"]
     MacRender --> Engraver["LilyPond 2.26.0"]
@@ -26,8 +27,9 @@ Anfragen und Quelltextbearbeitungen übernehmen Ergebnisse erst nach Validierung
 Quellrevision und Ziel-Slot dürfen sich zwischen Start und Übernahme nicht ändern.
 Die gemeinsame Playback-Kopie verändert ausschließlich Anschlagsstärken und
 Tempi für den Player. Exportdaten bleiben unverändert, Tempoverläufe bleiben
-relativ erhalten. Die weitere Entkopplung der großen UI-Controller und noch
-fehlende Plattformfunktionen sind ausdrücklich nicht als abgeschlossen markiert.
+relativ erhalten. Gemeinsame Dialog-, Labor-, Register- und Revisionsdienste
+besitzen die fachlichen Regeln; große native Fenstercontroller koordinieren
+weiterhin die Controls. Betriebssystemadapter werden bewusst nicht vereinheitlicht.
 
 ---
 

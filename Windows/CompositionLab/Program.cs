@@ -8,7 +8,7 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         var test = args.Contains("--self-test");
         var output = args.SkipWhile(a => a != "--test-output").Skip(1).FirstOrDefault();
-        Application.ThreadException += (_, e) => MessageBox.Show(e.Exception.Message, "Composition Lab 4.0");
+        Application.ThreadException += (_, e) => MessageBox.Show(e.Exception.Message, "Composition Lab 4.2");
         using var form = new MainForm(test);
         if (test)
         {

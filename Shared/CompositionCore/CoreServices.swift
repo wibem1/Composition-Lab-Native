@@ -27,6 +27,8 @@ public enum CoreServices {
 
     /// Interpret a finished answer locally. Never calls a provider, repairs
     /// music or falls back to a paid technical translation.
+    public static func initialMIDITempo(_ data: Data) throws -> Double { try PlaybackMIDICopy.initialBPM(data) }
+
     public static func playbackMIDICopy(_ original: Data, velocityFactor: Double, targetBPM: Double? = nil) throws -> Data {
         try PlaybackMIDICopy.make(original, velocityFactor: velocityFactor, targetBPM: targetBPM)
     }

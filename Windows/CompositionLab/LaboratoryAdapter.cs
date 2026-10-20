@@ -38,11 +38,15 @@ internal sealed partial class MainForm
         var labTempo = new TextBox { Width = 60, PlaceholderText = "Tempo" };
         var labEnsemble = new TextBox { Width = 140, Text = "Klavier solo" };
         var style = new TextBox { Width = 180, PlaceholderText = "Stil / Charakter" };
-        if (!compare) { parameters.Controls.Add(new Label { Text = "Takte", AutoSize = true }); parameters.Controls.Add(bars); parameters.Controls.Add(labTempo); parameters.Controls.Add(labEnsemble); parameters.Controls.Add(style); }
+        if (!compare) { parameters.Controls.Add(new Label { Text = "Takte", AutoSize = true }); parameters.Controls.Add(bars); parameters.Controls.Add(new Label { Text = "Tempo", AutoSize = true }); parameters.Controls.Add(labTempo); parameters.Controls.Add(new Label { Text = "Besetzung", AutoSize = true }); parameters.Controls.Add(labEnsemble); parameters.Controls.Add(new Label { Text = "Stil", AutoSize = true }); parameters.Controls.Add(style); }
         layout.Controls.Add(parameters, 0, 1);
         var task = new TextBox { Multiline = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Vertical, PlaceholderText = compare ? "Frage oder Auftrag zu A und B" : "Musikalischer Impuls für das Motiv" };
         var output = new RichTextBox { ReadOnly = true, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11), BackColor = SystemColors.Window };
-        layout.Controls.Add(task, 0, 2); layout.Controls.Add(output, 0, 3);
+        var taskHost = new Panel { Dock = DockStyle.Fill };
+        taskHost.Controls.Add(task); taskHost.Controls.Add(new Label { Text = compare ? "Frage oder Auftrag zu A und B" : "Musikalischer Impuls für das Motiv", Dock = DockStyle.Top, Height = 24 });
+        var outputHost = new Panel { Dock = DockStyle.Fill };
+        outputHost.Controls.Add(output); outputHost.Controls.Add(new Label { Text = "Dialog und Ergebnis", Dock = DockStyle.Top, Height = 24 });
+        layout.Controls.Add(taskHost, 0, 2); layout.Controls.Add(outputHost, 0, 3);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true }; layout.Controls.Add(actions, 0, 4);
         var labPlayer = new MidiPlayer { OutputDevice = player.OutputDevice };
         JsonObject? resultDocument = null;

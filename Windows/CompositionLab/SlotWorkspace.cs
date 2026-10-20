@@ -64,8 +64,12 @@ internal sealed partial class MainForm
             var score = document["score"]!.DeepClone();
             var midi = await core.RunAsync(new JsonObject { ["operation"] = "midi", ["score"] = score });
             if (!workspaceRevisions.IsCurrent(generation)) return;
-            if (currentMidi == null && document["sourceMidiData"] is JsonValue original && original.TryGetValue<string>(out var encoded)) currentMidi = Convert.FromBase64String(encoded);
+            if (document["sourceMidiData"] is JsonValue original && original.TryGetValue<string>(out var encoded)) currentMidi = Convert.FromBase64String(encoded);
             currentMidi ??= Convert.FromBase64String(midi["data"]!.GetValue<string>());
+            var midiInfo = await core.RunAsync(new JsonObject { ["operation"] = "midi-info", ["data"] = Convert.ToBase64String(currentMidi) });
+            if (!workspaceRevisions.IsCurrent(generation)) return;
+            playerBpm = Math.Clamp((int)Math.Round(midiInfo["initialBPM"]!.GetValue<double>()), 20, 400);
+            foreach (var transport in transports) transport.Tempo.Text = playerBpm.ToString();
             var xml = await core.RunAsync(new JsonObject { ["operation"] = "musicxml", ["score"] = score.DeepClone(), ["options"] = notationOptions?.DeepClone() });
             if (!workspaceRevisions.IsCurrent(generation)) return;
             currentXML = Encoding.UTF8.GetString(Convert.FromBase64String(xml["data"]!.GetValue<string>()));

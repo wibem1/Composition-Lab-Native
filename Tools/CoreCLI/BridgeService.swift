@@ -45,6 +45,8 @@ enum BridgeService {
         case "validate-register-repair":
             try RegisterReview.validateRepair(before: data("before"), after: data("after"), source: obj["source"] as? String ?? "")
             send(["ok": true])
+        case "midi-info":
+            send(["ok": true, "initialBPM": try CoreServices.initialMIDITempo(bytes())])
         case "playback-midi":
             send(["ok": true, "data": try CoreServices.playbackMIDICopy(bytes(), velocityFactor: obj["velocityFactor"] as? Double ?? 1,
                 targetBPM: obj["targetBPM"] as? Double).base64EncodedString()])

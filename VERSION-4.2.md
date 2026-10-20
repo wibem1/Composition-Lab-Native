@@ -15,5 +15,12 @@ Vorhandene Datenverzeichnisse und Bundle-IDs bleiben erhalten. `main` und die
 Referenzzweige werden nicht verändert. Pakete heißen `Composition-Lab-4.2-Mac.zip`
 und `Composition-Lab-4.2-Windows-x64.zip`; die Mac-App ist universal.
 
-Der Quellstand ist bis zu erfolgreichem vollständigem Testlauf ein Kandidat.
+Installation: Auf Mac das ZIP entpacken und die App in Programme ablegen.
+Auf Windows das gesamte ZIP entpacken und `Composition Lab 4.2.exe` starten.
+Die Pakete enthalten LilyPond und die benötigten Laufzeitdateien.
+
+Die Veröffentlichung ist an den erfolgreichen vollständigen Testlauf gekoppelt.
+CI hat keine externen MIDI-Geräte und keinen Windows-Synthesizer; konkreter
+Hardwareklang muss auf dem Zielrechner geprüft werden. Die Mac-App ist ad hoc
+signiert, nicht von Apple notarisiert.
 Prüfung, Datenflüsse und praktische Grenzen stehen in `V4.2-AUDIT.md`.

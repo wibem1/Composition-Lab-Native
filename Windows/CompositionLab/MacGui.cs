@@ -101,7 +101,7 @@ internal sealed partial class MainForm
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28)); Controls.Add(root);
         root.Controls.Add(BuildMacMenus(), 0, 0);
         var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(233, 233, 233), Margin = Padding.Empty };
-        var project = MacLabel("Composition Lab V4.14", 15, true); project.AutoSize = false; project.AutoEllipsis = true; header.Controls.Add(project);
+        var project = MacLabel("Composition Lab " + Version, 15, true); project.AutoSize = false; project.AutoEllipsis = true; header.Controls.Add(project);
         var navigation = MacRow(); navigation.Dock = DockStyle.None; navigation.Size = new Size(408, 34); navigation.WrapContents = false;
         foreach (string label in new[] { "Main", "Noten", "Technik" })
         { int index = navButtons.Count; var button = new StudioButton { Text = label, Width = 126, Height = 28, AutoSize = false, Selected = index == 0 }; button.Click += (_, _) => tabs.SelectedIndex = index; navButtons.Add(button); navigation.Controls.Add(button); }
@@ -255,7 +255,7 @@ internal sealed partial class MainForm
     {
         var transport = new Transport(); transports.Add(transport); var row = MacRow(true);
         slotTips.SetToolTip(transport.Loop, "Wiederholung ein-/ausschalten (Loop)");
-        var play = AddButton(row, "▶ / Ⅱ", PlayAsync); play.AutoSize = false; play.Size = new Size(36, 26);
+        var play = AddButton(row, "▶Ⅱ", PlayAsync); play.AutoSize = false; play.Size = new Size(36, 26);
         var stop = AddButton(row, "■", () => { playbackSettingsGeneration++; player.Stop(); return Task.CompletedTask; }); stop.AutoSize = false; stop.Size = new Size(36, 26); row.Controls.Add(transport.Loop); row.Controls.Add(transport.Time); row.Controls.Add(transport.Position);
         row.Controls.Add(MacLabel("Tempo")); row.Controls.Add(transport.Tempo); row.Controls.Add(MacLabel("Lautstärke (Windows)")); row.Controls.Add(transport.Volume);
         transport.Loop.CheckedChanged += (_, _) => { loopPlaying = transport.Loop.Checked; foreach (var other in transports) if (other != transport) other.Loop.Checked = loopPlaying; };

@@ -32,6 +32,7 @@ jobs:
         with:
           swift-version: swift-6.1.2-release
           swift-build: 6.1.2-RELEASE
+      - run: python Tools/check_architecture.py
       - run: swift --version
       - run: swift test
       - run: swift build -c release
@@ -81,3 +82,29 @@ jobs:
         with:
           name: Mac-TestResults
           path: Mac-TestResults/
+
+  release:
+    needs: core
+    if: github.event_name == 'push' && github.ref == 'refs/heads/v4-cross-platform' && contains(github.event.head_commit.message, '[release 4.2]')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Composition-Lab-4.2-*
+          merge-multiple: true
+          path: ReleasePackages
+      - name: Verify packages and publish tested 4.2 commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -s ReleasePackages/Composition-Lab-4.2-Mac.zip
+          test -s ReleasePackages/Composition-Lab-4.2-Windows-x64.zip
+          python Tools/check_architecture.py
+          cd ReleasePackages
+          sha256sum Composition-Lab-4.2-Mac.zip Composition-Lab-4.2-Windows-x64.zip > SHA256SUMS.txt
+          cd ..
+          gh release create v4.2.0 ReleasePackages/Composition-Lab-4.2-Mac.zip ReleasePackages/Composition-Lab-4.2-Windows-x64.zip ReleasePackages/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Composition Lab Native 4.2' --notes-file VERSION-4.2.md

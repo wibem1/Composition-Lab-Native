@@ -289,7 +289,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         workspaceSegment.translatesAutoresizingMaskIntoConstraints = false
         header.addSubview(workspaceSegment)
 
-        let project = NSTextField(labelWithString: "Composition Lab · Composition Engine \(ComposerPrompts.referenceVersion) · Build \(ComposerPrompts.engineBuild)")
+        let project = NSTextField(labelWithString: "Composition Lab \(CoreServices.version) · Build 4200 · 20.10.2026")
         project.font = .systemFont(ofSize: 15, weight: .semibold)
         project.translatesAutoresizingMaskIntoConstraints = false
         header.addSubview(project)
@@ -1071,7 +1071,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         playerRow.alignment = .centerY
         playerRow.spacing = 7
 
-        playerRow.addArrangedSubview(NSButton(title: "▶", target: self, action: #selector(playCurrentMIDI)))
+        playerRow.addArrangedSubview(NSButton(title: "▶Ⅱ", target: self, action: #selector(playCurrentMIDI)))
         playerRow.addArrangedSubview(NSButton(title: "■", target: self, action: #selector(stopCurrentMIDI)))
         playerLoopButton.setButtonType(.toggle)
         playerLoopButton.target = self
@@ -1753,7 +1753,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         row.spacing = 7
         panel.contentView = row
 
-        row.addArrangedSubview(NSButton(title: "▶", target: self, action: #selector(playCurrentMIDI)))
+        row.addArrangedSubview(NSButton(title: "▶Ⅱ", target: self, action: #selector(playCurrentMIDI)))
         row.addArrangedSubview(NSButton(title: "■", target: self, action: #selector(stopCurrentMIDI)))
         notationPlayerLoopButton.setButtonType(.toggle)
         notationPlayerLoopButton.bezelStyle = .rounded
@@ -1859,7 +1859,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         playerStack.orientation = .vertical; playerStack.alignment = .leading; playerStack.spacing = 5
         let transportRow = NSStackView()
         transportRow.orientation = .horizontal; transportRow.spacing = 6
-        let playButton = NSButton(title:"▶", target:self, action:#selector(playCurrentMIDI))
+        let playButton = NSButton(title:"▶Ⅱ", target:self, action:#selector(playCurrentMIDI))
         let pauseButton = NSButton(title:"Ⅱ", target:self, action:#selector(pauseCurrentMIDI))
         let stopButton = NSButton(title:"■", target:self, action:#selector(stopCurrentMIDI))
         transportRow.addArrangedSubview(playButton); transportRow.addArrangedSubview(pauseButton); transportRow.addArrangedSubview(stopButton)
@@ -1885,7 +1885,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         playerTempoField.widthAnchor.constraint(equalToConstant: 58).isActive = true
         tempoPlayerRow.addArrangedSubview(playerTempoField)
         tempoPlayerRow.addArrangedSubview(NSTextField(labelWithString:"BPM"))
-        playerTempoStepper.minValue = 20; playerTempoStepper.maxValue = 300; playerTempoStepper.increment = 1
+        playerTempoStepper.minValue = 20; playerTempoStepper.maxValue = 400; playerTempoStepper.increment = 1
         playerTempoStepper.target = self; playerTempoStepper.action = #selector(playerTempoStepperChanged)
         tempoPlayerRow.addArrangedSubview(playerTempoStepper)
         playerStack.addArrangedSubview(tempoPlayerRow)
@@ -2209,23 +2209,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         return "KI: \(provider.displayName) · \(modelName)\n\n\(concept)"
     }
 
-    private func titleAvoidanceInstruction() -> String {
-        let recent = Storage.shared.loadHistory()
-            .map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let unique = Array(NSOrderedSet(array: recent).compactMap { $0 as? String }.prefix(12))
-        guard !unique.isEmpty else {
-            return "Vergib der Komposition einen eigenständigen, prägnanten Titel."
-        }
-        let list = unique.map { "– \($0)" }.joined(separator: "\n")
-        return """
-        TITEL:
-        Vergib der Komposition einen neuen, eigenständigen und prägnanten Titel.
-        Verwende keinen der folgenden bereits vergebenen Titel erneut und vermeide auch bloße minimale Varianten davon:
-        \(list)
-        """
-    }
-
     @objc private func composePressed() {
         guard !nativeRequestInFlight else { status("Bitte die laufende Anfrage abwarten.", good: false); return }
         let p = provider, m = model
@@ -2522,7 +2505,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         else { lastMidi = MIDIBuilder.build(score) }
         loadOriginalPreview()
         let initialBPM = metadata["sourceMidiData"] != nil ? (lastMidi.flatMap { try? PlaybackMIDICopy.initialBPM($0) } ?? score.bpm) : score.bpm
-        let displayBPM = max(20, min(300, Int(initialBPM.rounded())))
+        let displayBPM = max(20, min(400, Int(initialBPM.rounded())))
         playerTempoField.integerValue = displayBPM
         playerTempoStepper.integerValue = displayBPM
         midiPlayer.stop()
@@ -2576,6 +2559,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
     @objc private func playCurrentMIDI() {
         guard lastMidi != nil else { status("Noch keine MIDI-Komposition vorhanden.", good:false); return }
+        if midiPlayer.isPlaying { pauseCurrentMIDI(); return }
         midiPlayer.play(); startPlayerTimer(); status("Wiedergabe läuft.", good:true)
     }
     @objc private func playerLoopChanged() {
@@ -2676,7 +2660,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private func validate(_ score:Score) -> String {
         var errors:[String] = [], warnings:[String] = []
         var notes = 0, controls = 0, maxBeat = 0.0
-        if score.bpm < 20 || score.bpm > 300 { errors.append("Tempo ungültig: \(score.bpm)") }
+        if score.bpm < 20 || score.bpm > 400 { errors.append("Tempo ungültig: \(score.bpm)") }
         if score.ts.n < 1 || score.ts.n > 32 { errors.append("Taktzähler ungültig: \(score.ts.n)") }
         if ![1,2,4,8,16,32,64].contains(score.ts.d) { errors.append("Taktnenner ungültig: \(score.ts.d)") }
         let beatsPerBar = Double(score.ts.n) * 4.0 / Double(max(1,score.ts.d))
@@ -2799,7 +2783,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             "format": "composition-lab-native-diagnostic",
             "engineBuild": ComposerPrompts.engineBuild,
             "interface": "macOS AppKit",
-            "interfaceVersion": "4.0.0-alpha.1",
+            "interfaceVersion": CoreServices.version,
             "entryPoint": "musicchat",
             "stage": "dialogue-request",
             "userMessage": msg,
@@ -3721,16 +3705,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         guard let score=lastExperimentScore else { window?.appendChat("Hinweis","Bitte zuerst eine Vorlage erzeugen."); return }
         let p=provider,m=model,e=effort
         let scoreJSON=(try? String(data:JSONEncoder().encode(score),encoding:.utf8)) ?? ""
-        let user="""
-        MUSIKALISCHER IMPULS:
-        \(lastExperimentConcept)
-
-        VORLAGE:
-        \(scoreJSON)
-
-        FRAGE / WUNSCH:
-        \(question)
-        """
+        let user = (try? LaboratoryWorkflow.prompt(kind: "analysis", task: question, first: lastExperimentConcept + "\n" + scoreJSON)) ?? ""
         APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,purpose: "MainViewController.chatExperiment", system:"Du bist ein musikalischer Analyse- und Kompositionspartner. Besprich die vorliegende musikalische Vorlage konkret und musikalisch. Ändere nicht automatisch die MIDI-Daten; antworte zunächst als Gesprächspartner.",user:user,wantJSON:false){ [weak window] result in
             DispatchQueue.main.async { switch result { case .failure(let err): window?.appendChat("Fehler",err.localizedDescription); case .success(let r): window?.appendChat(p.displayName,r.text) } }
         }
@@ -4027,6 +4002,8 @@ extension MainViewController {
                                             try require(self.lastMidi == originalMidi, "Partitur-Undo stellt Original-MIDI nicht wieder her.")
                                             self.menuRedoScore()
                                             try require(self.lastMidi == validMidi, "Partitur-Redo stellt bearbeitetes MIDI nicht wieder her.")
+                                            self.playerVolume.doubleValue = 0; self.playerVolumeChanged()
+                                            try require(self.midiPlayer.duration > 0, "Stumme Wiedergabekopie ist nicht ladbar.")
                                             self.playerVolume.doubleValue = 0.5; self.playerTempoField.integerValue = 72
                                             self.reloadMainPlayerForPlaybackSettings(errorPrefix: "Test-Player")
                                             try require(self.lastMidi == validMidi, "Player-Einstellungen verändern das exportierbare Original-MIDI.")

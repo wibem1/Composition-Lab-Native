@@ -1,6 +1,6 @@
 # Composition Lab Native – Entwicklung zu Version 4.2
 
-Arbeitszweig: `v4-cross-platform`. **Version 4.2 ist noch nicht freigegeben.**
+Arbeitszweig: `v4-cross-platform`. Die Veröffentlichung von Version 4.2 erfolgt erst nach vollständig erfolgreichem Freigabelauf.
 `main` und die bisherigen Referenzzweige bleiben unverändert.
 
 Mac und Windows verwenden denselben Swift-Kern mit eigenständigen nativen
@@ -25,7 +25,7 @@ REAPER-/Studio-Pro-Dateibrücken sind entfernt; normale Ein-/Ausgaben bleiben.
 
 Die bisherigen Datenpfade und Bundle-IDs bleiben stabil. Pakete und Apps sind
 eindeutig mit 4.2 bezeichnet. Ein grüner Build bedeutet bestandene automatische Prüfungen; noch offene
-Funktionsunterschiede stehen im aktuellen Audit. Es gibt keinen 4.2-Release-Tag.
+Funktionsunterschiede stehen im aktuellen Audit. Der Release-Job erzeugt `v4.2.0` nur nach erfolgreicher Pflichtmatrix.
 
 Die nachfolgende historische Dokumentation beschreibt 3.5.3 und frühere Stände.
 
