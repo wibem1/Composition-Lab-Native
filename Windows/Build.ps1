@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
-$destination = Join-Path $PWD 'Windows/Bundle/Composition Lab 4.2.4'
+$destination = Join-Path $PWD 'Windows/Bundle/Composition Lab 4.2.5'
 if (Test-Path $destination) { Remove-Item $destination -Recurse -Force }
 New-Item $destination -ItemType Directory -Force | Out-Null
 dotnet publish 'Windows/CompositionLab/CompositionLab.csproj' -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $destination
@@ -50,7 +50,7 @@ $oldPath = $env:Path
 try {
     $env:Path = "$env:windir/System32;$env:windir"
     $version = & (Join-Path $core 'composition-lab-core.exe') --version
-    if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.2.4') { throw 'Bundled core runtime is incomplete' }
+    if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.2.5') { throw 'Bundled core runtime is incomplete' }
 } finally { $env:Path = $oldPath }
 # CI must exercise a real native browser, not only managed bitmap painting.
 try { [void][Microsoft.Win32.Registry]::GetValue('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F1E7E558-F3C6-4A58-B13A-B17E7164CA09}', 'pv', $null) } catch { }
@@ -61,7 +61,7 @@ $tests = Join-Path $PWD 'Windows/TestResults'
 New-Item $tests -ItemType Directory -Force | Out-Null
 try { Set-DisplayResolution -Width 1600 -Height 1200 -Force -ErrorAction Stop | Out-Null } catch { Write-Output 'Default Windows display retained; GUI scroll reachability is tested.' }
 $start = New-Object System.Diagnostics.ProcessStartInfo
-$start.FileName = Join-Path $destination 'Composition Lab 4.2.4.exe'
+$start.FileName = Join-Path $destination 'Composition Lab 4.2.5.exe'
 $start.Arguments = "--self-test --test-output `"$tests`""
 $start.UseShellExecute = $false
 $start.Environment['PATH'] = "$env:windir/System32;$env:windir"
@@ -74,6 +74,6 @@ if ($process.ExitCode -ne 0) {
 $report = Get-Content (Join-Path $tests 'result.json') -Raw | ConvertFrom-Json
 if (-not $report.passed) { throw 'Windows test result is not green' }
 Get-Content (Join-Path $tests 'result.json')
-$zip = Join-Path $PWD 'Composition-Lab-4.2.4-Windows-x64.zip'
+$zip = Join-Path $PWD 'Composition-Lab-4.2.5-Windows-x64.zip'
 Compress-Archive -Path $destination -DestinationPath $zip -Force
 Write-Output "Windows test package: $zip"

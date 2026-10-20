@@ -56,7 +56,26 @@ internal sealed partial class MainForm
                 source["model"]?.GetValue<string>() ?? SelectedModelId);
             SetMusicStatus(result, "Vorhandene Komposition in Slot " + (destination + 1) + " übernommen; MIDI bereit.");
         }
-        catch (CoreRequestException e) { lastDiagnostic = e.Diagnostic; UpdateDiagnostic(); SaveLocalState(); throw; }
+        catch (Exception e)
+        {
+            // Recovery failures must replace the old saved diagnostic too.
+            lastDiagnostic = new JsonObject {
+                ["interface"] = "Windows WinForms", ["interfaceVersion"] = Version,
+                ["stage"] = e is EngravingTimeoutException ? "engraving-timeout" :
+                    e is OperationCanceledException ? "recovery-cancelled" : "recovery-failed",
+                ["recordedAt"] = DateTimeOffset.UtcNow.ToString("O"),
+                ["processingError"] = e.ToString(), ["composition"] = music,
+                ["sourceDiagnostic"] = source.DeepClone()
+            };
+            if (e is EngravingTimeoutException timeout) {
+                lastDiagnostic["engravingLog"] = timeout.Log;
+                lastDiagnostic["engravingMilliseconds"] = timeout.Milliseconds;
+            }
+            UpdateDiagnostic(); SaveLocalState();
+            if (e is OperationCanceledException)
+                throw new OperationCanceledException("Übernahme abgebrochen. Die Originalkomposition bleibt gespeichert.", e);
+            throw;
+        }
         finally { pending?.Dispose(); pending = null; SetBusy(false); }
     }
 

@@ -24,7 +24,7 @@ internal sealed class LilyPondCompiler(string cacheRoot)
         catch (CoreRequestException e) { throw new InvalidDataException(e.Message, e); }
     }
 
-    public async Task<LilyPondOutput> CompileAsync(string source, CancellationToken cancellation = default)
+    public async Task<LilyPondOutput> CompileAsync(string source, CancellationToken cancellation = default, Action<string>? progress = null)
     {
         string prepared = await PrepareAsync(source, cancellation);
         string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Version + "\npoint-and-click-v1\n" + prepared)));
@@ -45,18 +45,24 @@ internal sealed class LilyPondCompiler(string cacheRoot)
             await File.WriteAllTextAsync(Path.Combine(temporary, "source.ly"), prepared, new UTF8Encoding(false), cancellation);
             var start = new ProcessStartInfo(executable) { WorkingDirectory = temporary, UseShellExecute = false, CreateNoWindow = true,
                 RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 };
-            foreach (string argument in new[] { "--svg", "-dpoint-and-click", "--loglevel=WARNING", "--output=score", "source.ly" }) start.ArgumentList.Add(argument);
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation); timeout.CancelAfter(TimeSpan.FromMinutes(2));
-            using var process = new Process { StartInfo = start };
-            var watch = Stopwatch.StartNew(); process.Start();
-            using var registration = timeout.Token.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { } });
-            var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync(timeout.Token);
-            string log = (await stderr) + (await stdout); watch.Stop();
+            // Portable LilyPond's relocate files use set?, which otherwise keeps
+            // Fontconfig settings inherited from unrelated installed programs.
+            // Use this bundle's configuration and a persistent writable user cache.
+            string bundle = Path.Combine(AppContext.BaseDirectory, "LilyPond");
+            start.Environment["FONTCONFIG_FILE"] = Path.Combine(bundle, "etc", "fonts", "fonts.conf");
+            start.Environment["FONTCONFIG_PATH"] = Path.Combine(bundle, "etc", "fonts");
+            string fontCache = Path.Combine(cacheRoot, "font-cache");
+            Directory.CreateDirectory(fontCache);
+            start.Environment["XDG_CACHE_HOME"] = fontCache;
+            foreach (string argument in new[] { "--svg", "-dpoint-and-click", "--loglevel=INFO", "--output=score", "source.ly" }) start.ArgumentList.Add(argument);
+            // Keep the existing deadline; preserve the actual process log on timeout.
+            var reporter = progress == null ? null : new Progress<string>(progress);
+            var run = await EngravingProcess.RunAsync(start, TimeSpan.FromMinutes(2), cancellation, reporter);
+            string log = run.Log;
             await File.WriteAllTextAsync(Path.Combine(temporary, "compile.log"), log, cancellation);
-            if (process.ExitCode != 0) throw new InvalidDataException("LilyPond konnte die Originalkomposition nicht setzen. Es wurde keine KI-Übersetzung gestartet.\n" + log[..Math.Min(5000, log.Length)]);
+            if (run.ExitCode != 0) throw new InvalidDataException("LilyPond konnte die Originalkomposition nicht setzen. Es wurde keine KI-Übersetzung gestartet.\n" + log[..Math.Min(8000, log.Length)]);
             // Verify every output before publishing the cache atomically.
-            var output = Read(temporary, false, watch.Elapsed.TotalMilliseconds);
+            var output = Read(temporary, false, run.Milliseconds);
             cancellation.ThrowIfCancellationRequested();
             if (Directory.Exists(final)) Directory.Delete(final, true);
             await File.WriteAllTextAsync(Path.Combine(temporary, "complete"), Version, cancellation);

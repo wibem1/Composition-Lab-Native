@@ -9,6 +9,23 @@ internal sealed partial class MainForm
 {
     async Task RunLilyPondTestsAsync(string output)
     {
+        // Real child-process regression: preserve output at a deadline and
+        // distinguish it from an explicit user cancellation.
+        var probeStart = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe")) {
+            UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardOutput = true, RedirectStandardError = true
+        };
+        foreach (string arg in new[] { "-NoProfile", "-NonInteractive", "-Command", "[Console]::Error.WriteLine('engraving-timeout-probe'); Start-Sleep -Seconds 30" }) probeStart.ArgumentList.Add(arg);
+        bool deadlineReported = false;
+        try { await EngravingProcess.RunAsync(probeStart, TimeSpan.FromSeconds(3), CancellationToken.None); }
+        catch (EngravingTimeoutException e) { deadlineReported = e.Log.Contains("engraving-timeout-probe") && e.Milliseconds >= 2500; }
+        if (!deadlineReported) throw new Exception("Notensatz-Zeitlimit verliert Ursache oder Prozessprotokoll.");
+        using (var stop = new CancellationTokenSource()) {
+            stop.CancelAfter(TimeSpan.FromMilliseconds(250)); bool cancelledByUser = false;
+            try { await EngravingProcess.RunAsync(probeStart, TimeSpan.FromSeconds(30), stop.Token); }
+            catch (OperationCanceledException) { cancelledByUser = true; }
+            if (!cancelledByUser) throw new Exception("Benutzerabbruch wird mit Zeitlimit verwechselt.");
+        }
         await ScoreSourceMapper.SelfTestAsync();
         WorkspaceRevisionGate.SelfTest();
         ProjectPieceCodec.SelfTest();
@@ -46,7 +63,21 @@ internal sealed partial class MainForm
         string pastorale = await File.ReadAllTextAsync(pastoralePath);
         if (await LilyPondCompiler.PrepareAsync(pastorale) != pastorale)
             throw new Exception("Pastorale-Original wird durch die Quellprüfung verändert.");
-        var pastoraleOutput = await Engraver.CompileAsync(pastorale);
+        // Deliberately hostile inherited config: the bundle must not use it.
+        string? inheritedFontConfig = Environment.GetEnvironmentVariable("FONTCONFIG_FILE");
+        LilyPondOutput pastoraleOutput;
+        try {
+            Environment.SetEnvironmentVariable("FONTCONFIG_FILE", Path.Combine(output, "missing-external-fontconfig.conf"));
+            pastoraleOutput = await Engraver.CompileAsync(pastorale);
+        }
+        finally { Environment.SetEnvironmentVariable("FONTCONFIG_FILE", inheritedFontConfig); }
+        var pastoraleCached = await Engraver.CompileAsync(pastorale);
+        if (!pastoraleCached.Cached || !pastoraleCached.Midi.SequenceEqual(pastoraleOutput.Midi))
+            throw new Exception("Pastorale wird bei erneuter Übernahme unnötig neu gesetzt.");
+        AtomicFile.WriteText(Path.Combine(output, "Pastorale-Messung.json"), new JsonObject {
+            ["coldEngravingMilliseconds"] = pastoraleOutput.Milliseconds,
+            ["pages"] = pastoraleOutput.Pages.Length, ["repeatWasCached"] = pastoraleCached.Cached
+        }.ToJsonString());
         if (pastoraleOutput.Pages.Length == 0 || pastoraleOutput.Midi.Length < 14)
             throw new Exception("Pastorale wird nicht als Noten und MIDI ausgegeben.");
         var generated = await Engraver.CompileAsync(source);
