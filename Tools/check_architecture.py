@@ -39,4 +39,10 @@ packer = (root / 'Windows/Build.ps1').read_text(encoding='utf-8')
 archive = re.search(r"\$zip = Join-Path \$PWD '([^']+)'", packer).group(1)
 require(f'path: {archive}' in workflow, 'Windows archive and CI upload disagree')
 require(info['CFBundleExecutable'] in (root / 'Build Native App.command').read_text(encoding='utf-8'), 'Mac executable and bundle metadata disagree')
+# A patch release must be identifiable before download and after extraction.
+for field in ['CFBundleExecutable', 'CFBundleName', 'CFBundleDisplayName']:
+    require(info[field] == f'Composition Lab {version}', f'Mac {field} omits full version')
+require(project.findtext('./PropertyGroup/AssemblyName') == f'Composition Lab {version}', 'Windows executable omits full version')
+require(archive == f'Composition-Lab-{version}-Windows-x64.zip', 'Windows download omits full version')
+require(f'Composition-Lab-{version}-Mac.zip' in workflow, 'Mac download omits full version')
 print(f'Architecture, {len(requests)} Windows operation contracts, package paths and version {version}: PASS')
