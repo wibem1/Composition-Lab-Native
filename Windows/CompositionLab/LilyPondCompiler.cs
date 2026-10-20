@@ -11,7 +11,7 @@ internal sealed record LilyPondOutput(byte[] Midi, string[] Pages, string Log, d
 /// the same original score; the structured MIDI import is only an interchange view.
 internal sealed class LilyPondCompiler(string cacheRoot)
 {
-    public const string Version = "2.26.0";
+    public const string Version = "2.24.4";
     readonly SemaphoreSlim gate = new(1, 1);
     public static async Task<string> PrepareAsync(string source, CancellationToken cancellation = default)
     {

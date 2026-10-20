@@ -1,14 +1,14 @@
 # Windows 4.2
 
 Aktuelle Funktionen, Tests und Grenzen: [V4.2-AUDIT.md](../V4.2-AUDIT.md).
-Das ZIP vollständig entpacken und `Composition Lab 4.2.5.exe` starten.
+Das ZIP vollständig entpacken und `Composition Lab 4.2.6.exe` starten.
 Backups können mit der Mac-Version ausgetauscht werden; aktuelle Stückplätze
 werden separat als Arbeitsplatz gespeichert. Die folgenden Abschnitte enthalten
 auch historische Versionsbeschreibungen.
 
 # Composition Lab Native · Windows · V4.1 · 16.10.2026
 
-Das gesamte ZIP in einen neuen Ordner entpacken und `Composition Lab 4.2.5.exe`
+Das gesamte ZIP in einen neuen Ordner entpacken und `Composition Lab 4.2.6.exe`
 starten. Die Unterordner `Core`, `LilyPond` und `Notices` beibehalten. .NET,
 Swift und LilyPond müssen nicht zusätzlich installiert werden. Voraussetzung:
 Windows 10/11 auf Intel/AMD 64 Bit und Microsoft Edge WebView2 Runtime.
@@ -86,7 +86,9 @@ Fehlermeldung erscheint in der Statusleiste und in der Diagnose.
 
 ## MIDI und Originalnoten
 
-Fertiger LilyPond-Code wird mit dem mitgelieferten LilyPond 2.26.0 lokal in
+Windows verwendet ab 4.2.6 LilyPond 2.24.4 mit Guile 2.2 als Kompatibilitätsfassung.
+
+Fertiger LilyPond-Code wird mit dem mitgelieferten LilyPond 2.24.4 lokal in
 MIDI und Notenseiten (SVG) umgesetzt. Dafür ist keine zweite KI-Anfrage nötig.
 Auftakt, Takte, Stimmen, Tonhöhen und Artikulation stammen aus dem Original.
 Notenvorschau, Blättern, Zoom und Drucken funktionieren für diese Ausgabe ohne
@@ -153,11 +155,11 @@ Mac-Version auf `main` wird durch diesen Windows-Build nicht verändert.
 
 ## Mitgelieferte Programme
 
-LilyPond 2.26.0 wird unverändert als separates Programm mitgeliefert. Seine
+LilyPond 2.24.4 wird unverändert als separates Programm mitgeliefert. Seine
 Lizenzen und die Lizenzen der Abhängigkeiten stehen unter `LilyPond/licenses`.
 Weitere Lizenzhinweise stehen unter `Notices` und in der beiliegenden GPL.
 Unverändertes Originalpaket, zugehörige Quellen und Bauanleitungen:
 
-- https://gitlab.com/lilypond/lilypond/-/releases/v2.26.0
+- https://gitlab.com/lilypond/lilypond/-/releases/v2.24.4
 - https://lilypond.org/source.html
-- https://gitlab.com/lilypond/lilypond/-/tree/v2.26.0/release/binaries
+- https://gitlab.com/lilypond/lilypond/-/tree/v2.24.4/release/binaries

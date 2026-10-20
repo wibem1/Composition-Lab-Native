@@ -1,0 +1,7 @@
+# Composition Lab Native 4.2.6 · 21.10.2026
+
+Die Windows-Fassung verwendet LilyPond 2.24.4 mit Guile 2.2 statt LilyPond 2.26.0 mit Guile 3.0. Anlass: Auf dem betroffenen Windows-Rechner startet 2.26.0 zwar sofort, bleibt aber schon beim Ein-Takt-Test während des internen Laufzeitstarts hängen. Abschalten von JIT und eine bereinigte Prozessumgebung ändern den Befund nicht. Die genaue technische Ursache ist noch nicht abschließend geklärt; die alternative Laufzeit muss dort in der Praxis bestätigt werden.
+
+Die App verlangt weiterhin vollständige 2.24-kompatible Partituren. Die musikalische Anfrage, die Originalquelle und die übrigen Funktionen bleiben erhalten. Der Compiler und seine Version werden korrekt in Diagnose und Cache-Schlüssel erfasst. Der Mac verwendet weiterhin die dort geprüfte Version 2.26.0. Notation, die ausdrücklich nur Funktionen neuerer LilyPond-Versionen verwendet, ist mit dem älteren Windows-Compiler nicht automatisch kompatibel.
+
+Die vollständige native Windows-Testserie wird nun zusätzlich nach dem ZIP-Verpacken und erneuten Entpacken ausgeführt. Sie prüft unter anderem die unveränderte Pastorale, Notenseiten, MIDI, Bearbeitung, Wiedergabevorbereitung, Exporte und gespeicherte Stücke. Die Paket-Testberichte enthalten die gemessene Notensatzdauer. Die Originalpakete der Laufzeiten werden per SHA-256 geprüft. Veröffentlichung erst nach bestandener Testmatrix und beiden nativen Builds.
