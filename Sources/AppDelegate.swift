@@ -170,6 +170,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let edit = NSMenu(title: "Bearbeiten")
         edit.addItem(withTitle: "Rückgängig", action: Selector(("undo:")), keyEquivalent: "z")
         edit.addItem(withTitle: "Wiederholen", action: Selector(("redo:")), keyEquivalent: "Z")
+        edit.addItem(withTitle: "Partituränderung rückgängig", action: #selector(MainViewController.menuUndoScore), keyEquivalent: "")
+        edit.addItem(withTitle: "Partituränderung wiederholen", action: #selector(MainViewController.menuRedoScore), keyEquivalent: "")
         edit.addItem(NSMenuItem.separator())
         edit.addItem(withTitle: "Ausschneiden", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         edit.addItem(withTitle: "Kopieren", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
@@ -184,6 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         c.keyEquivalentModifierMask = [.command]
         comp.addItem(c)
         comp.addItem(withTitle: "Gesicherte Originalantwort übernehmen", action: #selector(MainViewController.menuRecoverOriginal), keyEquivalent: "")
+        comp.addItem(withTitle: "Oktavlagen prüfen und korrigieren", action: #selector(MainViewController.menuReviewRegisters), keyEquivalent: "")
         compItem.submenu = comp
         main.addItem(compItem)
 

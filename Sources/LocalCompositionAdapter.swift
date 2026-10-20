@@ -23,7 +23,9 @@ final class NativeLocalCompositionService {
                         try ScoreValidation.validate(score)
                         return NativeLocalComposition(score: score, metadata: [
                             "directLilyPond": .bool(true), "sourceMidiData": .string(output.midi.base64EncodedString()),
-                            "lilyPondSource": .string(original), "description": .string(original)])
+                            "lilyPondSource": .string(original), "description": .string(original),
+                            "octaveReview": .object(["status": .string((try JSONSerialization.jsonObject(with: RegisterReview.inspect(scoreJSON: JSONEncoder().encode(score))) as! [[String: Any]]).isEmpty ? "passed" : "issues"),
+                                "issues": try JSONDecoder().decode(JSONValue.self, from: RegisterReview.inspect(scoreJSON: JSONEncoder().encode(score))), "repairAICalls": .number(0)])])
                     } })
                 }
             } else if json["kind"] as? String == "score", let value = json["score"] {

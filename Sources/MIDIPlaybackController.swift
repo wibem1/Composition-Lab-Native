@@ -35,7 +35,7 @@ final class MIDIPlaybackController {
     func load(score: Score, data: Data, preserveOriginal: Bool = false) throws {
         stop()
         loadedScore = score
-        externalPlayer.load(score: score)
+        externalPlayer.load(score: score, data: preserveOriginal ? data : nil)
         if let u = tempURL { try? FileManager.default.removeItem(at: u) }
         let u = FileManager.default.temporaryDirectory.appendingPathComponent("composition-lab-\(UUID().uuidString).mid")
 

@@ -27,6 +27,12 @@ enum BridgeService {
         case "build-assignment":
             send(["ok": true, "assignment": try CoreServices.buildAssignment(obj["assignment"] as? String ?? "",
                 parametersJSON: obj["parameters"] == nil ? nil : data("parameters"))])
+        case "register-review":
+            let issues = try RegisterReview.inspect(scoreJSON: data("score"))
+            send(["ok": true, "issues": try JSONSerialization.jsonObject(with: issues), "instruction": RegisterReview.instruction])
+        case "validate-register-repair":
+            try RegisterReview.validateRepair(before: data("before"), after: data("after"), source: obj["source"] as? String ?? "")
+            send(["ok": true])
         case "playback-midi":
             send(["ok": true, "data": try CoreServices.playbackMIDICopy(bytes(), velocityFactor: obj["velocityFactor"] as? Double ?? 1,
                 targetBPM: obj["targetBPM"] as? Double).base64EncodedString()])

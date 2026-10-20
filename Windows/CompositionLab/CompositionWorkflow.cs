@@ -25,6 +25,7 @@ internal sealed partial class MainForm
         string instruction = userText;
         var request = new JsonObject { ["assignment"] = instruction, ["provider"] = activeProvider,
             ["model"] = SelectedModelId, ["effort"] = effort.SelectedIndex switch { 0 => "low", 2 => "high", _ => "medium" } };
+        if (!makeMusic) { request["mode"] = "dialogue"; request["workspace"] = DialogueWorkspace(); }
         string selectedProvider = activeProvider, selectedModel = SelectedModelId;
         try
         {
@@ -34,7 +35,7 @@ internal sealed partial class MainForm
                 var built = await core.RunAsync(new JsonObject { ["operation"] = "build-assignment", ["assignment"] = instruction,
                     ["parameters"] = new JsonObject { ["ensemble"] = ensemble.Text, ["measures"] = measures.Text,
                         ["meter"] = meter.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text } }, pending.Token);
-                request["assignment"] = built["assignment"]!.DeepClone();
+                request["assignment"] = built["assignment"]!.GetValue<string>() + DialogueSourceMaterial();
             }
             chat.AppendText("Du: " + userText + "\n\n");
             SetStatus(makeMusic ? "KI komponiert …" : "KI antwortet …");
@@ -66,20 +67,7 @@ internal sealed partial class MainForm
             }
             else
             {
-                string answer = result["text"]!.GetValue<string>(); chat.AppendText("KI: " + answer + "\n\n"); chatInput.Clear();
-                SaveLocalState(); // Keep the full answer before any translation or slot validation can fail.
-                if (ContainsFinishedMusic(answer))
-                {
-                    destination = documents.FirstFreeIndex();
-                    if (destination < 0) throw new InvalidOperationException("Komposition erhalten, aber alle Slots sind belegt. Einen Slot leeren und unter Komposition → Fertige Komposition übernehmen fortsetzen.");
-                    PreservePendingComposition(answer, result, userText, selectedProvider, selectedModel);
-                    var translated = await CompileCheckedCompositionAsync(answer, result, pending.Token);
-                    result = translated;
-                    var document = await AcceptCompositionAsync(result, destination, userText, selectedProvider, selectedModel);
-                    chat.AppendText("KI: Stück übernommen in Slot " + (destination + 1) + ": " + document["title"] + "\n\n");
-                    makeMusic = true;
-                }
-                else if (string.IsNullOrWhiteSpace(composition.Text)) composition.Text = answer;
+                AcceptDialogue(result);
             }
             cost.Text = "Anfrage ca. $" + result["estimatedCostUSD"]!.GetValue<double>().ToString("0.0000");
             SetMusicStatus(result, makeMusic ? "Komposition abgeschlossen." : "Antwort erhalten."); SaveLocalState();

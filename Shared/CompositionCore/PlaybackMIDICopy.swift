@@ -66,11 +66,11 @@ enum PlaybackMIDICopy {
         return source.tempos.first(where: { $0.tick == 0 }).map { 60_000_000 / Double($0.micros) } ?? 120
     }
     static func make(_ original: Data, velocityFactor: Double, targetBPM: Double? = nil) throws -> Data {
-        guard velocityFactor.isFinite, velocityFactor > 0, velocityFactor <= 1,
+        guard velocityFactor.isFinite, velocityFactor >= 0, velocityFactor <= 1,
               targetBPM.map({ $0.isFinite && (20...400).contains($0) }) ?? true else { throw APIError.badResponse("Ungültige Player-Einstellungen.") }
         var bytes = Array(original)
         let source = try scan(bytes)
-        for offset in source.velocities { bytes[offset] = UInt8(max(1, min(127, Int((Double(bytes[offset]) * velocityFactor).rounded())))) }
+        for offset in source.velocities { bytes[offset] = UInt8(velocityFactor == 0 ? 0 : max(1, min(127, Int((Double(bytes[offset]) * velocityFactor).rounded())))) }
         if let targetBPM {
             let initial = source.tempos.first(where: { $0.tick == 0 }).map { 60_000_000 / Double($0.micros) } ?? 120
             let factor = targetBPM / initial

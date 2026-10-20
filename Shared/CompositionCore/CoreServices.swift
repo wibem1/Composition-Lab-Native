@@ -172,14 +172,18 @@ public enum CoreServices {
         do {
             let dto = try JSONDecoder().decode(RequestDTO.self, from: requestJSON)
             guard !dto.assignment.isEmpty, !apiKey.isEmpty else { throw APIError.emptyResponse }
+            let options = try JSONSerialization.jsonObject(with: requestJSON) as? [String: Any] ?? [:]
+            let dialogue = !compositionOnly && options["mode"] as? String == "dialogue"
+            let prompt = dialogue ? WorkspaceDialogue.prompt(message: dto.assignment, workspace: options["workspace"] as? String ?? "{}") : dto.assignment
             APIClient.shared.call(provider: dto.provider, model: dto.model, key: apiKey,
-                effort: dto.effort, purpose: compositionOnly ? "composition" : "music-chat", system: ComposerPrompts.system, user: dto.assignment,
-                wantJSON: false) { result in
+                effort: dto.effort, purpose: compositionOnly ? "composition" : "music-chat", system: ComposerPrompts.system, user: prompt,
+                wantJSON: dialogue) { result in
                 completion(result.flatMap { response in Result {
-                    var diagnostic: [String: Any] = ["text": response.text, "provider": dto.provider.rawValue, "model": dto.model, "assignment": dto.assignment, "sentUserPrompt": dto.assignment, "sentSystemPrompt": ComposerPrompts.system, "automaticTranslation": false, "reasoning": dto.effort.rawValue, "stage": "chat-completed",
+                    var diagnostic: [String: Any] = ["text": response.text, "provider": dto.provider.rawValue, "model": dto.model, "assignment": dto.assignment, "sentUserPrompt": prompt, "sentSystemPrompt": ComposerPrompts.system, "automaticTranslation": false, "reasoning": dto.effort.rawValue, "stage": "chat-completed",
                         "inputTokens": response.inputTokens, "outputTokens": response.outputTokens,
                         "estimatedCostUSD": APICost.estimate(provider: dto.provider, model: dto.model,
                             inputTokens: response.inputTokens, outputTokens: response.outputTokens)]
+                    if dialogue { diagnostic["dialogue"] = try JSONSerialization.jsonObject(with: WorkspaceDialogue.decode(response.text)) }
                     if compositionOnly {
                         diagnostic["composition"] = response.text
                         diagnostic["compositionPrompt"] = dto.assignment

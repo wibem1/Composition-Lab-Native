@@ -14,7 +14,7 @@ enum LilyPondSource {
         }
         return source + "\n"
     }
-    static func prepare(_ source: String) throws -> String {
+    static func maskedNotation(_ source: String) throws -> String {
         // Mask strings and comments without shifting offsets or line numbers.
         let masked = NSMutableString(string: source)
         let tokens = try NSRegularExpression(pattern: #"(?s)%\{.*?%\}|%[^\r\n]*|\"(?:\\.|[^\"\\])*\""#)
@@ -23,9 +23,12 @@ enum LilyPondSource {
             let blank = value.utf16.map { ($0 == 10 || $0 == 13) ? $0 : 32 }
             masked.replaceCharacters(in: token.range, with: String(decoding: blank, as: UTF16.self))
         }
-        let notation = masked as String
+        return masked as String
+    }
+    static func prepare(_ source: String) throws -> String {
+        let notation = try maskedNotation(source)
         let allowed = try NSRegularExpression(pattern: #"##[tf]\b|#\(set-global-staff-size\s+\d+(?:\.\d+)?\s*\)"#)
-        let checked = allowed.stringByReplacingMatches(in: notation, range: NSRange(location: 0, length: masked.length), withTemplate: " ")
+        let checked = allowed.stringByReplacingMatches(in: notation, range: NSRange(location: 0, length: (notation as NSString).length), withTemplate: " ")
         guard match(#"\\(?:include|includeSpecial|bookOutputName|bookOutputSuffix|applyContext|applyOutput|displayScheme|scheme|load)\b|\$|#(?!#[tf]\b|[-+]?\d+(?:\.\d+)?)"#, in: checked) == nil else {
             throw APIError.badResponse("Die LilyPond-Datei enthält externe Dateien, veränderte Ausgabepfade oder ausführbare Scheme-Ausdrücke. Für die direkte Ausgabe bitte reine Notation verwenden.")
         }

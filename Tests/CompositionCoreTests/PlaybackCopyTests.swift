@@ -30,6 +30,16 @@ final class PlaybackCopyTests: XCTestCase {
         XCTAssertEqual(try MIDIParser.parse(data: copy, fallbackTitle: "Test").bpm, 160, accuracy: 0.001)
         XCTAssertEqual(try PlaybackMIDICopy.initialBPM(data), 100, accuracy: 0.001)
     }
+    func testMuteCopyRetainsOriginalAndStopsAllAttacks() throws {
+        let data = original()
+        let muted = try PlaybackMIDICopy.make(data, velocityFactor: 0)
+        XCTAssertNotEqual(data, muted)
+        XCTAssertEqual(data.count, muted.count)
+        XCTAssertEqual(try MIDIParser.parse(data: data, fallbackTitle: "Original").tr[0].nt.count, 2)
+        let changed = zip(data, muted).filter { $0 != $1 }
+        XCTAssertEqual(changed.count, 2)
+        XCTAssertTrue(changed.allSatisfy { $0.1 == 0 })
+    }
     func testInvalidInputsFailWithoutInventingMidi() throws {
         XCTAssertThrowsError(try PlaybackMIDICopy.make(Data(), velocityFactor: 1))
         XCTAssertThrowsError(try PlaybackMIDICopy.make(original(), velocityFactor: .nan))

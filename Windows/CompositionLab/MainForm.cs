@@ -255,6 +255,8 @@ internal sealed partial class MainForm : Form
                 if (state["slots"] is JsonArray list)
                     for (int i = 0; i < Math.Min(10, list.Count); i++) documents[i] = list[i]?.DeepClone().AsObject();
                 automaticRegisterReview = state["automaticRegisterReview"]?.GetValue<bool>() ?? false;
+                player.OutputDevice = state["midiOutputDevice"]?.GetValue<int>() ?? -1;
+                dialogueSourceSlots = state["dialogueSourceSlots"]?.AsArray().Select(n => n!.GetValue<int>()).Where(n => n is >= 1 and <= 10).ToArray() ?? [];
                 chat.Text = state["chat"]?.GetValue<string>() ?? "";
                 lastDiagnostic = state["diagnostic"]?.DeepClone().AsObject();
                 pendingComposition = state["pendingComposition"]?.DeepClone().AsObject(); UpdateDiagnostic();
@@ -297,7 +299,7 @@ internal sealed partial class MainForm : Form
                 ["diagnostic"] = lastDiagnostic?.DeepClone(), ["pendingComposition"] = pendingComposition?.DeepClone(), ["provider"] = activeProvider,
                 ["models"] = JsonSerializer.SerializeToNode(models), ["assignment"] = assignment.Text,
                 ["workspaceExtensions"] = workspaceExtensions.DeepClone(),
-                ["slotDrafts"] = JsonSerializer.SerializeToNode(slotDrafts), ["mainSplitRatio"] = mainSplitRatio, ["editableIdea"] = editableIdea, ["meter"] = meter.Text, ["projectName"] = projectName, ["history"] = new JsonArray(pieceHistory.Select(d => d.DeepClone()).ToArray()), ["notation"] = new JsonArray(notationSettings.Select(c => (JsonNode?)JsonValue.Create(c.SelectedIndex)).ToArray()), ["automaticRegisterReview"] = automaticRegisterReview, ["splitBeats"] = splitBeats.Checked,
+                ["slotDrafts"] = JsonSerializer.SerializeToNode(slotDrafts), ["mainSplitRatio"] = mainSplitRatio, ["editableIdea"] = editableIdea, ["meter"] = meter.Text, ["projectName"] = projectName, ["history"] = new JsonArray(pieceHistory.Select(d => d.DeepClone()).ToArray()), ["notation"] = new JsonArray(notationSettings.Select(c => (JsonNode?)JsonValue.Create(c.SelectedIndex)).ToArray()), ["automaticRegisterReview"] = automaticRegisterReview, ["midiOutputDevice"] = player.OutputDevice, ["dialogueSourceSlots"] = new JsonArray(dialogueSourceSlots.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()), ["splitBeats"] = splitBeats.Checked,
                 ["measures"] = measures.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text, ["ensemble"] = ensemble.Text };
             AtomicFile.WriteText(Path.Combine(dataDirectory, "workspace.json"), state.ToJsonString());
         }

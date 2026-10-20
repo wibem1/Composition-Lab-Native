@@ -31,11 +31,11 @@ internal sealed partial class MainForm
                 .First(t => (t["pg"]?.GetValue<int>() ?? -1) is >= 0 and <= 7)["nt"]!.AsArray();
             for (int i = 0; i < 5; i++)
                 pianoNotes.Add(new JsonArray(16d + i, 1d, 96d + i, 80d, 0d, 1d));
-            if (RegisterIssues(highPiano, good).Count == 0)
+            if ((await RegisterIssuesAsync(highPiano, good)).Count == 0)
                 throw new Exception("Hohe Klavierpassagen innerhalb C7–E7 wurden übersehen.");
             var highStrings = highPiano.DeepClone().AsObject();
             highStrings["tr"]![0]!["pg"] = 40;
-            if (RegisterIssues(highStrings, good).Count == 0)
+            if ((await RegisterIssuesAsync(highStrings, good)).Count == 0)
                 throw new Exception("Auffällige hohe Streicherpassagen wurden übersehen.");
             forceRegisterReview = true;
             var fixedResult = await CompileCheckedCompositionAsync(bad, source, CancellationToken.None);

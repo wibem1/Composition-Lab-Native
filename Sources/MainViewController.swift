@@ -75,6 +75,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     // V6: zehn gleichberechtigte Stück-/Varianten-Slots.
     private var pieceSlots: [HistoryItem?] = [HistoryItem?](repeating: nil, count: 10)
     private var activePieceSlot: Int = 0
+    private var scoreUndo: [(slot: Int, item: HistoryItem)] = []
+    private var scoreRedo: [(slot: Int, item: HistoryItem)] = []
     private var pendingCompositionSlot: Int?
     private var slotSelectionLoad = false
     private var mainPieceSlotButtons: [NSButton] = []
@@ -2385,6 +2387,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 case .success(.some(let work)):
                     var updated = metadata
                     for (key, value) in work.metadata { updated[key] = value }
+                    self.saveScoreUndoSnapshot()
                     self.install(score: work.score, concept: original, provider: p, model: m, addHistory: false,
                         costUSD: self.lastCostUSD, inputTokens: self.lastInputTokens, outputTokens: self.lastOutputTokens, metadata: updated)
                     self.conceptView.string = text
@@ -2395,6 +2398,83 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                         "composition": text, "lastValidSource": { if case .string(let applied)? = metadata["lilyPondSource"] { return applied }; return original }(),
                         "error": error.localizedDescription, "conversionAICalls": 0]
                     self.status(error.localizedDescription, good: false)
+                }
+            }
+        }
+    }
+
+    private func saveScoreUndoSnapshot() {
+        guard let item = pieceSlots[activePieceSlot] else { return }
+        scoreUndo.append((activePieceSlot, item))
+        if scoreUndo.count > 25 { scoreUndo.removeFirst(scoreUndo.count - 25) }
+        scoreRedo.removeAll()
+    }
+
+    @objc func menuUndoScore() { restoreScoreRevision(redo: false) }
+    @objc func menuRedoScore() { restoreScoreRevision(redo: true) }
+    private func restoreScoreRevision(redo: Bool) {
+        guard !nativeRequestInFlight else { status("Bitte die laufende Anfrage abwarten.", good: false); return }
+        guard let entry = redo ? scoreRedo.last : scoreUndo.last else { status("Keine weitere Partituränderung vorhanden.", good: true); return }
+        guard pieceSlots.indices.contains(entry.slot), let current = pieceSlots[entry.slot], current.id == entry.item.id else {
+            if redo { scoreRedo.removeLast() } else { scoreUndo.removeLast() }
+            status("Das ursprüngliche Stück ist nicht mehr vorhanden.", good: false); return
+        }
+        captureCurrentInActiveSlot()
+        if redo { scoreRedo.removeLast(); scoreUndo.append((entry.slot, current)) }
+        else { scoreUndo.removeLast(); scoreRedo.append((entry.slot, current)) }
+        activePieceSlot = entry.slot
+        pieceSlots[entry.slot] = entry.item
+        let item = entry.item
+        install(score: item.score, concept: item.concept, provider: item.provider, model: item.model,
+            addHistory: false, costUSD: item.costUSD, inputTokens: item.inputTokens, outputTokens: item.outputTokens, metadata: item.extraFields)
+        if case .string(let assignment)? = item.extraFields["assignment"] { promptView.string = assignment }
+        v309SaveSessionMemory()
+        status(redo ? "Partituränderung wiederhergestellt." : "Partituränderung rückgängig gemacht.", good: true)
+    }
+
+    @objc func menuReviewRegisters() {
+        guard !nativeRequestInFlight, lastScore != nil else { status("Bitte ein Stück laden und die laufende Anfrage abwarten.", good: false); return }
+        let source = conceptView.string, generation = nativeWorkspaceGeneration
+        let slot = activePieceSlot, original = lastConcept, metadata = lastPortableMetadata
+        let p = provider, m = model, e = effort
+        var key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if key.isEmpty { key = SessionSecrets.shared.key(for: p) }
+        let apiKey = key
+        nativeRequestInFlight = true
+        status("Oktavlagen werden geprüft …", good: true)
+        NativeRegisterRepairService(compiler: localCompiler).repair(source: source, transport: { instruction, done in
+            guard !apiKey.isEmpty else { done(.failure(APIError.badResponse("Für die ausdrücklich angeforderte Oktavkorrektur fehlt der API-Schlüssel."))); return }
+            do {
+                let request = try JSONSerialization.data(withJSONObject: ["assignment": instruction, "provider": p.rawValue, "model": m, "effort": e.rawValue])
+                CoreServices.chat(requestJSON: request, apiKey: apiKey) { result in
+                    DispatchQueue.main.async {
+                        if case .success(let data) = result, let diagnostic = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                            self.lastDiagnostic = diagnostic
+                        }
+                        done(result)
+                    }
+                }
+            } catch { done(.failure(error)) }
+        }) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.nativeRequestInFlight = false
+                guard self.nativeWorkspaceGeneration == generation, self.activePieceSlot == slot, self.conceptView.string == source else { return }
+                switch result {
+                case .success(let work):
+                    var updated = metadata
+                    for (key, value) in work.metadata { updated[key] = value }
+                    self.saveScoreUndoSnapshot()
+                    var cost = self.lastCostUSD, input = self.lastInputTokens, output = self.lastOutputTokens
+                    if case .object(let review)? = work.metadata["octaveReview"], case .object(let response)? = review["response"] {
+                        if case .number(let n)? = response["estimatedCostUSD"] { cost += n }
+                        if case .number(let n)? = response["inputTokens"] { input += Int(n) }
+                        if case .number(let n)? = response["outputTokens"] { output += Int(n) }
+                    }
+                    self.install(score: work.score, concept: original, provider: p, model: m, addHistory: false,
+                        costUSD: cost, inputTokens: input, outputTokens: output, metadata: updated)
+                    self.status("Oktavprüfung abgeschlossen. Original bleibt erhalten.", good: true)
+                case .failure(let error): self.status(error.localizedDescription + " Letzte gültige Fassung bleibt erhalten.", good: false)
                 }
             }
         }
@@ -2779,7 +2859,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 }
             case .success(let response):
                 do {
-                    let data = try APIClient.shared.extractJSON(response.text)
+                    let data = try WorkspaceDialogue.decode(response.text)
                     let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
                     let reply = object["reply"] as? String ?? "Bearbeitung abgeschlossen."
                     let concept = (object["concept"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2844,33 +2924,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         chatInput.stringValue = ""
 
         let workspace = musicChatWorkspaceContext()
-        let dialoguePrompt = """
-        Du bist der musikalische Gesprächspartner im MusicChat von Composition Lab.
-        Dieser Aufruf dient ausschließlich Gespräch und Ideenarbeit; er erzeugt keine Partitur.
-
-        Der ARBEITSRAUM ist Gedächtnis und Orientierung, nicht automatisch musikalisches Ausgangsmaterial.
-        Vorhandene Slots oder eine frühere Kompositionsidee werden nur dann zu Material, wenn der aktuelle
-        Nutzerwunsch erkennbar darauf Bezug nimmt. sourceSlots nennt ausschließlich solche tatsächlich
-        gewünschten Quellen. Bei einem neuen Kompositionsvorhaben entwickelst du die Idee aus dem aktuellen
-        Nutzerwunsch und den ausdrücklich gesetzten Rahmenbedingungen.
-
-        Antworte ausschließlich als JSON:
-        {
-          "reply":"natürliche Dialogantwort",
-          "compositionAssignment": null ODER "aktueller Kompositionsauftrag",
-          "compositionIdea": null ODER "aktuelle musikalische Vorstellung",
-          "sourceSlots":[1,2],
-          "resolvedSettings":{"measures":"4","meter":"4/4","tempo":null,"key":"d-Moll","ensemble":"Klavier"}
-        }
-        Gib resolvedSettings nur für im aktuellen Nutzerwunsch ausdrücklich genannte Werte zurück; sonst null.
-        Ein neuer Kompositionsauftrag darf alte Einstellungen nicht stillschweigend übernehmen, wenn sie ihm widersprechen.
-
-        ARBEITSRAUM:
-        \(workspace)
-
-        AKTUELLER NUTZERBEITRAG:
-        \(msg)
-        """
+        let dialoguePrompt = WorkspaceDialogue.prompt(message: msg, workspace: workspace)
 
         lastDiagnostic = [
             "format": "composition-lab-native-diagnostic",
@@ -2883,6 +2937,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             "workspaceContext": workspace,
             "dialoguePrompt": dialoguePrompt
         ]
+        nativeRequestInFlight = true
         status("KI denkt im MusicChat mit …", good: true)
 
         APIClient.shared.call(provider: p, model: m, key: key, effort: e,
@@ -2892,6 +2947,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             switch result {
             case .failure(let error):
                 DispatchQueue.main.async {
+                    self?.nativeRequestInFlight = false
                     if var d = self?.lastDiagnostic {
                         d["stage"] = "dialogue-failed"
                         d["error"] = error.localizedDescription
@@ -2903,7 +2959,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
             case .success(let response):
                 do {
-                    let data = try APIClient.shared.extractJSON(response.text)
+                    let data = try WorkspaceDialogue.decode(response.text)
                     let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
                     let reply = (object["reply"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                     let assignment = (object["compositionAssignment"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2932,6 +2988,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
                     DispatchQueue.main.async {
                         guard let self else { return }
+                        self.nativeRequestInFlight = false
                         let answer = (reply?.isEmpty == false) ? reply! : "Ich habe den musikalischen Zusammenhang aufgenommen."
                         self.appendChat(p.displayName, answer)
 
@@ -2949,7 +3006,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                         }
                         if let idea, !idea.isEmpty {
                             self.conceptView.string = idea
-                            self.lastConcept = idea
+                            // Planning is a draft; retain the accepted score original.
                         }
                         if assignment?.isEmpty == false || idea?.isEmpty == false {
                             self.musicChatCompositionContextOverride = self.musicChatSourceMaterial(sourceSlots)
@@ -2976,6 +3033,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                     }
                 } catch {
                     DispatchQueue.main.async {
+                        self?.nativeRequestInFlight = false
                         if var d = self?.lastDiagnostic {
                             d["stage"] = "dialogue-decode-failed"
                             d["rawResponse"] = response.text
@@ -4191,6 +4249,10 @@ extension MainViewController {
                                             try require(self.lastMidi != originalMidi, "Bearbeitung aktualisiert MIDI nicht.")
                                             try require(self.lastPortableMetadata["lilyPondSource"] == .string(edited), "Bearbeitete Quelle fehlt.")
                                             let validMidi = self.lastMidi
+                                            self.menuUndoScore()
+                                            try require(self.lastMidi == originalMidi, "Partitur-Undo stellt Original-MIDI nicht wieder her.")
+                                            self.menuRedoScore()
+                                            try require(self.lastMidi == validMidi, "Partitur-Redo stellt bearbeitetes MIDI nicht wieder her.")
                                             self.playerVolume.doubleValue = 0.5; self.playerTempoField.integerValue = 72
                                             self.reloadMainPlayerForPlaybackSettings(errorPrefix: "Test-Player")
                                             try require(self.lastMidi == validMidi, "Player-Einstellungen verändern das exportierbare Original-MIDI.")
@@ -4203,7 +4265,7 @@ extension MainViewController {
                                                     let restored = try JSONDecoder().decode(CompositionLabDocument.self, from: doc)
                                                     try require(restored.extraFields["lilyPondSource"] == .string(edited), "Mac-CLAB verliert angewendete Quelle.")
                                                     let report: [String: Any] = ["passed": true, "interface": "AppKit/WebKit", "offline": true,
-                                                        "checks": ["local-original", "duplicate-model-names", "svg-to-editor", "empty-slot", "source-edit", "invalid-edit-rollback", "failed-import-rollback", "clab-metadata", "original-midi", "playback-copy"]]
+                                                        "checks": ["local-original", "duplicate-model-names", "svg-to-editor", "empty-slot", "source-edit", "invalid-edit-rollback", "failed-import-rollback", "clab-metadata", "original-midi", "playback-copy", "score-undo-redo"]]
                                                     try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
                                                     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: output).appendingPathComponent("result.json"))
                                                     completion(nil)

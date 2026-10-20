@@ -260,8 +260,18 @@ internal sealed partial class MainForm
         row.Controls.Add(MacLabel("Tempo")); row.Controls.Add(transport.Tempo); row.Controls.Add(MacLabel("Lautstärke (Windows)")); row.Controls.Add(transport.Volume);
         transport.Loop.CheckedChanged += (_, _) => { loopPlaying = transport.Loop.Checked; foreach (var other in transports) if (other != transport) other.Loop.Checked = loopPlaying; };
         transport.Position.Scroll += (_, _) => { if (player.Loaded && !seekUpdating) { player.Seek(transport.Position.Value / 1000d); UpdateTransport(); } };
-        transport.Tempo.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter && int.TryParse(transport.Tempo.Text, out int bpm) && bpm is >= 20 and <= 400) { playerBpm = bpm; tempoOverride = true; if (player.Loaded) player.SetTempo(bpm); foreach (var other in transports) other.Tempo.Text = bpm.ToString(); e.SuppressKeyPress = true; } };
-        // MCI sequencer exposes no reliable per-app volume control. Avoid the blocking\n        // midiOutSetVolume system-driver call on the WinForms UI thread.\n        transport.Volume.Enabled = false;\n        transport.Volume.AccessibleDescription = "Unter Windows vom verwendeten MIDI-Treiber nicht unterstützt; Windows-Lautstärkemixer verwenden.";
+        transport.Tempo.KeyDown += async (_, e) => {
+            if (e.KeyCode != Keys.Enter || !int.TryParse(transport.Tempo.Text, out int bpm) || bpm is < 20 or > 400) return;
+            e.SuppressKeyPress = true; playerBpm = bpm; tempoOverride = true;
+            foreach (var other in transports) other.Tempo.Text = bpm.ToString();
+            try { await ReloadPlaybackCopyAsync(false); } catch (Exception error) { SetStatus(error.Message, true); }
+        };
+        transport.Volume.Scroll += async (_, _) => {
+            playerVolume = transport.Volume.Value;
+            foreach (var other in transports) if (other != transport) other.Volume.Value = playerVolume;
+            try { await ReloadPlaybackCopyAsync(false); } catch (Exception error) { SetStatus(error.Message, true); }
+        };
+        transport.Volume.AccessibleDescription = "Lautstärke der Wiedergabekopie; die exportierbare MIDI-Datei bleibt unverändert.";
         if (!notation) return row;
         // Native playback controls use three explicit rows. A wrapping FlowLayoutPanel
         // can report only its first row while its last slider is already on row two.
@@ -328,10 +338,27 @@ internal sealed partial class MainForm
         fixedPlayer.DpiChangedAfterParent += (_, _) => SizeFixedPlayer();
         SizeFixedPlayer(); return fixedPlayer;
     }
+    int playbackSettingsGeneration;
+    async Task ReloadPlaybackCopyAsync(bool start)
+    {
+        if (currentMidi == null) { if (start) throw new InvalidOperationException("Kein Stück geladen."); return; }
+        byte[] original = currentMidi;
+        int generation = ++playbackSettingsGeneration;
+        bool playing = player.Loaded && player.Mode == "playing";
+        double fraction = player.Loaded && player.Length > 0 ? (double)player.Position / player.Length : 0;
+        var request = new JsonObject { ["operation"] = "playback-midi", ["data"] = Convert.ToBase64String(original), ["velocityFactor"] = playerVolume / 100d };
+        if (tempoOverride && playerBpm > 0) request["targetBPM"] = playerBpm;
+        var result = await core.RunAsync(request);
+        if (IsDisposed || generation != playbackSettingsGeneration || !ReferenceEquals(original, currentMidi)) return;
+        player.Load(Convert.FromBase64String(result["data"]!.GetValue<string>()));
+        if (fraction > 0) player.Seek(fraction);
+        if (start || playing) player.Play();
+        UpdateTransport();
+    }
     async Task PlayAsync()
     {
-        if (currentMidi == null) throw new InvalidOperationException("Kein Stück geladen.");
-        if (!player.Loaded) player.Load(currentMidi); if (tempoOverride && playerBpm > 0) player.SetTempo(playerBpm); player.Play(); await Task.CompletedTask;
+        if (player.Loaded) { player.Play(); return; }
+        await ReloadPlaybackCopyAsync(true);
     }
     void UpdateTransport()
     {
@@ -520,7 +547,6 @@ internal sealed partial class MainForm
         ShowKeyDialog(this);
         return Task.CompletedTask;
     }
-    Task ShowMidiOutput() { MessageBox.Show(this, "Windows-General-MIDI über den System-Synthesizer.\n\nDie Mac-Auswahl von Soundfonts und direkten MIDI-Ausgängen ist noch nicht unter Windows portiert. Player, Tempo, Position und Loop stehen zur Verfügung; Lautstärke hängt vom Treiber ab.", "MIDI-Ausgabe", MessageBoxButtons.OK, MessageBoxIcon.Information); return Task.CompletedTask; }
     Task SaveScoreJSON() { if (Score == null) throw new InvalidOperationException("Kein Stück geladen."); using var dialog = new SaveFileDialog { Filter = "JSON|*.json", FileName = SafeName(Current?["title"]?.GetValue<string>() ?? "Partitur") + ".json" }; if (dialog.ShowDialog(this) == DialogResult.OK) AtomicFile.WriteText(dialog.FileName, Score.ToJsonString(new JsonSerializerOptions { WriteIndented = true })); return Task.CompletedTask; }
     MenuStrip BuildMacMenus()
     {
