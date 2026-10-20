@@ -2,7 +2,7 @@ name: LilyPond standalone start probe
 on:
   push:
     branches: [v4-cross-platform]
-    paths: ['Windows/LilyPond-Starttest.cmd', '.github/workflows/lilypond-starttest.yml']
+    paths: ['Windows/LilyPond-Starttest.cmd', 'Windows/LilyPond-Starttest-2.cmd', '.github/workflows/lilypond-starttest.yml']
 permissions:
   contents: read
 jobs:
@@ -21,11 +21,11 @@ jobs:
         shell: cmd
         env:
           CLAB_PROBE_NO_PAUSE: '1'
-        run: Windows\LilyPond-Starttest.cmd
+        run: Windows\LilyPond-Starttest-2.cmd
       - name: Verify startup and tiny score output
         shell: pwsh
         run: |
-          $file = Get-ChildItem Windows/LilyPond-Starttest-*.json | Select-Object -First 1
+          $file = Get-ChildItem Windows/LilyPond-Starttest-2-*.json | Select-Object -First 1
           $report = Get-Content $file -Raw | ConvertFrom-Json
           Get-Content $file
           if ($report.error -or $report.probes.Count -ne 2 -or $report.svgCount -lt 1 -or $report.midiCount -lt 1) { throw 'Probe failed' }
