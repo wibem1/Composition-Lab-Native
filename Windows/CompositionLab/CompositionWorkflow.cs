@@ -29,7 +29,7 @@ internal sealed partial class MainForm
         string selectedProvider = activeProvider, selectedModel = SelectedModelId;
         try
         {
-            StoreKey(); pending = new CancellationTokenSource(); SetBusy(true);
+            pending = new CancellationTokenSource(); SetBusy(true);
             if (makeMusic)
             {
                 var built = await core.RunAsync(new JsonObject { ["operation"] = "build-assignment", ["assignment"] = instruction, ["chatInput"] = chatInput.Text, ["idea"] = composition.Text, ["source"] = compositionReference?.DeepClone(),
@@ -54,6 +54,7 @@ internal sealed partial class MainForm
                 if (string.IsNullOrWhiteSpace(apiKey.Text)) { SetStatus("Bitte API-Schlüssel eingeben.", true); return; }
                 request["assignment"] = built["assignment"]!.GetValue<string>() + DialogueSourceMaterial();
             }
+            StoreKey();
             chat.AppendText("Du: " + userText + "\n\n");
             SetStatus(makeMusic ? "KI komponiert …" : "KI antwortet …");
             var response = await core.RunAsync(new JsonObject { ["operation"] = makeMusic ? "compose-source" : "chat",

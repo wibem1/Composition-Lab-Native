@@ -433,9 +433,11 @@ internal sealed partial class MainForm : Form
         string preservedPiece = documents[0]!.ToJsonString();
         string finishedDuo = "\\version \"2.24.0\"\n\\score { << \\new Staff { \\set Staff.midiInstrument = \"violin\" c''4 d'' e'' f'' } \\new PianoStaff << \\new Staff { g'4 a' b' c'' } \\new Staff { \\clef bass c4 d e f } >> >> \\layout {} \\midi {} }";
         composition.Text = finishedDuo; chatInput.Clear(); ensemble.Text = "Klavier"; apiKey.Clear();
+        sessionKeys[activeProvider] = "OFFLINE-LOCAL-IMPORT-KEY";
         int localDestination = documents.FirstFreeIndex();
         await RequestAIAsync(true);
-        if (documents[localDestination]?["concept"]?.GetValue<string>() != finishedDuo ||
+        if (sessionKeys.GetValueOrDefault(activeProvider) != "OFFLINE-LOCAL-IMPORT-KEY" ||
+            documents[localDestination]?["concept"]?.GetValue<string>() != finishedDuo ||
             documents[localDestination]?["score"]?["tr"]?.AsArray().Sum(t => t!["nt"]!.AsArray().Count) != 12 ||
             lastDiagnostic?["compositionAICalls"]?.GetValue<int>() != 0 || documents[0]!.ToJsonString() != preservedPiece)
             throw new Exception("Fertige Violin-/Klavierpartitur nicht unverändert ohne API-Key lokal übernommen.");
