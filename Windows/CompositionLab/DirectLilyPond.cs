@@ -90,6 +90,7 @@ internal sealed partial class MainForm
             ["estimatedCostUSD"] = source["estimatedCostUSD"]?.DeepClone() ?? JsonValue.Create(0d),
             ["sourceDiagnostic"] = source.DeepClone()
         };
+        if (source["compositionAICalls"] != null) result["compositionAICalls"] = source["compositionAICalls"]!.DeepClone();
         if (updateDiagnostic) { lastDiagnostic = result.DeepClone().AsObject(); UpdateDiagnostic(); }
         return result;
     }

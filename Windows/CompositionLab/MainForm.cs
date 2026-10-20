@@ -436,11 +436,16 @@ internal sealed partial class MainForm : Form
         sessionKeys[activeProvider] = "OFFLINE-LOCAL-IMPORT-KEY";
         int localDestination = documents.FirstFreeIndex();
         await RequestAIAsync(true);
-        if (sessionKeys.GetValueOrDefault(activeProvider) != "OFFLINE-LOCAL-IMPORT-KEY" ||
-            documents[localDestination]?["concept"]?.GetValue<string>() != finishedDuo ||
-            documents[localDestination]?["score"]?["tr"]?.AsArray().Sum(t => t!["nt"]!.AsArray().Count) != 12 ||
-            lastDiagnostic?["compositionAICalls"]?.GetValue<int>() != 0 || documents[0]!.ToJsonString() != preservedPiece)
-            throw new Exception("Fertige Violin-/Klavierpartitur nicht unverändert ohne API-Key lokal übernommen.");
+        if (sessionKeys.GetValueOrDefault(activeProvider) != "OFFLINE-LOCAL-IMPORT-KEY")
+            throw new Exception("Lokale Übernahme verändert Zugangsdaten.");
+        if (documents[localDestination]?["concept"]?.GetValue<string>() != finishedDuo)
+            throw new Exception("Lokale Übernahme verliert den Originaltext: " + lastDiagnostic?.ToJsonString());
+        if (documents[localDestination]?["score"]?["tr"]?.AsArray().Sum(t => t!["nt"]!.AsArray().Count) != 12)
+            throw new Exception("Lokale Violin-/Klavierpartitur verliert Noten.");
+        if (lastDiagnostic?["compositionAICalls"]?.GetValue<int>() != 0)
+            throw new Exception("Diagnose verliert den Nachweis der lokalen Übernahme ohne KI-Aufruf.");
+        if (documents[0]!.ToJsonString() != preservedPiece)
+            throw new Exception("Lokale Übernahme verändert das vorherige Stück.");
         // Synthetic demo music for visual QA; no user composition or real API call.
         documents[0] = CreateDocument(fixture.DeepClone().AsObject(), "Elegie im Abendlicht\n\n" + lily, "Ein ruhiges Klavierstück mit einer klaren musikalischen Idee.");
         documents[0]!["title"] = "Elegie im Abendlicht"; documents[0]!["ensemble"] = "Klavier";
