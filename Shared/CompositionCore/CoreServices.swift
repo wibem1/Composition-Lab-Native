@@ -10,7 +10,7 @@ public final class CoreRequestHandle {
 /// Small public boundary for desktop clients. JSON preserves the existing score
 /// and CLAB wire format; AppKit and Windows APIs never enter this module.
 public enum CoreServices {
-    public static let version = "4.2.1"
+    public static let version = "4.2.2"
 
     /// Stateless catalog boundary. State contains model metadata and cursors,
     /// never keys; adapters supply a provider response only after HTTP success.
@@ -223,12 +223,18 @@ public enum CoreServices {
                             completion: @escaping (Result<Data, Error>) -> Void) -> CoreRequestHandle {
         let client = APIClient()
         let handle = CoreRequestHandle(client: client)
+        performChat(requestJSON: requestJSON, apiKey: apiKey, compositionOnly: compositionOnly, client: client, completion: completion)
+        return handle
+    }
+
+    static func performChat(requestJSON: Data, apiKey: String, compositionOnly: Bool,
+                            client: AIRequesting, completion: @escaping (Result<Data, Error>) -> Void) {
         do {
             let dto = try JSONDecoder().decode(RequestDTO.self, from: requestJSON)
             guard !dto.assignment.isEmpty, !apiKey.isEmpty else { throw APIError.emptyResponse }
             let options = try JSONSerialization.jsonObject(with: requestJSON) as? [String: Any] ?? [:]
             let dialogue = !compositionOnly && options["mode"] as? String == "dialogue"
-            let prompt = dialogue ? WorkspaceDialogue.prompt(message: dto.assignment, workspace: options["workspace"] as? String ?? "{}") : dto.assignment
+            let prompt = compositionOnly ? ComposerPrompts.nativeCompositionPrompt(dto.assignment) : dialogue ? WorkspaceDialogue.prompt(message: dto.assignment, workspace: options["workspace"] as? String ?? "{}") : dto.assignment
             client.call(provider: dto.provider, model: dto.model, key: apiKey,
                 effort: dto.effort, purpose: compositionOnly ? "composition" : "music-chat", system: ComposerPrompts.system, user: prompt,
                 wantJSON: dialogue) { result in
@@ -240,16 +246,18 @@ public enum CoreServices {
                     if dialogue { diagnostic["dialogue"] = try JSONSerialization.jsonObject(with: WorkspaceDialogue.decode(response.text)) }
                     if compositionOnly {
                         diagnostic["composition"] = response.text
-                        diagnostic["compositionPrompt"] = dto.assignment
+                        diagnostic["compositionPrompt"] = prompt
+                        diagnostic["requestedOutputFormat"] = "lilypond"
                         diagnostic["engineBuild"] = ComposerPrompts.engineBuild
                         diagnostic["engineVersion"] = ComposerPrompts.referenceVersion
-                        diagnostic["stage"] = "composition-completed"
+                        let interpreted = (try? JSONSerialization.jsonObject(with: interpretComposition(response.text))) as? [String: Any] ?? ["kind": "unrecognized"]
+                        diagnostic["outputFormat"] = interpreted["kind"]
+                        diagnostic["stage"] = interpreted["kind"] as? String == "unrecognized" ? "composition-output-unrecognized" : "composition-completed"
                     }
                     return try JSONSerialization.data(withJSONObject: diagnostic)
                 } })
             }
         } catch { completion(.failure(error)) }
-        return handle
     }
 
     private struct RequestDTO: Decodable {

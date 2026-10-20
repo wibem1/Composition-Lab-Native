@@ -198,6 +198,11 @@ enum ComposerPrompts {
 
     static let system = ""
 
+    /// Native apps engrave locally. This is an output contract, not a musical strategy.
+    static func nativeCompositionPrompt(_ assignment: String) -> String {
+        assignment + "\n\nAUSGABEFORMAT DER ANWENDUNG:\nGib die vollständige fertige Komposition als eigenständig kompilierbaren LilyPond-Quelltext in genau einem ```lilypond-Codeblock aus. Verwende LilyPond 2.24-kompatible Notation mit \\version, einem vollständigen \\score und darin \\layout {} sowie \\midi {}. Notiere alle verlangten Instrumente und Stimmen vollständig und gleichzeitig in dieser Partitur. Setze Titel, Tempo und die zur Wiedergabe passenden midiInstrument-Angaben im Quelltext. Keine externen Dateien, keine Include-Anweisungen und keine eigenen Scheme-Funktionen. Kein ABC, kein MusicXML, kein JSON und keine Platzhalter. Der musikalische Auftrag oben bleibt maßgeblich; diese Ergänzung bestimmt ausschließlich das Ausgabeformat."
+    }
+
     static func compositionPrompt(_ assignment: String) -> String {
         """
         Komponiere jetzt das verlangte Stück vollständig. Erzeuge die Musik selbst – keinen Entwurf, keinen Formplan, kein Konzept, keine Klangbeschreibung und keine Erläuterung darüber, wie das Stück später komponiert werden könnte. Triff die musikalischen Entscheidungen unmittelbar in der Komposition: konkrete Stimmen, Tonhöhen, Dauern, Rhythmus, Harmonik, Artikulation, Dynamik und Verlauf. Die Komposition muss so vollständig und eindeutig notiert sein, dass eine nachfolgende technische Instanz sie ohne eigene musikalische Entscheidungen lediglich übertragen kann. Gib der fertigen Komposition einen kurzen Werktitel und, soweit musikalisch bestimmbar, Tonart und Tempo an. Denke nicht an MIDI-Codierung, QN-Werte, CS-Zeilen oder das technische Zielformat. Keine Analyse und keine Beschreibung der Arbeitsweise.

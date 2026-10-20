@@ -3,6 +3,46 @@ import XCTest
 @testable import CompositionCore
 
 final class CoreTests: XCTestCase {
+    func testNativeCreativeRequestRequiresLilyPondForEveryProviderAndPreservesAssignment() throws {
+        let assignment = "Pastorale für Violine und Violoncello im 6/8-Takt."
+        let music = "```lilypond\n\\version \"2.24.3\"\n\\score { << \\new Staff { c''4 } \\new Staff { c4 } >> \\layout {} \\midi {} }\n```"
+        for provider in Provider.allCases {
+            let client = FakeAI([.success(LLMResponse(text: music, inputTokens: 10, outputTokens: 20))])
+            let request = try JSONSerialization.data(withJSONObject: ["assignment": assignment, "provider": provider.rawValue, "model": "offline-model", "effort": "medium"])
+            var captured: Result<Data, Error>?
+            CoreServices.performChat(requestJSON: request, apiKey: "OFFLINE", compositionOnly: true, client: client) { captured = $0 }
+            let diagnostic = try JSONSerialization.jsonObject(with: XCTUnwrap(captured).get()) as! [String: Any]
+            XCTAssertEqual(client.calls.count, 1)
+            XCTAssertTrue(client.calls[0].user.hasPrefix(assignment))
+            XCTAssertTrue(client.calls[0].user.contains("LilyPond 2.24"))
+            XCTAssertTrue(client.calls[0].user.contains("Kein ABC"))
+            XCTAssertEqual(diagnostic["assignment"] as? String, assignment)
+            XCTAssertEqual(diagnostic["sentUserPrompt"] as? String, client.calls[0].user)
+            XCTAssertEqual(diagnostic["compositionPrompt"] as? String, client.calls[0].user)
+            XCTAssertEqual(diagnostic["requestedOutputFormat"] as? String, "lilypond")
+            XCTAssertEqual(diagnostic["composition"] as? String, music)
+            let interpretation = try JSONSerialization.jsonObject(with: CoreServices.interpretComposition(music)) as! [String: Any]
+            XCTAssertEqual(interpretation["kind"] as? String, "lilypond")
+            XCTAssertTrue(try CoreServices.prepareLilyPond(interpretation["source"] as! String).contains("\\midi"))
+        }
+    }
+    func testUnsupportedABCResponseIsPreservedAndMarkedWithoutAnotherRequest() throws {
+        let abc = "```abc\nX:1\nT:Pastorale\nM:6/8\nL:1/8\nK:F\nF6|]\n```"
+        let client = FakeAI([.success(LLMResponse(text: abc, inputTokens: 10, outputTokens: 20))])
+        let request = try JSONSerialization.data(withJSONObject: ["assignment": "Pastorale", "provider": "gemini", "model": "offline", "effort": "medium"])
+        var captured: Result<Data, Error>?
+        CoreServices.performChat(requestJSON: request, apiKey: "OFFLINE", compositionOnly: true, client: client) { captured = $0 }
+        let diagnostic = try JSONSerialization.jsonObject(with: XCTUnwrap(captured).get()) as! [String: Any]
+        XCTAssertEqual(diagnostic["stage"] as? String, "composition-output-unrecognized")
+        XCTAssertEqual(diagnostic["composition"] as? String, abc)
+        XCTAssertEqual(client.calls.count, 1)
+    }
+    func testOrdinaryChatDoesNotReceiveCompositionFormatInstructions() throws {
+        let client = FakeAI([.success(LLMResponse(text: "Antwort", inputTokens: 1, outputTokens: 1))])
+        let request = try JSONSerialization.data(withJSONObject: ["assignment": "Erkläre einen Kanon", "provider": "gemini", "model": "offline", "effort": "medium"])
+        CoreServices.performChat(requestJSON: request, apiKey: "OFFLINE", compositionOnly: false, client: client) { _ in }
+        XCTAssertEqual(client.calls[0].user, "Erkläre einen Kanon")
+    }
     private func score() -> Score {
         Score(ti: "Über die Grenze", bpm: 96, ts: TimeSignature(n: 4, d: 4), k: "C major",
               sm: "", tr: [Track(nm: "Piano", ch: 0, pg: 0,

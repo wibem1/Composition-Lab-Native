@@ -20,8 +20,8 @@ internal sealed partial class MainForm
             if (destination < 0) { SetStatus("Alle zehn Slots sind belegt. Bitte zuerst ein Stück speichern und einen Slot leeren.", true); return; }
         }
         string userText = inputText.Trim();
-        // V4.11: The user's assignment is transmitted verbatim. No hidden
-        // orchestration prompt, prior chat, pitch instructions or form constraints.
+        // Preserve the musical assignment. The shared native request adds only
+        // the LilyPond output contract; the exact sent prompt is diagnostic data.
         string instruction = userText;
         var request = new JsonObject { ["assignment"] = instruction, ["provider"] = activeProvider,
             ["model"] = SelectedModelId, ["effort"] = effort.SelectedIndex switch { 0 => "low", 2 => "high", _ => "medium" } };
