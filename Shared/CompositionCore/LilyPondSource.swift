@@ -27,7 +27,9 @@ enum LilyPondSource {
     }
     static func prepare(_ source: String) throws -> String {
         let notation = try maskedNotation(source)
-        let allowed = try NSRegularExpression(pattern: #"##[tf]\b|#\(set-global-staff-size\s+\d+(?:\.\d+)?\s*\)"#)
+        // Permit only literal duration constructors used by notation spacing.
+        // No nested calls, symbols, or arbitrary Scheme evaluation.
+        let allowed = try NSRegularExpression(pattern: #"##[tf]\b|#\(set-global-staff-size\s+\d+(?:\.\d+)?\s*\)|#\(ly:make-moment\s+[0-9]+(?:/[1-9][0-9]*|\s+[1-9][0-9]*)\s*\)"#)
         let checked = allowed.stringByReplacingMatches(in: notation, range: NSRange(location: 0, length: (notation as NSString).length), withTemplate: " ")
         guard match(#"\\(?:include|includeSpecial|bookOutputName|bookOutputSuffix|applyContext|applyOutput|displayScheme|scheme|load)\b|\$|#(?!#[tf]\b|[-+]?\d+(?:\.\d+)?)"#, in: checked) == nil else {
             throw APIError.badResponse("Die LilyPond-Datei enthält externe Dateien, veränderte Ausgabepfade oder ausführbare Scheme-Ausdrücke. Für die direkte Ausgabe bitte reine Notation verwenden.")

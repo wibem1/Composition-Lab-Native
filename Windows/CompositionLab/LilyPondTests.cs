@@ -40,6 +40,15 @@ internal sealed partial class MainForm
             if (!failed) throw new Exception("Ausführbarer LilyPond-Code wird nicht abgefangen.");
         }
         if (await LilyPondCompiler.PrepareAsync(source) != source) throw new Exception("Vollständiger LilyPond-Code wurde verändert.");
+        // Regression for the real Pastorale diagnostic: literal spacing moments
+        // must reach the bundled engraver without a second model request.
+        string pastoralePath = Path.Combine(Path.GetDirectoryName(Environment.GetEnvironmentVariable("COMPOSITION_LAB_BACKUP_FIXTURE"))!, "pastorale-violin-cello.ly");
+        string pastorale = await File.ReadAllTextAsync(pastoralePath);
+        if (await LilyPondCompiler.PrepareAsync(pastorale) != pastorale)
+            throw new Exception("Pastorale-Original wird durch die Quellprüfung verändert.");
+        var pastoraleOutput = await Engraver.CompileAsync(pastorale);
+        if (pastoraleOutput.Pages.Length == 0 || pastoraleOutput.Midi.Length < 14)
+            throw new Exception("Pastorale wird nicht als Noten und MIDI ausgegeben.");
         var generated = await Engraver.CompileAsync(source);
         if (generated.Cached || generated.Pages.Length != 2) throw new Exception("Originalnoten werden nicht vollständig in zwei Seiten gesetzt.");
         // V4.13: SVG notation must retain the source references required

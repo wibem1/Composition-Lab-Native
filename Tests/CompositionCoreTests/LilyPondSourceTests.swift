@@ -19,6 +19,21 @@ final class LilyPondSourceTests: XCTestCase {
             XCTAssertThrowsError(try LilyPondSource.prepare(source))
         }
     }
+    func testPastoraleDiagnosticAcceptsLiteralSpacingMomentUnchanged() throws {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "pastorale-violin-cello", withExtension: "ly", subdirectory: "Fixtures"))
+        let source = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(source.contains("#(ly:make-moment 1/16)"))
+        XCTAssertEqual(try LilyPondSource.prepare(source), source)
+        XCTAssertEqual(try LilyPondSource.prepare(source.replacingOccurrences(of: "1/16)", with: "1 16)")),
+                       source.replacingOccurrences(of: "1/16)", with: "1 16)"))
+    }
+    func testSpacingMomentDoesNotAllowExecutableArguments() throws {
+        for expression in ["#(ly:make-moment (system \"anything\") 16)",
+                           "#(ly:make-moment 1/0)", "#(ly:make-moment 1 0)",
+                           "#(ly:make-moment 1/16 extra)", "#(ly:make-moment 1/16) #(system \"anything\")"] {
+            XCTAssertThrowsError(try LilyPondSource.prepare("\\score { { c'4 } \\layout {} \\midi {} } " + expression))
+        }
+    }
     func testSharedSelectionNormalizesOnlyLineEndings() throws {
         let source = "c'4 d'4\r\n<e' g'>2\r\n"
         let editor = source.replacingOccurrences(of: "\r\n", with: "\n")
