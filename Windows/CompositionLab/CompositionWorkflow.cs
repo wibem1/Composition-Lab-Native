@@ -88,7 +88,7 @@ internal sealed partial class MainForm
                 AcceptDialogue(result);
             }
             cost.Text = "Anfrage ca. $" + result["estimatedCostUSD"]!.GetValue<double>().ToString("0.0000");
-            SetMusicStatus(result, makeMusic ? "Komposition abgeschlossen." : "Antwort erhalten."); SaveLocalState();
+            SetMusicStatus(result, makeMusic ? "Komposition abgeschlossen." : "Chat-Antwort erhalten. Für die Partitur: Mit gewählter KI komponieren."); SaveLocalState();
         }
         catch (OperationCanceledException) { SetStatus("Anfrage lokal abgebrochen."); }
         catch (CoreRequestException e)
@@ -186,7 +186,7 @@ internal sealed partial class MainForm
         if (modelsButton != null) modelsButton.Enabled = !value;
         provider.Enabled = !value; model.Enabled = !value; effort.Enabled = !value; apiKey.Enabled = !value;
         if (value) SetStatus("Bitte warten …");
-        else { status.ForeColor = Color.Black; SelectModel(); }
+        else { SelectModel(); RenderStatus(); }
     }
 
 }

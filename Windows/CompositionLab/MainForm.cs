@@ -306,7 +306,17 @@ internal sealed partial class MainForm : Form
         }
         catch (Exception e) { SetStatus("Speichern fehlgeschlagen: " + e.Message, true); }
     }
-    void SetStatus(string text, bool error = false) { status.Text = busy && !error ? "● KI arbeitet · " + text : text; status.ForeColor = error ? Color.DarkRed : busy ? Color.ForestGreen : Color.Black; }
+    string statusMessage = "";
+    bool statusIsError;
+    void SetStatus(string text, bool error = false)
+    {
+        statusMessage = text; statusIsError = error; RenderStatus();
+    }
+    void RenderStatus()
+    {
+        status.Text = busy && !statusIsError ? "● KI arbeitet · " + statusMessage : statusMessage;
+        status.ForeColor = statusIsError ? Color.DarkRed : busy ? Color.ForestGreen : Color.Black;
+    }
     static string FormatTime(int ms) => TimeSpan.FromMilliseconds(ms).ToString(@"mm\:ss");
     static string SafeName(string title) => string.Concat(title.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
     static string RepairLegacyText(string text)
@@ -324,6 +334,18 @@ internal sealed partial class MainForm : Form
     public async Task<string> RunSelfTestAsync(string output)
     {
         Directory.CreateDirectory(output);
+        // Terminal messages are set before RequestAIAsync's finally clears busy.
+        // The visible label and controls must settle together for every outcome.
+        foreach (var outcome in new[] {
+            (Text: "Antwort erhalten.", Error: false),
+            (Text: "Anfrage lokal abgebrochen.", Error: false),
+            (Text: "Original gespeichert; Notensatz fehlgeschlagen.", Error: true) })
+        {
+            SetBusy(true); SetStatus(outcome.Text, outcome.Error); SetBusy(false);
+            if (busy || status.Text != outcome.Text || !compose.Enabled || !send.Enabled || cancel.Enabled ||
+                status.ForeColor != (outcome.Error ? Color.DarkRed : Color.Black))
+                throw new Exception("Abgeschlossene Anfrage bleibt als aktiv markiert oder verliert ihre Fehleranzeige.");
+        }
         // Guard the intentionally compact V4.14 interface against button/menu duplication.
         var topMenus = MainMenuStrip?.Items.OfType<ToolStripMenuItem>().ToArray()
             ?? throw new Exception("V4.14-Menüleiste fehlt.");
@@ -442,6 +464,8 @@ internal sealed partial class MainForm : Form
             throw new Exception("Lokale Übernahme verliert den Originaltext: " + lastDiagnostic?.ToJsonString());
         if (documents[localDestination]?["score"]?["tr"]?.AsArray().Sum(t => t!["nt"]!.AsArray().Count) != 12)
             throw new Exception("Lokale Violin-/Klavierpartitur verliert Noten.");
+        if (busy || status.Text.StartsWith("● KI arbeitet", StringComparison.Ordinal) || !compose.Enabled || cancel.Enabled)
+            throw new Exception("Echter Komponieren-Ablauf beendet den sichtbaren Arbeitsstatus nicht.");
         if (lastDiagnostic?["compositionAICalls"]?.GetValue<int>() != 0)
             throw new Exception("Diagnose verliert den Nachweis der lokalen Übernahme ohne KI-Aufruf.");
         if (documents[0]!.ToJsonString() != preservedPiece)
@@ -679,7 +703,7 @@ internal sealed partial class MainForm : Form
         }
         }
         tabs.SelectedIndex = 0;
-        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "finished violin/piano notation Compose handler imports locally without key despite stale ensemble", "portable AES-GCM backup compatibility, wrong password rejection, native laboratories and exact stored MIDI bytes", "shared register detection; explicit bounded octave repair, unchanged music validation, costs and rejection", "edited LilyPond refresh updates notation, MIDI, export source and persisted score; syntax errors retain last valid output", "bundled LilyPond compiles original pickup score into MIDI and SVG locally, cache and source preserved, page/zoom and workspace roundtrip", "model picker opens immediately, key acceptance loads models, cached selection without key prompt, session keys survive provider changes, inline HTTP error and cancelled credentials", "complete provider model catalogs with paginated Anthropic and Gemini responses, future and specialized models, safe failure, deduplication and cache persistence", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily direct source handoff, long source and Unicode roundtrip without clipboard", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "piece-specific editable descriptions load on slot selection and save without altering original music", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches restore previous scroll position, splitter and controls at every DPI", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "terminal success, cancellation and error states settle label, color and buttons; actual Compose handler clears busy label", "finished violin/piano notation Compose handler imports locally without key despite stale ensemble", "portable AES-GCM backup compatibility, wrong password rejection, native laboratories and exact stored MIDI bytes", "shared register detection; explicit bounded octave repair, unchanged music validation, costs and rejection", "edited LilyPond refresh updates notation, MIDI, export source and persisted score; syntax errors retain last valid output", "bundled LilyPond compiles original pickup score into MIDI and SVG locally, cache and source preserved, page/zoom and workspace roundtrip", "model picker opens immediately, key acceptance loads models, cached selection without key prompt, session keys survive provider changes, inline HTTP error and cancelled credentials", "complete provider model catalogs with paginated Anthropic and Gemini responses, future and specialized models, safe failure, deduplication and cache persistence", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily direct source handoff, long source and Unicode roundtrip without clipboard", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "piece-specific editable descriptions load on slot selection and save without altering original music", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches restore previous scroll position, splitter and controls at every DPI", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
     }
     protected override void Dispose(bool disposing)
     {
