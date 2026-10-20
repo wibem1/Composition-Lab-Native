@@ -1,0 +1,37 @@
+name: LilyPond standalone start probe
+on:
+  push:
+    branches: [v4-cross-platform]
+    paths: ['Windows/LilyPond-Starttest.cmd', '.github/workflows/lilypond-starttest.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare original bundled LilyPond
+        shell: pwsh
+        run: |
+          Invoke-WebRequest 'https://gitlab.com/lilypond/lilypond/-/releases/v2.26.0/downloads/lilypond-2.26.0-mingw-x86_64.zip' -OutFile lilypond.zip
+          if ((Get-FileHash lilypond.zip -Algorithm SHA256).Hash -ne '14DDDDC233B469EF60D4FFC1C7F35520F15AC6B58E38CAB458C60BDCC3AF650C') { throw 'Checksum mismatch' }
+          Expand-Archive lilypond.zip Extracted
+          Move-Item Extracted/lilypond-2.26.0 Windows/LilyPond
+      - name: Execute exactly the user-facing CMD probe
+        shell: cmd
+        env:
+          CLAB_PROBE_NO_PAUSE: '1'
+        run: Windows\LilyPond-Starttest.cmd
+      - name: Verify startup and tiny score output
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem Windows/LilyPond-Starttest-*.json | Select-Object -First 1
+          $report = Get-Content $file -Raw | ConvertFrom-Json
+          Get-Content $file
+          if ($report.error -or $report.probes.Count -ne 2 -or $report.svgCount -lt 1 -or $report.midiCount -lt 1) { throw 'Probe failed' }
+          foreach ($probe in $report.probes) { if ($probe.timedOut -or $probe.error -or $probe.exitCode -ne 0) { throw 'Probe process failed' } }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LilyPond-Starttest-Report
+          path: Windows/LilyPond-Starttest-*.json
