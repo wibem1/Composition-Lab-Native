@@ -22,6 +22,26 @@ jobs:
           $expected = 'E238F5A33EBDE7466FE03D0FBCAA155A44536CA582951972482E0B00CEB0FBF1'
           if ((Get-FileHash lilypond.zip -Algorithm SHA256).Hash -ne $expected) { throw 'Checksum mismatch' }
           Expand-Archive lilypond.zip -DestinationPath lilypond-dist
+      - name: Create minimal control diagnostic
+        shell: pwsh
+        run: |
+          $control = [ordered]@{
+            composition = @'
+          \\version "2.24.0"
+          \\score {
+            \\new Staff { \\clef treble \\time 4/4 c'4 d'4 e'4 f'4 }
+            \\layout { }
+            \\midi { \\tempo 4 = 100 }
+          }
+          '@
+          }
+          $control | ConvertTo-Json | Set-Content minimal-control.json -Encoding utf8
+      - name: Test minimal LilyPond first
+        id: minimal
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          pwsh -File Windows/Diagnose-LilyPond-Isolated.ps1 -DiagnosticPath minimal-control.json -LilyPondExe lilypond-dist/lilypond-2.24.4/bin/lilypond.exe -OutputDirectory LilyPond-Control -TimeoutSeconds 60
       - name: Reproduce original Pastorale outside application
         id: reproduce
         continue-on-error: true
@@ -33,9 +53,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lilypond-pastorale-isolation
-          path: LilyPond-Isolation/
+          path: |
+            LilyPond-Isolation/
+            LilyPond-Control/
           if-no-files-found: warn
       - name: Fail gate when original does not compile
-        if: steps.reproduce.outcome != 'success'
+        if: steps.reproduce.outcome != 'success' || steps.minimal.outcome != 'success'
         shell: pwsh
         run: throw 'Original Pastorale LilyPond isolation failed; no release allowed'
