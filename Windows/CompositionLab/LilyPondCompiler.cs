@@ -12,7 +12,6 @@ internal sealed record LilyPondOutput(byte[] Midi, string[] Pages, string Log, d
 internal sealed class LilyPondCompiler(string cacheRoot)
 {
     public const string Version = "2.24.4";
-    bool runtimeChecked;
     readonly SemaphoreSlim gate = new(1, 1);
     internal static string? ProgressMessage(string line)
     {
@@ -51,11 +50,11 @@ internal sealed class LilyPondCompiler(string cacheRoot)
             var executable = Path.Combine(AppContext.BaseDirectory, "LilyPond", "bin", "lilypond.exe");
             if (!File.Exists(executable)) throw new FileNotFoundException("Der mitgelieferte LilyPond-Notensatz fehlt. Bitte das gesamte ZIP in einen neuen Ordner entpacken.");
             int repairedPairs = 0;
-            if (!runtimeChecked) {
-                progress?.Invoke("Guile-Startdateien werden geprüft …");
-                repairedPairs = await Task.Run(() => GuileRuntime.EnsureBytecodeFresh(Path.Combine(AppContext.BaseDirectory, "LilyPond")), cancellation);
-                runtimeChecked = true;
-            }
+            // Check timestamps on every cache miss. A user may replace or re-extract
+            // bundled Guile files while this app is running; a one-time flag would
+            // silently skip repair and reproduce the CPU-bound startup hang.
+            progress?.Invoke("Guile-Startdateien werden geprüft …");
+            repairedPairs = await Task.Run(() => GuileRuntime.EnsureBytecodeFresh(Path.Combine(AppContext.BaseDirectory, "LilyPond")), cancellation);
             Directory.CreateDirectory(cacheRoot);
             temporary = Path.Combine(cacheRoot, ".work-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(temporary);
             await File.WriteAllTextAsync(Path.Combine(temporary, "source.ly"), prepared, new UTF8Encoding(false), cancellation);
