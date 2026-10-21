@@ -58,7 +58,6 @@ internal static class EngravingProcess
         void Sample(string stage) {
             try {
                 process.Refresh();
-                var children = "";
                 var cpu = process.TotalProcessorTime.TotalMilliseconds;
                 var ram = process.WorkingSet64;
                 var row = $"[+{watch.Elapsed.TotalSeconds:F3}s] {stage} pid={process.Id} cpuMs={cpu:F0} workingSetBytes={ram} exited={process.HasExited}";
