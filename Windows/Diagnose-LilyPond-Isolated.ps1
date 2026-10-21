@@ -68,6 +68,29 @@ foreach ($case in @(
   [System.IO.File]::WriteAllText($stderr, $(if($errTask.IsCompletedSuccessfully){$errTask.Result}else{'<output incomplete>'}))
   $outputs = @(Get-ChildItem -Path $work -File | Where-Object { $_.Extension -in @('.midi','.mid','.svg') } | Select-Object -ExpandProperty Name)
   $expectedExtension = if ($case.name -eq "midi") { @(".midi",".mid") } else { @(".svg") }
+  $hasMidi = @($outputs | Where-Object { $_ -match '\\.(midi|mid)
+  $hasExpectedOutput = @($outputs | Where-Object { $fileName = $_; @($expectedExtension | Where-Object { $fileName.EndsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 }).Count -gt 0
+  if ($case.name -eq 'app-exact') { $hasExpectedOutput = $hasMidi -and $hasSvg }
+  $report.cases += [ordered]@{ name=$case.name; hasExpectedOutput=$hasExpectedOutput; timedOut=(-not $finished); exitCode=$(if($finished){$process.ExitCode}else{$null}); elapsedMilliseconds=[Math]::Round($stopwatch.Elapsed.TotalMilliseconds); cpuMilliseconds=$cpuMs; memoryBytes=$memory; outputs=$outputs; stdout=$stdout; stderr=$stderr }
+  $process.Dispose()
+}
+$reportPath = Join-Path $dir 'report.json'
+$report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $reportPath -Encoding utf8
+Write-Output "Isolation report: $reportPath"
+Get-Content -LiteralPath $reportPath
+if (@($report.cases | Where-Object { $_.timedOut -or $_.exitCode -ne 0 -or -not $_.hasExpectedOutput }).Count) { exit 2 }
+ }).Count -gt 0
+  $hasSvg = @($outputs | Where-Object { $_ -match '\\.svg
+  $hasExpectedOutput = @($outputs | Where-Object { $fileName = $_; @($expectedExtension | Where-Object { $fileName.EndsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 }).Count -gt 0
+  $report.cases += [ordered]@{ name=$case.name; hasExpectedOutput=$hasExpectedOutput; timedOut=(-not $finished); exitCode=$(if($finished){$process.ExitCode}else{$null}); elapsedMilliseconds=[Math]::Round($stopwatch.Elapsed.TotalMilliseconds); cpuMilliseconds=$cpuMs; memoryBytes=$memory; outputs=$outputs; stdout=$stdout; stderr=$stderr }
+  $process.Dispose()
+}
+$reportPath = Join-Path $dir 'report.json'
+$report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $reportPath -Encoding utf8
+Write-Output "Isolation report: $reportPath"
+Get-Content -LiteralPath $reportPath
+if (@($report.cases | Where-Object { $_.timedOut -or $_.exitCode -ne 0 -or -not $_.hasExpectedOutput }).Count) { exit 2 }
+ }).Count -gt 0
   $hasExpectedOutput = @($outputs | Where-Object { $fileName = $_; @($expectedExtension | Where-Object { $fileName.EndsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 }).Count -gt 0
   $report.cases += [ordered]@{ name=$case.name; hasExpectedOutput=$hasExpectedOutput; timedOut=(-not $finished); exitCode=$(if($finished){$process.ExitCode}else{$null}); elapsedMilliseconds=[Math]::Round($stopwatch.Elapsed.TotalMilliseconds); cpuMilliseconds=$cpuMs; memoryBytes=$memory; outputs=$outputs; stdout=$stdout; stderr=$stderr }
   $process.Dispose()
