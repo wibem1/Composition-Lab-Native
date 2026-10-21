@@ -1,0 +1,34 @@
+name: Check standalone LilyPond CPU diagnosis
+on:
+  push:
+    branches: [diagnostics/lilypond-cpu-stall]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: windows-2022
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact released Windows 4.2.8 package
+        shell: pwsh
+        run: |
+          Invoke-WebRequest 'https://github.com/wibem1/Composition-Lab-Native/releases/download/v4.2.8/Composition-Lab-4.2.8-Windows-x64.zip' -OutFile package.zip
+          Expand-Archive package.zip package
+      - name: Run independent CPU probes against actual package
+        shell: powershell
+        run: |
+          ./Tools/Windows/Diagnose-LilyPond-CPU.ps1 -AppFolder 'package/Composition Lab 4.2.8' -ReportPath "$PWD/cpu-probe.json"
+          $result=Get-Content cpu-probe.json -Raw | ConvertFrom-Json
+          if ($result.error) { throw $result.error }
+          if (@($result.experiments).Count -ne 2) { throw 'Missing phase diagnostics' }
+          if (@($result.experiments | Where-Object { $_.timedOut -or $_.exitCode -ne 0 }).Count -ne 0) { throw 'LilyPond startup probe failed' }
+          if (@($result.experiments[1].outputs | Where-Object { $_ -match '\.svg$' }).Count -lt 1) { throw 'Missing SVG' }
+          if (@($result.experiments[1].outputs | Where-Object { $_ -match '\.mid(i)?$' }).Count -ne 1) { throw 'Missing MIDI' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lilypond-cpu-probe
+          path: cpu-probe.json
+          if-no-files-found: warn
