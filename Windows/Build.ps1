@@ -52,7 +52,8 @@ $oldPath = $env:Path
 try {
     $env:Path = "$env:windir/System32;$env:windir"
     $version = & (Join-Path $core 'composition-lab-core.exe') --version
-    if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.2.9') { throw 'Bundled core runtime is incomplete' }
+    # The shared Swift core has its own unchanged semantic version (4.2.6); the Windows shell is 4.2.9.
+    if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.2.6') { throw 'Bundled core runtime is incomplete' }
 } finally { $env:Path = $oldPath }
 # Recreate the affected Explorer extraction order before BOTH native tests.
 # Sources and compiled files keep their original bytes, but source is newer.
