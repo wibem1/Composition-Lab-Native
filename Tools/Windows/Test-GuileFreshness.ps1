@@ -60,7 +60,7 @@ if (($finished -and $baseline.exitCode -eq 0) -or $baseline.svgCount -gt 0) { th
 $env:CLAB_REPAIR_NO_PAUSE='1';$env:CLAB_REPAIR_TARGET=$app
 $env:CLAB_REPAIR_REPORT=Join-Path $root 'FreshnessResults/repaired.json'
 & $env:ComSpec /c Windows\LilyPond-Reparatur.cmd
-if ($LASTEXITCODE -ne 0) { throw 'Repair CMD did not restore local notation' }
+if ($LASTEXITCODE -ne 0) { Get-Content $env:CLAB_REPAIR_REPORT; throw 'Repair CMD did not restore local notation' }
 $repaired=Get-Content $env:CLAB_REPAIR_REPORT -Raw | ConvertFrom-Json
 if (-not $repaired.passed -or $repaired.repairedPairs -ne $stalePairs) { throw 'Repair did not cover exactly the known bundled pairs' }
 $env:CLAB_REPAIR_REPORT=Join-Path $root 'FreshnessResults/repeated.json'

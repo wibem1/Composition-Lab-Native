@@ -1,4 +1,10 @@
 $ErrorActionPreference = 'Stop'
+function Get-RuntimeSHA256([string]$path) {
+    $algorithm=[Security.Cryptography.SHA256]::Create()
+    $stream=[IO.File]::OpenRead($path)
+    try { return ([BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace('-','') }
+    finally { $stream.Dispose(); $algorithm.Dispose() }
+}
 $encodedManifest = '@@MANIFEST@@'
 $bytes = [Convert]::FromBase64String($encodedManifest)
 $inputStream = New-Object IO.MemoryStream(,$bytes)
@@ -20,7 +26,7 @@ try {
         foreach ($entry in @(@($pair.source,$pair.sourceSHA256), @($pair.compiled,$pair.compiledSHA256))) {
             $path = Join-Path $runtime $entry[0]
             if (-not (Test-Path -LiteralPath $path)) { throw ('Mitgelieferte Datei fehlt: ' + $entry[0]) }
-            if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $entry[1]) { throw ('Dateiinhalt weicht vom geprueften Original ab: ' + $entry[0]) }
+            if ((Get-RuntimeSHA256 $path) -ne $entry[1]) { throw ('Dateiinhalt weicht vom geprueften Original ab: ' + $entry[0]) }
         }
         $report.verifiedPairs++
     }
