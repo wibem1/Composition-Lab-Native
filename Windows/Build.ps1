@@ -34,14 +34,16 @@ foreach ($package in @('microsoft.web.webview2','microsoft.netcore.app.runtime.w
         }
     }
 }
-# Keep the verified, unmodified portable engraver with the app: no user install
-# and no network calls during MIDI conversion or notation rendering.
-$lilyArchive = Join-Path $env:TEMP 'lilypond-2.24.4-mingw-x86_64.zip'
-Invoke-WebRequest 'https://gitlab.com/lilypond/lilypond/-/releases/v2.24.4/downloads/lilypond-2.24.4-mingw-x86_64.zip' -OutFile $lilyArchive
-if ((Get-FileHash $lilyArchive -Algorithm SHA256).Hash -ne 'E238F5A33EBDE7466FE03D0FBCAA155A44536CA582951972482E0B00CEB0FBF1') { throw 'LilyPond archive checksum mismatch' }
+# Preserve the exact released 4.2.8 runtime, including its validated local GIO
+# fix. Do not silently regress to the unpatched official DLLs while fixing Guile.
+$lilyArchive = Join-Path $env:TEMP 'clab-verified-4.2.8-runtime.zip'
+Invoke-WebRequest 'https://github.com/wibem1/Composition-Lab-Native/releases/download/v4.2.8/Composition-Lab-4.2.8-Windows-x64.zip' -OutFile $lilyArchive
+if ((Get-FileHash $lilyArchive -Algorithm SHA256).Hash -ne '5702DD4F05C641BDAECF44FC46E3962A02D2378949A290120A6242F9B358D2D0') { throw 'Released runtime archive checksum mismatch' }
 $lilyExtract = Join-Path $env:TEMP ('clab-lily-' + [guid]::NewGuid().ToString('N'))
 Expand-Archive $lilyArchive $lilyExtract
-Copy-Item (Join-Path $lilyExtract 'lilypond-2.24.4') (Join-Path $destination 'LilyPond') -Recurse
+$releasedApp = Join-Path $lilyExtract 'Composition Lab 4.2.8'
+Copy-Item (Join-Path $releasedApp 'LilyPond') (Join-Path $destination 'LilyPond') -Recurse
+Copy-Item (Join-Path $releasedApp 'Notices/*') (Join-Path $destination 'Notices') -Recurse -Force
 & (Join-Path $destination 'LilyPond/bin/lilypond.exe') --version
 if ($LASTEXITCODE -ne 0) { throw 'Bundled LilyPond cannot start' }
 Copy-Item 'Windows/README-Windows.md' (Join-Path $destination 'LIESMICH.md')
