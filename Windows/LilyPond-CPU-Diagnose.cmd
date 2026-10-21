@@ -11,12 +11,28 @@ $ErrorActionPreference = 'Stop'
 # PowerShell 5.1. Use its own built-in modules for a reproducible diagnostic.
 $env:PSModulePath = Join-Path $PSHOME 'Modules'
 $root = Split-Path -Parent $env:CLAB_CPU_SELF
+if ($env:CLAB_CPU_APP) { $root = $env:CLAB_CPU_APP }
+if (-not (Test-Path -LiteralPath (Join-Path $root 'LilyPond\bin\lilypond.exe'))) {
+    # Support a download-and-double-click diagnostic without moving files.
+    $downloads = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Downloads'
+    $candidates = @()
+    if (Test-Path -LiteralPath $downloads) {
+        foreach ($folder in @(Get-ChildItem -LiteralPath $downloads -Directory -Filter 'Composition*4.2.8*')) {
+            foreach ($candidate in @($folder.FullName, (Join-Path $folder.FullName 'Composition Lab 4.2.8'))) {
+                if (Test-Path -LiteralPath (Join-Path $candidate 'LilyPond\bin\lilypond.exe')) { $candidates += $candidate }
+            }
+        }
+    }
+    $candidates = @($candidates | Select-Object -Unique)
+    if ($candidates.Count -eq 1) { $root = $candidates[0] }
+    elseif ($candidates.Count -gt 1) { throw 'Multiple 4.2.8 installations found. Put this diagnostic beside the application EXE to select the correct one.' }
+}
 $DiagnosticJson = ''
 $ReportPath = ''
 $exe = Join-Path $root 'LilyPond\bin\lilypond.exe'
 if (-not (Test-Path -LiteralPath $exe)) { throw "No bundled LilyPond: $exe" }
 if (-not $ReportPath) { $ReportPath = Join-Path ([Environment]::GetFolderPath('Desktop')) ("Composition-Lab-LilyPond-CPU-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + ".json") }
-$report = [ordered]@{ version=2; windows=[Environment]::OSVersion.VersionString; executableSHA256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash; recordedAt=[DateTimeOffset]::UtcNow.ToString('o'); appFolder=$root; lilyPond=$exe; diagnosticInput=([bool]$DiagnosticJson); experiments=@() }
+$report = [ordered]@{ version=3; windows=[Environment]::OSVersion.VersionString; executableSHA256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash; recordedAt=[DateTimeOffset]::UtcNow.ToString('o'); appFolder=$root; lilyPond=$exe; diagnosticInput=([bool]$DiagnosticJson); experiments=@() }
 $work = Join-Path ([IO.Path]::GetTempPath()) ('clab-phase-' + [guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($work) | Out-Null
 function Run-Probe([string]$name,[string]$source,[string[]]$options,[int]$seconds) {
@@ -46,6 +62,20 @@ function Run-Probe([string]$name,[string]$source,[string[]]$options,[int]$second
             Start-Sleep -Milliseconds 500
             try { $p.Refresh(); $samples+= [ordered]@{ elapsedMs=[int]$clock.Elapsed.TotalMilliseconds; cpuMs=[int]$p.TotalProcessorTime.TotalMilliseconds; workingSetBytes=$p.WorkingSet64 } } catch { }
         }
+        $loadedModules=@(); $threads=@()
+        if (-not $p.HasExited) {
+            try {
+                $loadedModules=@($p.Modules | ForEach-Object {
+                    $module=$_
+                    $item=[ordered]@{ name=$module.ModuleName; path=$module.FileName; version=$module.FileVersionInfo.FileVersion }
+                    if ($module.FileName.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+                        $item.sha256=(Get-FileHash -LiteralPath $module.FileName -Algorithm SHA256).Hash
+                    }
+                    $item
+                })
+                $threads=@($p.Threads | ForEach-Object { [ordered]@{ id=$_.Id; cpuMs=[int]$_.TotalProcessorTime.TotalMilliseconds; state=$_.ThreadState.ToString() } })
+            } catch { $loadedModules += [ordered]@{ inspectionError=$_.Exception.Message } }
+        }
         $timedOut=(-not $p.HasExited)
         if ($timedOut) {
             & "$env:SystemRoot\System32\taskkill.exe" /PID $p.Id /T /F 2>$null | Out-Null
@@ -56,7 +86,7 @@ function Run-Probe([string]$name,[string]$source,[string[]]$options,[int]$second
         try { if ($stderr.Wait(3000)) { $errText=$stderr.Result } } catch {}
         try { if ($stdout.Wait(3000)) { $outText=$stdout.Result } } catch {}
         $outputs = @(Get-ChildItem -LiteralPath $folder -File | Where-Object { $_.Extension -in @('.svg','.mid','.midi') } | ForEach-Object { $_.Name })
-        $item=[ordered]@{ name=$name; elapsedMs=[int]$clock.Elapsed.TotalMilliseconds; timedOut=$timedOut; exitCode=$(if($p.HasExited){$p.ExitCode}else{$null}); samples=$samples; stderr=$errText; stdout=$outText; outputs=$outputs }
+        $item=[ordered]@{ name=$name; elapsedMs=[int]$clock.Elapsed.TotalMilliseconds; timedOut=$timedOut; exitCode=$(if($p.HasExited){$p.ExitCode}else{$null}); samples=$samples; loadedModules=$loadedModules; threads=$threads; stderr=$errText; stdout=$outText; outputs=$outputs }
         $report.experiments += $item
         Write-Host ("{0}: {1} ms; timeout={2}; outputs={3}" -f $name,$item.elapsedMs,$timedOut,($outputs -join ','))
     } finally { $p.Dispose() }
