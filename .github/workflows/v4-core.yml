@@ -1,15 +1,16 @@
 name: Composition Lab Native quality gates
 on:
   push:
-    branches: [v4-cross-platform]
+    branches: [v4-cross-platform, fix/local-lilypond-startup]
   pull_request:
-    branches: [v4-cross-platform]
+    branches: [v4-cross-platform, fix/local-lilypond-startup]
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 permissions:
   contents: read
+  actions: read
 env:
   COMPOSITION_LAB_BACKUP_FIXTURE: ${{ github.workspace }}/Tests/CompositionCoreTests/Fixtures/backup-compatibility.json
 jobs:
@@ -41,29 +42,67 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           bash 'Build Native App.command'
-          test -x 'Composition Lab 4.2.6.app/Contents/MacOS/Composition Lab 4.2.6'
-          lipo 'Composition Lab 4.2.6.app/Contents/MacOS/Composition Lab 4.2.6' -verify_arch x86_64 arm64
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' 'Composition Lab 4.2.6.app/Contents/Info.plist')" = 'de.klangwerke.compositionlab.native.v4'
-          COMPOSITION_LAB_TEST_DOMAIN=de.klangwerke.compositionlab.ci 'Composition Lab 4.2.6.app/Contents/MacOS/Composition Lab 4.2.6' --native-self-test "$PWD/Mac-TestResults"
+          test -x 'Composition Lab 4.2.7.app/Contents/MacOS/Composition Lab 4.2.7'
+          lipo 'Composition Lab 4.2.7.app/Contents/MacOS/Composition Lab 4.2.7' -verify_arch x86_64 arm64
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' 'Composition Lab 4.2.7.app/Contents/Info.plist')" = 'de.klangwerke.compositionlab.native.v4'
+          COMPOSITION_LAB_TEST_DOMAIN=de.klangwerke.compositionlab.ci 'Composition Lab 4.2.7.app/Contents/MacOS/Composition Lab 4.2.7' --native-self-test "$PWD/Mac-TestResults"
           test -s Mac-TestResults/result.json
-          'Composition Lab 4.2.6.app/Contents/MacOS/Composition Lab 4.2.6' --capture-gui-reference "$PWD/Mac-GUI-Reference"
+          'Composition Lab 4.2.7.app/Contents/MacOS/Composition Lab 4.2.7' --capture-gui-reference "$PWD/Mac-GUI-Reference"
           test -s Mac-GUI-Reference/Mac-Main.png
-          ditto -c -k --keepParent 'Composition Lab 4.2.6.app' Composition-Lab-4.2.6-Mac.zip
+          ditto -c -k --keepParent 'Composition Lab 4.2.7.app' Composition-Lab-4.2.7-Mac.zip
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
         with:
-          name: Composition-Lab-4.2.6-Mac
-          path: Composition-Lab-4.2.6-Mac.zip
+          name: Composition-Lab-4.2.7-Mac
+          path: Composition-Lab-4.2.7-Mac.zip
           if-no-files-found: error
+      - name: Prefer permanent verified GIO release asset
+        if: runner.os == 'Windows'
+        id: permanent-gio
+        shell: pwsh
+        run: |
+          try {
+            Invoke-WebRequest 'https://github.com/wibem1/Composition-Lab-Native/releases/download/v4.2.7/Local-GIO-Runtime-v1.zip' -OutFile Local-GIO-Runtime-v1.zip
+            Expand-Archive Local-GIO-Runtime-v1.zip VerifiedRuntime
+            'found=true' >> $env:GITHUB_OUTPUT
+          } catch {
+            if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw }
+            'found=false' >> $env:GITHUB_OUTPUT
+          }
+      - name: Download pinned local GIO runtime candidate
+        if: runner.os == 'Windows' && steps.permanent-gio.outputs.found != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: Local-LilyPond-Investigation
+          run-id: 39568896709
+          github-token: ${{ github.token }}
+          path: VerifiedRuntime
       - name: Build Windows desktop and test bundled runtime
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          COMPOSITION_LAB_GIO_SOURCE: ${{ github.workspace }}/VerifiedRuntime/RuntimeCandidate
         run: ./Windows/Build.ps1
+      - name: Preserve minimal verified runtime for reproducible future builds
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item MinimalRuntime/RuntimeCandidate -ItemType Directory -Force | Out-Null
+          foreach ($name in @('libgio-2.0-0.dll','zlib1.dll','COPYING-GLib.txt','lazy-appinfo.patch')) {
+            Copy-Item (Join-Path VerifiedRuntime/RuntimeCandidate $name) MinimalRuntime/RuntimeCandidate
+          }
+          Compress-Archive MinimalRuntime/RuntimeCandidate Local-GIO-Runtime-v1.zip -Force
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
-          name: Composition-Lab-4.2.6-Windows-x64
-          path: Composition-Lab-4.2.6-Windows-x64.zip
+          name: Local-GIO-Runtime-v1
+          path: Local-GIO-Runtime-v1.zip
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: Composition-Lab-4.2.7-Windows-x64
+          path: Composition-Lab-4.2.7-Windows-x64.zip
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'Windows'
@@ -85,7 +124,7 @@ jobs:
 
   release:
     needs: core
-    if: github.event_name == 'push' && github.ref == 'refs/heads/v4-cross-platform' && contains(github.event.head_commit.message, '[release 4.2.6]')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/fix/local-lilypond-startup' && contains(github.event.head_commit.message, '[candidate 4.2.7]')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -94,17 +133,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          pattern: Composition-Lab-4.2.6-*
+          pattern: Composition-Lab-4.2.7-*
           merge-multiple: true
+          path: ReleasePackages
+      - uses: actions/download-artifact@v4
+        with:
+          name: Local-GIO-Runtime-v1
           path: ReleasePackages
       - name: Verify packages and publish tested 4.2 commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          test -s ReleasePackages/Composition-Lab-4.2.6-Mac.zip
-          test -s ReleasePackages/Composition-Lab-4.2.6-Windows-x64.zip
+          test -s ReleasePackages/Composition-Lab-4.2.7-Mac.zip
+          test -s ReleasePackages/Composition-Lab-4.2.7-Windows-x64.zip
           python Tools/check_architecture.py
           cd ReleasePackages
-          sha256sum Composition-Lab-4.2.6-Mac.zip Composition-Lab-4.2.6-Windows-x64.zip > SHA256SUMS.txt
+          sha256sum Composition-Lab-4.2.7-Mac.zip Composition-Lab-4.2.7-Windows-x64.zip Local-GIO-Runtime-v1.zip > SHA256SUMS.txt
           cd ..
-          gh release create v4.2.6 ReleasePackages/Composition-Lab-4.2.6-Mac.zip ReleasePackages/Composition-Lab-4.2.6-Windows-x64.zip ReleasePackages/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Composition Lab Native 4.2.6' --notes-file VERSION-4.2.6.md
+          gh release create v4.2.7 ReleasePackages/Composition-Lab-4.2.7-Mac.zip ReleasePackages/Composition-Lab-4.2.7-Windows-x64.zip ReleasePackages/Local-GIO-Runtime-v1.zip ReleasePackages/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title 'Composition Lab Native 4.2.7 – lokale Testfassung' --notes-file VERSION-4.2.7.md

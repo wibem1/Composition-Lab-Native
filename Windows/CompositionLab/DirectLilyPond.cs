@@ -82,7 +82,7 @@ internal sealed partial class MainForm
             ["composition"] = music, ["score"] = score, ["sourceMidiData"] = Convert.ToBase64String(compiled.Midi),
             ["directLilyPond"] = true, ["stage"] = "completed", ["conversionEngine"] = "LilyPond " + LilyPondCompiler.Version,
             ["conversionMilliseconds"] = Math.Round(watch.Elapsed.TotalMilliseconds), ["engravingMilliseconds"] = Math.Round(compiled.Milliseconds),
-            ["engravingCacheHit"] = compiled.Cached, ["engravingPageCount"] = compiled.Pages.Length,
+            ["engravingRuntimeProfile"] = LilyPondCompiler.RuntimeProfile, ["engravingCacheHit"] = compiled.Cached, ["engravingPageCount"] = compiled.Pages.Length,
             ["engravingLog"] = compiled.Log, ["conversionAICalls"] = 0,
             ["translationInputTokens"] = 0, ["translationOutputTokens"] = 0,
             ["inputTokens"] = source["inputTokens"]?.DeepClone() ?? JsonValue.Create(0),

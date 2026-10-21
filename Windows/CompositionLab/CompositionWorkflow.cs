@@ -107,6 +107,14 @@ internal sealed partial class MainForm
             if (pendingComposition != null) lastDiagnostic["sourceDiagnostic"] = pendingComposition.DeepClone();
             lastDiagnostic["stage"] = "post-chat-processing-failed";
             lastDiagnostic["processingError"] = e.ToString();
+            lastDiagnostic["interfaceVersion"] = Version;
+            lastDiagnostic["recordedAt"] = DateTimeOffset.UtcNow.ToString("O");
+            lastDiagnostic["engravingRuntimeProfile"] = LilyPondCompiler.RuntimeProfile;
+            if (e is EngravingTimeoutException timeout) {
+                lastDiagnostic["stage"] = "engraving-timeout";
+                lastDiagnostic["engravingLog"] = timeout.Log;
+                lastDiagnostic["engravingMilliseconds"] = timeout.Milliseconds;
+            }
             UpdateDiagnostic(); SaveLocalState();
             SetStatus("KI-Antwort gespeichert, Ausgabe fehlgeschlagen: " + e.Message, true);
         }

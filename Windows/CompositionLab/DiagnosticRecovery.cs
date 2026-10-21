@@ -61,6 +61,7 @@ internal sealed partial class MainForm
             // Recovery failures must replace the old saved diagnostic too.
             lastDiagnostic = new JsonObject {
                 ["interface"] = "Windows WinForms", ["interfaceVersion"] = Version,
+                ["engravingRuntimeProfile"] = LilyPondCompiler.RuntimeProfile,
                 ["stage"] = e is EngravingTimeoutException ? "engraving-timeout" :
                     e is OperationCanceledException ? "recovery-cancelled" : "recovery-failed",
                 ["recordedAt"] = DateTimeOffset.UtcNow.ToString("O"),

@@ -10,7 +10,7 @@ public final class CoreRequestHandle {
 /// Small public boundary for desktop clients. JSON preserves the existing score
 /// and CLAB wire format; AppKit and Windows APIs never enter this module.
 public enum CoreServices {
-    public static let version = "4.2.6"
+    public static let version = "4.2.7"
 
     /// Stateless catalog boundary. State contains model metadata and cursors,
     /// never keys; adapters supply a provider response only after HTTP success.

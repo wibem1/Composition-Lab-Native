@@ -12,6 +12,7 @@ internal sealed record LilyPondOutput(byte[] Midi, string[] Pages, string Log, d
 internal sealed class LilyPondCompiler(string cacheRoot)
 {
     public const string Version = "2.24.4";
+    public const string RuntimeProfile = "local-gio-lazy-v1";
     readonly SemaphoreSlim gate = new(1, 1);
     internal static string? ProgressMessage(string line)
     {
@@ -36,7 +37,7 @@ internal sealed class LilyPondCompiler(string cacheRoot)
     public async Task<LilyPondOutput> CompileAsync(string source, CancellationToken cancellation = default, Action<string>? progress = null)
     {
         string prepared = await PrepareAsync(source, cancellation);
-        string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Version + "\npoint-and-click-v1\n" + prepared)));
+        string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Version + "\n" + RuntimeProfile + "\npoint-and-click-v1\n" + prepared)));
         string final = Path.Combine(cacheRoot, hash);
         await gate.WaitAsync(cancellation);
         string? temporary = null;

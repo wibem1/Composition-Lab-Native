@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
-$destination = Join-Path $PWD 'Windows/Bundle/Composition Lab 4.2.6'
+$destination = Join-Path $PWD 'Windows/Bundle/Composition Lab 4.2.7'
 if (Test-Path $destination) { Remove-Item $destination -Recurse -Force }
 New-Item $destination -ItemType Directory -Force | Out-Null
 dotnet publish 'Windows/CompositionLab/CompositionLab.csproj' -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $destination
@@ -34,7 +34,7 @@ foreach ($package in @('microsoft.web.webview2','microsoft.netcore.app.runtime.w
         }
     }
 }
-# Keep the verified, unmodified portable engraver with the app: no user install
+# Keep the verified portable engraver with the app: no user install
 # and no network calls during MIDI conversion or notation rendering.
 $lilyArchive = Join-Path $env:TEMP 'lilypond-2.24.4-mingw-x86_64.zip'
 Invoke-WebRequest 'https://gitlab.com/lilypond/lilypond/-/releases/v2.24.4/downloads/lilypond-2.24.4-mingw-x86_64.zip' -OutFile $lilyArchive
@@ -42,6 +42,17 @@ if ((Get-FileHash $lilyArchive -Algorithm SHA256).Hash -ne 'E238F5A33EBDE7466FE0
 $lilyExtract = Join-Path $env:TEMP ('clab-lily-' + [guid]::NewGuid().ToString('N'))
 Expand-Archive $lilyArchive $lilyExtract
 Copy-Item (Join-Path $lilyExtract 'lilypond-2.24.4') (Join-Path $destination 'LilyPond') -Recurse
+if (-not $env:COMPOSITION_LAB_GIO_SOURCE) {
+    $runtimeZip = Join-Path $env:TEMP 'Composition-Lab-Local-GIO-v1.zip'
+    $runtimeRoot = Join-Path $env:TEMP ('clab-gio-' + [guid]::NewGuid().ToString('N'))
+    Invoke-WebRequest 'https://github.com/wibem1/Composition-Lab-Native/releases/download/v4.2.7/Local-GIO-Runtime-v1.zip' -OutFile $runtimeZip
+    Expand-Archive $runtimeZip $runtimeRoot
+    $env:COMPOSITION_LAB_GIO_SOURCE = Join-Path $runtimeRoot 'RuntimeCandidate'
+}
+& ./Windows/ApplyLocalGio.ps1 -Bundle (Join-Path $destination 'LilyPond') -Candidate $env:COMPOSITION_LAB_GIO_SOURCE
+if ($LASTEXITCODE -ne 0) { throw 'Local GIO runtime validation failed' }
+& (Get-Command pwsh).Source -NoLogo -NoProfile -File Tools/Windows/Test-GioLoad.ps1 -Bundle (Join-Path $destination 'LilyPond')
+if ($LASTEXITCODE -ne 0) { throw 'Local GIO still loads Windows application enumeration' }
 & (Join-Path $destination 'LilyPond/bin/lilypond.exe') --version
 if ($LASTEXITCODE -ne 0) { throw 'Bundled LilyPond cannot start' }
 Copy-Item 'Windows/README-Windows.md' (Join-Path $destination 'LIESMICH.md')
@@ -50,7 +61,7 @@ $oldPath = $env:Path
 try {
     $env:Path = "$env:windir/System32;$env:windir"
     $version = & (Join-Path $core 'composition-lab-core.exe') --version
-    if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.2.6') { throw 'Bundled core runtime is incomplete' }
+    if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.2.7') { throw 'Bundled core runtime is incomplete' }
 } finally { $env:Path = $oldPath }
 # CI must exercise a real native browser, not only managed bitmap painting.
 try { [void][Microsoft.Win32.Registry]::GetValue('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F1E7E558-F3C6-4A58-B13A-B17E7164CA09}', 'pv', $null) } catch { }
@@ -61,7 +72,7 @@ $tests = Join-Path $PWD 'Windows/TestResults'
 New-Item $tests -ItemType Directory -Force | Out-Null
 try { Set-DisplayResolution -Width 1600 -Height 1200 -Force -ErrorAction Stop | Out-Null } catch { Write-Output 'Default Windows display retained; GUI scroll reachability is tested.' }
 $start = New-Object System.Diagnostics.ProcessStartInfo
-$start.FileName = Join-Path $destination 'Composition Lab 4.2.6.exe'
+$start.FileName = Join-Path $destination 'Composition Lab 4.2.7.exe'
 $start.Arguments = "--self-test --test-output `"$tests`""
 $start.UseShellExecute = $false
 $start.Environment['PATH'] = "$env:windir/System32;$env:windir"
@@ -74,7 +85,7 @@ if ($process.ExitCode -ne 0) {
 $report = Get-Content (Join-Path $tests 'result.json') -Raw | ConvertFrom-Json
 if (-not $report.passed) { throw 'Windows test result is not green' }
 Get-Content (Join-Path $tests 'result.json')
-$zip = Join-Path $PWD 'Composition-Lab-4.2.6-Windows-x64.zip'
+$zip = Join-Path $PWD 'Composition-Lab-4.2.7-Windows-x64.zip'
 Compress-Archive -Path $destination -DestinationPath $zip -Force
 Write-Output "Windows test package: $zip"
 
@@ -83,7 +94,7 @@ $roundtrip = Join-Path $env:TEMP ('clab-packaged-' + [guid]::NewGuid().ToString(
 Expand-Archive $zip $roundtrip
 $packagedTests = Join-Path $tests 'Packaged'
 New-Item $packagedTests -ItemType Directory -Force | Out-Null
-$start.FileName = Join-Path $roundtrip 'Composition Lab 4.2.6/Composition Lab 4.2.6.exe'
+$start.FileName = Join-Path $roundtrip 'Composition Lab 4.2.7/Composition Lab 4.2.7.exe'
 $start.Arguments = "--self-test --test-output `"$packagedTests`""
 $packagedProcess = [System.Diagnostics.Process]::Start($start)
 if (-not $packagedProcess.WaitForExit(180000)) { $packagedProcess.Kill(); throw 'Packaged Windows test timed out' }
