@@ -72,13 +72,19 @@ jobs:
         shell: pwsh
         run: |
           $app = "$PWD/package/Composition Lab 4.2.8"
-          Copy-Item Windows/LilyPond-CPU-Diagnose.cmd "$app/LilyPond-CPU-Diagnose.cmd"
-          cmd /c "`"$app/LilyPond-CPU-Diagnose.cmd`" < NUL"
+          # Exercise download-and-double-click auto-discovery outside the app.
+          $downloads = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Downloads'
+          New-Item -ItemType Directory -Path $downloads -Force | Out-Null
+          New-Item -ItemType Junction -Path "$downloads/Composition Lab 4.2.8" -Target $app | Out-Null
+          cmd /c "`"$PWD/Windows/LilyPond-CPU-Diagnose.cmd`" < NUL"
           $desktop = [Environment]::GetFolderPath('Desktop')
           $report = Get-ChildItem $desktop -Filter 'Composition-Lab-LilyPond-CPU-*.json' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
           if (-not $report) { throw 'Standalone diagnostic did not save its report' }
           Copy-Item $report.FullName LilyPond-Isolation/cpu-diagnostic.json
           $result = Get-Content $report.FullName -Raw | ConvertFrom-Json
+          if ($result.version -ne 3 -or $result.appFolder -notlike '*Downloads*') { throw 'Auto-discovery did not select the test installation' }
+          $original = $result.experiments | Where-Object name -eq '03-original-pastorale'
+          if (@($original.loadedModules | Where-Object { $_.name -eq 'lilypond.exe' -and $_.sha256 }).Count -ne 1) { throw 'Runtime module capture missing' }
           if ($result.error -or @($result.experiments).Count -ne 3) { throw 'Incomplete standalone diagnostic' }
           if (@($result.experiments | Where-Object { $_.timedOut -or $_.exitCode -ne 0 }).Count) { throw 'Standalone diagnostic failed' }
       - name: Upload isolation logs even on failure
