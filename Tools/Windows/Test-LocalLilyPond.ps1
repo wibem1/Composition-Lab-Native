@@ -13,6 +13,10 @@ $summary = [Collections.Generic.List[object]]::new()
 # Stress keys belong only to this disposable runner and are removed in finally.
 $stressRoot = 'HKCU:\Software\Classes'
 $keys = [Collections.Generic.List[string]]::new()
+$registeredNames = [Collections.Generic.List[string]]::new()
+$registeredRoot = 'HKCU:\Software\RegisteredApplications'
+$capabilitiesRoot = 'HKCU:\Software\CompositionLabStartupTest'
+New-Item $registeredRoot -Force | Out-Null
 try {
     foreach ($phase in @('clean','many-applications')) {
         if ($phase -eq 'many-applications') {
@@ -20,7 +24,17 @@ try {
                 $key = "$stressRoot\CompositionLabStartupTest.$i"
                 $keys.Add($key)
                 New-Item "$key\shell\open\command" -Force | Out-Null
-                Set-Item "$key\shell\open\command" '"C:\Program Files\Composition Lab Startup Test\test.exe" "%1"'
+                Set-Item "$key\shell\open\command" ('"C:\Program Files\Composition Lab Startup Test\app' + $i + '.exe" "%1"')
+                $extension = "$stressRoot\.clabStartupTest$i"
+                $keys.Add($extension)
+                New-Item $extension -Force | Out-Null
+                Set-Item $extension "CompositionLabStartupTest.$i"
+                $capability = "$capabilitiesRoot\App$i\Capabilities"
+                New-Item "$capability\FileAssociations" -Force | Out-Null
+                New-ItemProperty $capability ApplicationName -Value "Composition Lab Startup Test $i" -PropertyType String -Force | Out-Null
+                New-ItemProperty "$capability\FileAssociations" ".clabStartupTest$i" -Value "CompositionLabStartupTest.$i" -PropertyType String -Force | Out-Null
+                $registeredNames.Add("CompositionLabStartupTest.$i")
+                New-ItemProperty $registeredRoot "CompositionLabStartupTest.$i" -Value "Software\CompositionLabStartupTest\App$i\Capabilities" -PropertyType String -Force | Out-Null
             }
         }
         foreach ($variant in @('original','rebuilt-control','lazy-appinfo')) {
@@ -63,6 +77,10 @@ try {
             }
         }
     }
-} finally { foreach ($key in $keys) { Remove-Item $key -Recurse -Force -ErrorAction SilentlyContinue } }
+} finally {
+    foreach ($key in $keys) { Remove-Item $key -Recurse -Force -ErrorAction SilentlyContinue }
+    foreach ($name in $registeredNames) { Remove-ItemProperty $registeredRoot $name -ErrorAction SilentlyContinue }
+    Remove-Item $capabilitiesRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
 if (@($summary | Where-Object { $_.variant -eq 'lazy-appinfo' -and -not $_.passed }).Count -gt 0) { throw 'Candidate runtime failed; do not integrate or release' }
 # Passing this experiment is deliberately insufficient to trigger a product release.
