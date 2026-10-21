@@ -77,6 +77,8 @@ $bootstrap = Join-Path $env:TEMP 'MicrosoftEdgeWebview2Setup.exe'
 Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $bootstrap
 Start-Process $bootstrap -ArgumentList '/silent /install' -Wait
 $tests = Join-Path $PWD 'Windows/TestResults'
+# Never permit artefacts from a previous build to satisfy release assertions.
+if (Test-Path -LiteralPath $tests) { Remove-Item -LiteralPath $tests -Recurse -Force }
 New-Item $tests -ItemType Directory -Force | Out-Null
 try { Set-DisplayResolution -Width 1600 -Height 1200 -Force -ErrorAction Stop | Out-Null } catch { Write-Output 'Default Windows display retained; GUI scroll reachability is tested.' }
 $start = New-Object System.Diagnostics.ProcessStartInfo
