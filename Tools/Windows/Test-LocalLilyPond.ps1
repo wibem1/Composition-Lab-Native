@@ -7,6 +7,8 @@ if ((Get-FileHash runtime.zip -Algorithm SHA256).Hash -ne 'E238F5A33EBDE7466FE03
 Expand-Archive runtime.zip OriginalRuntime
 Copy-Item OriginalRuntime/lilypond-2.24.4 CandidateRuntime -Recurse
 Copy-Item RuntimeCandidate/*.dll CandidateRuntime/bin -Force
+Copy-Item OriginalRuntime/lilypond-2.24.4 ControlRuntime -Recurse
+Copy-Item RuntimeControl/*.dll ControlRuntime/bin -Force
 $summary = [Collections.Generic.List[object]]::new()
 # Stress keys belong only to this disposable runner and are removed in finally.
 $stressRoot = 'HKCU:\Software\Classes'
@@ -21,8 +23,8 @@ try {
                 Set-Item "$key\shell\open\command" '"C:\Program Files\Composition Lab Startup Test\test.exe" "%1"'
             }
         }
-        foreach ($variant in @('original','lazy-appinfo')) {
-            $bundle = if ($variant -eq 'original') { Join-Path $root 'OriginalRuntime/lilypond-2.24.4' } else { Join-Path $root 'CandidateRuntime' }
+        foreach ($variant in @('original','rebuilt-control','lazy-appinfo')) {
+            $bundle = if ($variant -eq 'original') { Join-Path $root 'OriginalRuntime/lilypond-2.24.4' } elseif ($variant -eq 'rebuilt-control') { Join-Path $root 'ControlRuntime' } else { Join-Path $root 'CandidateRuntime' }
             for ($run=0; $run -lt 3; $run++) {
                 $work = Join-Path $reportRoot "$phase-$variant-$run-Noten Übung"
                 New-Item $work -ItemType Directory -Force | Out-Null

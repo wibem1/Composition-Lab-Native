@@ -26,3 +26,11 @@ for file in /mingw64/bin/libffi-*.dll /mingw64/bin/libpcre-*.dll /mingw64/bin/li
 done
 cp COPYING ../RuntimeCandidate/COPYING-GLib.txt
 git diff > ../RuntimeCandidate/lazy-appinfo.patch
+
+# An otherwise identical rebuild separates the patch effect from toolchain or
+# dependency changes. Both variants must be measured before drawing conclusions.
+cp -r ../RuntimeCandidate ../RuntimeControl
+git checkout -- gio/giomodule.c
+meson compile -C build -j 4
+find build -name '*.dll' -exec cp '{}' ../RuntimeControl/ \;
+rm ../RuntimeControl/lazy-appinfo.patch

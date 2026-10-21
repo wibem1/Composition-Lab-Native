@@ -1,7 +1,7 @@
 name: Local LilyPond startup investigation
 on:
   push:
-    branches: [v4-cross-platform]
+    branches: [v4-cross-platform, fix/local-lilypond-startup]
     paths: ['Tools/Windows/**', '.github/workflows/local-lilypond-investigation.yml']
   workflow_dispatch:
 permissions:
@@ -22,6 +22,7 @@ jobs:
             mingw-w64-x86_64-meson
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-python
+            mingw-w64-x86_64-python-setuptools
             mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-libffi
             mingw-w64-x86_64-pcre
@@ -40,5 +41,6 @@ jobs:
           path: |
             RuntimeReports/
             RuntimeCandidate/
+            RuntimeControl/
             runtime-source/build/meson-logs/meson-log.txt
           if-no-files-found: warn
