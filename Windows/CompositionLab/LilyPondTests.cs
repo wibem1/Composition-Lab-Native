@@ -182,9 +182,13 @@ internal sealed partial class MainForm
             await core.RunAsync(new JsonObject { ["operation"] = "validate-document", ["document"] = Current!.DeepClone() });
             await WriteMusicExportAsync(Path.Combine(output, "Pastorale.ly"), "ly");
             await WriteMusicExportAsync(Path.Combine(output, "Pastorale.mid"), "mid");
-            if (File.ReadAllText(Path.Combine(output, "Pastorale.ly")) != pastorale || !File.ReadAllBytes(Path.Combine(output, "Pastorale.mid")).SequenceEqual(pastoraleOutput.Midi))
-                throw new Exception("Pastorale-Export verändert Originalquelle oder MIDI.");
+            if (File.ReadAllText(Path.Combine(output, "Pastorale.ly")).ReplaceLineEndings("\n") != ExtractLilyPond(pastorale).ReplaceLineEndings("\n"))
+                throw new Exception("Pastorale-LilyPond-Export verändert die Quelle (Zeilenenden ausgenommen).");
+            if (!File.ReadAllBytes(Path.Combine(output, "Pastorale.mid")).SequenceEqual(pastoraleOutput.Midi))
+                throw new Exception("Pastorale-MIDI-Export verändert die Originalbytes.");
             AtomicFile.WriteText(Path.Combine(output, "Pastorale-Verarbeitung.json"), pastoraleResult.ToJsonString());
+            // Release the test slot before accepting the independent second score.
+            documents[free] = null;
             await AcceptCompositionAsync(result, free, "Lokaler Test", "gemini", "test-local");
             if (currentLilyPond == null || currentMidi == null || !currentMidi.SequenceEqual(generated.Midi)) throw new Exception("Wiedergabe verwendet nicht das originale LilyPond-MIDI.");
             string file = Path.Combine(output, "Original-LilyPond.clab"); AtomicFile.WriteText(file, Current!.ToJsonString());
