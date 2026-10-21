@@ -63,7 +63,7 @@ try {
                 $log = $stderr.GetAwaiter().GetResult() + $stdout.GetAwaiter().GetResult()
                 [IO.File]::WriteAllText((Join-Path $work 'compile.log'), $log)
                 $pages = @(Get-ChildItem $work -Filter 'score*.svg')
-                $midi = @(Get-ChildItem $work -Filter 'score*.midi')
+                $midi = @(Get-ChildItem $work -Filter 'score*.mid*' | Where-Object { $_.Extension -in @('.mid','.midi') })
                 $valid = $finished -and $p.ExitCode -eq 0 -and $pages.Count -gt 0 -and $midi.Count -eq 1
                 if ($valid) {
                     $bytes = [IO.File]::ReadAllBytes($midi[0].FullName)

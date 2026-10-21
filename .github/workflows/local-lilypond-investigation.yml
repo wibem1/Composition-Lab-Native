@@ -6,8 +6,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 jobs:
   local-runtime:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[validate existing outputs]')
     runs-on: windows-2025
     timeout-minutes: 20
     steps:
@@ -44,3 +46,20 @@ jobs:
             RuntimeControl/
             runtime-source/build/meson-logs/meson-log.txt
           if-no-files-found: warn
+
+  validate-existing-outputs:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[validate existing outputs]')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Local-LilyPond-Investigation
+          run-id: 39568896709
+          github-token: ${{ github.token }}
+          path: SavedOutputs
+      - run: python Tools/Windows/Validate-LocalOutputs.py SavedOutputs/RuntimeReports
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Validated-Local-LilyPond-Comparison
+          path: SavedOutputs/RuntimeReports/validated-comparison.json
