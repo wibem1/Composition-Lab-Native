@@ -34,10 +34,24 @@ job checks the immutable outputs from the completed rendering run, including all
 18 process exits, page links, MIDI headers, and identical MIDI hashes. It does not
 claim another rendering run occurred or erase the original failed validator.
 
-## Remaining blocker
+## Current 4.2.6 evidence and 4.2.7 candidate
 
-The uploaded JSON diagnostics end at application version 4.2.5. The new screenshot
-shows a GIO Windows application-manifest warning, but not the full 4.2.6 process
-log or failure result. A freshly exported 4.2.6 failure diagnostic is needed to
-investigate the current runtime. The warning alone does not establish causation.
-No online renderer and no further speculative runtime change has been enabled.
+A fresh 4.2.6 diagnostic recorded at 2026-10-21T08:11:47Z confirms LilyPond
+2.24.4/Guile 2.2, 121523 ms to timeout, eight GIO warnings about missing Windows
+AppX manifests, and no score-parsing message. The score is byte-identical to the
+existing Pastorale regression fixture after removing its Markdown code fence.
+The warnings support investigating eager application enumeration but do not
+establish that it caused the timeout.
+
+The 4.2.7 candidate on this branch replaces only GIO 2.72.4 and adds its zlib 1.3.2
+dependency. All 2004 GIO exports match the original, all imported non-system
+functions are available in the original bundle, and both DLL hashes are pinned.
+The LilyPond executable, Guile and all other original GLib components are retained.
+Exact GLib source, patch, build script and licenses are included with the package.
+
+Quality-gate run 39573090144 passed native Mac and Windows builds, shared tests on
+Mac/Windows/Linux, and the full self-test of the extracted Windows ZIP. The
+minimal GIO load probe introduced zero Windows application-enumeration modules.
+Pastorale rendered from the extracted package in 9834 ms with 2 pages, and the
+repeat reused identical MIDI. The prerelease is explicitly a repair candidate;
+verification on the affected Windows PC is still required. Rendering stays local.
