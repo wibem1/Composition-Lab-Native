@@ -192,6 +192,24 @@ internal sealed partial class MainForm
             string romanzePath = Path.Combine(Path.GetDirectoryName(Environment.GetEnvironmentVariable("COMPOSITION_LAB_BACKUP_FIXTURE"))!, "romanze-violin-piano-a4.ly");
             string romanze = await File.ReadAllTextAsync(romanzePath);
             if (await LilyPondCompiler.PrepareAsync(romanze) != romanze) throw new Exception("Romanze-A4-Original wird verändert.");
+            var originalRomanzeOutput = await Engraver.CompileAsync(romanze);
+            await File.WriteAllBytesAsync(Path.Combine(output, "Romanze-Original.mid"), originalRomanzeOutput.Midi);
+            AtomicFile.WriteText(Path.Combine(output, "Romanze-Original.log"), originalRomanzeOutput.Log);
+            bool invalidRegisterRejected = false;
+            try { await core.RunAsync(new JsonObject { ["operation"] = "import-midi", ["data"] = Convert.ToBase64String(originalRomanzeOutput.Midi), ["title"] = "Romanze Original" }); }
+            catch (CoreRequestException e) { invalidRegisterRejected = e.Message.Contains("Oktavlagen außerhalb MIDI 0–127"); }
+            if (!invalidRegisterRejected) throw new Exception("Romanze mit negativen Bassnoten wird nicht verständlich zurückgewiesen.");
+            string originalRomanze = romanze;
+            romanze = await File.ReadAllTextAsync(Path.Combine(Path.GetDirectoryName(romanzePath)!, "romanze-violin-piano-a4-bass-corrected.ly"));
+            string BassSkeleton(string value) {
+                int start = value.IndexOf("pianoLH =", StringComparison.Ordinal);
+                string bass = value[start..value.IndexOf("\\score", start, StringComparison.Ordinal)];
+                bass = Regex.Replace(bass, @"%[^\r\n]*", "");
+                bass = Regex.Replace(bass, @"\\relative\s+c\b", @"\absolute");
+                return Regex.Replace(bass, @"[',\s]", "");
+            }
+            if (BassSkeleton(originalRomanze) != BassSkeleton(romanze) || originalRomanze[..originalRomanze.IndexOf("pianoLH =", StringComparison.Ordinal)] != romanze[..romanze.IndexOf("pianoLH =", StringComparison.Ordinal)])
+                throw new Exception("Die Basskorrektur verändert weitere musikalische Angaben.");
             var romanzeOutput = await Engraver.CompileAsync(romanze);
             var romanzeResult = await CompileCompositionAsync(romanze, new JsonObject { ["provider"] = "gemini", ["model"] = "offline-romanze" }, CancellationToken.None);
             var romanzeTracks = romanzeResult["score"]!["tr"]!.AsArray().OfType<JsonObject>().Where(t => t["nt"]!.AsArray().Count > 0).ToArray();
@@ -211,7 +229,7 @@ internal sealed partial class MainForm
             if (File.ReadAllText(Path.Combine(output, "Romanze.ly")).ReplaceLineEndings("\n") != ExtractLilyPond(romanze).ReplaceLineEndings("\n") || !File.ReadAllBytes(Path.Combine(output, "Romanze.mid")).SequenceEqual(romanzeOutput.Midi))
                 throw new Exception("Romanze-Export verändert Originalquelle oder MIDI.");
             AtomicFile.WriteText(Path.Combine(output, "Romanze-Messung.json"), new JsonObject {
-                ["passed"] = true, ["coldEngravingMilliseconds"] = romanzeOutput.Milliseconds,
+                ["passed"] = true, ["originalA4Accepted"] = true, ["invalidOriginalMidiRejected"] = invalidRegisterRejected, ["correctedBassOctaves"] = true, ["coldEngravingMilliseconds"] = romanzeOutput.Milliseconds,
                 ["pages"] = romanzeOutput.Pages.Length, ["tracks"] = romanzeTracks.Length, ["bars"] = 37
             }.ToJsonString());
             // Release the test slot before accepting the independent second score.

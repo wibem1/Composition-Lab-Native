@@ -9,3 +9,9 @@ The exact original Romanze source is stored as `Tests/CompositionCoreTests/Fixtu
 All version/title/package metadata now identify 4.2.10, build 4210. The existing published 4.2.9 is preserved. Architecture check: PASS (23 Windows operations and package/version consistency).
 
 Full cross-platform and native workflow verification: pending. No release is authorized by this document alone; the existing full test gate controls publication.
+
+## Second defect exposed by the original-score test
+
+Run 39678542323 passed shared tests and the full Mac build but rejected the original Romanze MIDI after engraving. Independent Windows engraving in run 39679810313 produced five SVG pages. Downloaded raw MIDI shows bass pitches written as bytes 251, 255, 246, 253, 239, corresponding to negative pitches; the relative bass descends below MIDI zero. This is a source octave error and must not be admitted as valid MIDI.
+
+The MIDI parser now rejects invalid note data bytes immediately with track, note, velocity and a precise octave-range explanation. A separately named bass-corrected fixture uses absolute bass pitches. A token comparison requires unchanged pitch names, chords, durations, accidentals and all other notation except bass octave marks. The violin and right-hand source remain unchanged. Native tests require original A4 acceptance, explicit rejection of invalid original MIDI, and complete corrected-score import/export. No silent octave folding or paid automatic repair was added. Full tests remain required before release.

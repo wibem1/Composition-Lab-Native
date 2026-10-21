@@ -36,6 +36,9 @@ enum MIDIParser {
                 }
                 if status==0xF0 || status==0xF7 { let l=try vlq(&pos); pos=min(end,pos+l); running=nil; continue }
                 let kind=status&0xF0, ch=status&0x0F; let count=(kind==0xC0 || kind==0xD0) ? 1:2; guard pos+count<=end else{break}; let a=Int(b[pos]); pos+=1; let c=count==2 ? Int(b[pos]):0; if count==2{pos+=1}
+                if (kind == 0x80 || kind == 0x90) && (a > 127 || c > 127) {
+                    throw MIDIParserError.invalid("MIDI-Spur \(parsed.count + 1) enthält eine ungültige Tonhöhe oder Anschlagstärke (Note \(a), Velocity \(c)). LilyPond kann bei Oktavlagen außerhalb MIDI 0–127 solche Werte ausgeben. Bitte die klingenden Oktavlagen im Original prüfen; die Noten werden nicht stillschweigend verschoben.")
+                }
                 if kind==0x90 && c>0 { active["\(ch)-\(a)",default:[]].append((tick,c)) }
                 else if kind==0x80 || (kind==0x90 && c==0) { let k="\(ch)-\(a)"; if var arr=active[k], !arr.isEmpty { let x=arr.removeFirst(); active[k]=arr; pt.notes.append(EventNote(start:x.0,end:max(tick,x.0+1),pitch:a,velocity:x.1,channel:ch)) } }
                 else if kind==0xB0 { pt.controls.append([Double(tick)/Double(ppq),Double(a),Double(c),Double(ch)]) }
