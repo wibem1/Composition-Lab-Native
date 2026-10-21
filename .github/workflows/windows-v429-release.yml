@@ -13,14 +13,18 @@ on:
 permissions:
   contents: write
 jobs:
+  regression:
+    uses: ./.github/workflows/v4-core.yml
   native-windows:
+    needs: regression
     runs-on: windows-2022
     timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
-      - uses: swift-actions/setup-swift@v2
+      - uses: compnerd/gha-setup-swift@bbae8ce86bac5a3449f3992b3d88bc4ca25f2057
         with:
-          swift-version: '6.0'
+          swift-version: swift-6.1.2-release
+          swift-build: 6.1.2-RELEASE
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
@@ -66,4 +70,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v4.2.9 'Composition-Lab-4.2.9-Windows-x64.zip' --repo '${{ github.repository }}' --title 'Composition Lab Windows v4.29' --notes 'Windows application passed native Pastorale processing plus extracted-ZIP regression tests with deliberately inverted Guile timestamps. See workflow run ${{ github.run_id }}.'
+          gh release create v4.2.9 'Composition-Lab-4.2.9-Windows-x64.zip' --repo '${{ github.repository }}' --target '${{ github.sha }}' --title 'Composition Lab Windows v4.29' --notes 'Windows application passed native Pastorale processing plus extracted-ZIP regression tests with deliberately inverted Guile timestamps. See workflow run ${{ github.run_id }}.'
