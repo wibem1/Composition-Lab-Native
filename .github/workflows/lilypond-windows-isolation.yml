@@ -10,11 +10,18 @@ on:
       - '.github/workflows/lilypond-windows-isolation.yml'
 jobs:
   pastorale:
-    runs-on: windows-2022
-    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+        environment: [inherited, application]
+        runtime: [official, released-4.2.8]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Download pinned bundled LilyPond
+        if: matrix.runtime == 'official'
         shell: pwsh
         run: |
           $url = 'https://gitlab.com/lilypond/lilypond/-/releases/v2.24.4/downloads/lilypond-2.24.4-mingw-x86_64.zip'
@@ -22,16 +29,25 @@ jobs:
           $expected = 'E238F5A33EBDE7466FE03D0FBCAA155A44536CA582951972482E0B00CEB0FBF1'
           if ((Get-FileHash lilypond.zip -Algorithm SHA256).Hash -ne $expected) { throw 'Checksum mismatch' }
           Expand-Archive lilypond.zip -DestinationPath lilypond-dist
+          "LILYPOND_TEST_EXE=$PWD/lilypond-dist/lilypond-2.24.4/bin/lilypond.exe" >> $env:GITHUB_ENV
+      - name: Download exact released Windows 4.2.8 package
+        if: matrix.runtime == 'released-4.2.8'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest 'https://github.com/wibem1/Composition-Lab-Native/releases/download/v4.2.8/Composition-Lab-4.2.8-Windows-x64.zip' -OutFile package.zip
+          if ((Get-FileHash package.zip -Algorithm SHA256).Hash -ne '5702DD4F05C641BDAECF44FC46E3962A02D2378949A290120A6242F9B358D2D0') { throw 'Release checksum mismatch' }
+          Expand-Archive package.zip -DestinationPath package
+          "LILYPOND_TEST_EXE=$PWD/package/Composition Lab 4.2.8/LilyPond/bin/lilypond.exe" >> $env:GITHUB_ENV
       - name: Create minimal control diagnostic
         shell: pwsh
         run: |
           $control = [ordered]@{
             composition = @'
-          \\version "2.24.0"
-          \\score {
-            \\new Staff { \\clef treble \\time 4/4 c'4 d'4 e'4 f'4 }
-            \\layout { }
-            \\midi { \\tempo 4 = 100 }
+          \version "2.24.0"
+          \score {
+            \new Staff { \clef treble \time 4/4 c'4 d'4 e'4 f'4 }
+            \layout { }
+            \midi { \tempo 4 = 100 }
           }
           '@
           }
@@ -41,18 +57,20 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
-          pwsh -File Windows/Diagnose-LilyPond-Isolated.ps1 -DiagnosticPath minimal-control.json -LilyPondExe lilypond-dist/lilypond-2.24.4/bin/lilypond.exe -OutputDirectory LilyPond-Control -TimeoutSeconds 60
+          pwsh -File Windows/Diagnose-LilyPond-Isolated.ps1 -DiagnosticPath minimal-control.json -LilyPondExe "$env:LILYPOND_TEST_EXE" -OutputDirectory LilyPond-Control -TimeoutSeconds 60 -EnvironmentProfile ${{ matrix.environment }}
+          exit $LASTEXITCODE
       - name: Reproduce original Pastorale outside application
         id: reproduce
         continue-on-error: true
         shell: pwsh
         run: |
-          pwsh -File Windows/Diagnose-LilyPond-Isolated.ps1 -DiagnosticPath Windows/Fixtures/Pastorale-20261021.json -LilyPondExe lilypond-dist/lilypond-2.24.4/bin/lilypond.exe -OutputDirectory LilyPond-Isolation -TimeoutSeconds 120
+          pwsh -File Windows/Diagnose-LilyPond-Isolated.ps1 -DiagnosticPath Windows/Fixtures/Pastorale-20261021.json -LilyPondExe "$env:LILYPOND_TEST_EXE" -OutputDirectory LilyPond-Isolation -TimeoutSeconds 120 -EnvironmentProfile ${{ matrix.environment }}
+          exit $LASTEXITCODE
       - name: Upload isolation logs even on failure
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lilypond-pastorale-isolation
+          name: lilypond-pastorale-${{ matrix.os }}-${{ matrix.environment }}-${{ matrix.runtime }}
           path: |
             LilyPond-Isolation/
             LilyPond-Control/

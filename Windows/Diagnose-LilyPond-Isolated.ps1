@@ -4,6 +4,7 @@ param(
   [Parameter(Mandatory=$true)][string]$DiagnosticPath,
   [Parameter(Mandatory=$true)][string]$LilyPondExe,
   [string]$OutputDirectory = (Join-Path $PWD "LilyPond-Isolation"),
+  [ValidateSet("inherited", "application")][string]$EnvironmentProfile = "inherited",
   [int]$TimeoutSeconds = 120
 )
 $ErrorActionPreference = 'Stop'
@@ -22,13 +23,15 @@ $sourcePath = Join-Path $dir 'original.ly'
 [System.IO.File]::WriteAllText($sourcePath, $composition + "`n", (New-Object System.Text.UTF8Encoding($false)))
 $sha = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash
 $version = (& $exe --version 2>&1 | Select-Object -First 1 | Out-String).Trim()
-$report = [ordered]@{ sourceSha256=$sha; executable=$exe; version=$version; timeoutSeconds=$TimeoutSeconds; cases=@() }
+$report = [ordered]@{ sourceSha256=$sha; executable=$exe; version=$version; timeoutSeconds=$TimeoutSeconds; environmentProfile=$EnvironmentProfile; operatingSystem=[Environment]::OSVersion.VersionString; cases=@() }
 foreach ($case in @(
-  @{name='midi'; arguments=@('--loglevel=INFO','--output=midi','original.ly')},
-  @{name='svg-no-click'; arguments=@('--svg','-dno-point-and-click','--loglevel=INFO','--output=svg','original.ly')},
-  @{name='svg-click'; arguments=@('--svg','-dpoint-and-click','--loglevel=INFO','--output=svg','original.ly')}
+  @{name='midi'; arguments=@('--verbose','--output=midi','original.ly')},
+  @{name='svg-no-click'; arguments=@('--svg','-dno-point-and-click','--verbose','--output=svg','original.ly')},
+  @{name='svg-click'; arguments=@('--svg','-dpoint-and-click','--verbose','--output=svg','original.ly')}
 )) {
   $work = Join-Path $dir $case.name
+  # Never accept outputs left by an earlier failed run as proof of success.
+  if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }
   New-Item -ItemType Directory -Path $work -Force | Out-Null
   Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $work 'original.ly')
   $stdout = Join-Path $work 'stdout.txt'; $stderr = Join-Path $work 'stderr.txt'
@@ -37,6 +40,15 @@ foreach ($case in @(
   $start.WorkingDirectory = $work
   $start.UseShellExecute = $false
   foreach($arg in $case.arguments) { [void]$start.ArgumentList.Add($arg) }
+  if ($EnvironmentProfile -eq 'application') {
+    # Match LilyPondCompiler.cs exactly; never alter the user's environment.
+    $bundle = Split-Path (Split-Path $exe -Parent) -Parent
+    $start.Environment['FONTCONFIG_FILE'] = Join-Path $bundle 'etc/fonts/fonts.conf'
+    $start.Environment['FONTCONFIG_PATH'] = Join-Path $bundle 'etc/fonts'
+    $fontCache = Join-Path $dir 'font-cache'
+    New-Item -ItemType Directory -Path $fontCache -Force | Out-Null
+    $start.Environment['XDG_CACHE_HOME'] = $fontCache
+  }
   $process = New-Object System.Diagnostics.Process
   $process.StartInfo = $start
   # Drain stdout and stderr concurrently to avoid process-pipe deadlocks.

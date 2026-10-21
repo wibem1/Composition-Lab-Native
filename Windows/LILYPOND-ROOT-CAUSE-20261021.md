@@ -30,3 +30,17 @@ Before calling anything 4.2.9 / 4.29:
 - The exact saved Pastorale must finish reliably in both isolated compiler and full application; assert valid MIDI and SVG, not just exit code.
 - Test cold and warm runs and a second source; prevent regressions on macOS.
 - Keep the existing 4.2.8 release untouched until the failure is verified as repaired.
+
+## Verified CI evidence, continuation
+Run https://github.com/wibem1/Composition-Lab-Native/actions/runs/39609860657
+at `bc16c41f6945ee474dcd2ae5c627ef8e1b9b8beb`, Windows Server 2022:
+- Exact original source SHA-256: `46B79C95EC582B1FF4143F9ADA97D2F3BF7B9DBED5CB9D6618C0459342768DE5`.
+- Official LilyPond 2.24.4 / Guile 2.2: MIDI 1,099 ms; SVG without point-and-click 10,771 ms; SVG with point-and-click 10,796 ms. All three exited 0 and produced expected files; both SVG runs produced two pages and MIDI.
+- The overall run failed because the newly added minimal control used doubled backslashes inside a literal PowerShell here-string. Its three cases exited 1, without timeout. This is a test-fixture defect, not reproduction of the user's hang.
+- The direct test did not reproduce the application's explicit FONTCONFIG/XDG settings. Therefore these results do not clear that launch environment, nor the user's installed Windows environment.
+
+Continuation corrects the control fixture, propagates native PowerShell exit codes explicitly, and compares inherited versus application font environment on Windows Server 2022 and 2025. Verbose logs retain startup phase evidence. Per-case output directories are reset before execution to prevent stale outputs passing the gate. No product runtime or version is changed without evidence.
+
+Runtime versions are intentionally platform-specific: Windows/Build.ps1 and Windows/LilyPondCompiler.cs pin Windows to 2.24.4; Tools/bundle_lilypond.py pins macOS to 2.26.0. A blanket 2.26.0 statement does not describe the shipped Windows bundle.
+
+Important comparison gap found in branch history: release/v4.2.8 (`2b4e696`) applies a replacement GLib/GIO runtime and Guile timestamp repair, whereas v4-cross-platform still builds 4.2.6 with the official unmodified runtime. Thus the existing standalone tests do **not** test the same runtime as the user's v4.2.8. The expanded matrix also downloads the exact v4.2.8 release ZIP, verifies its published SHA-256 `5702dd4f05c641bdaecf44fc46e3962a02d2378949a290120a6242f9b358d2d0`, and runs both original sources against it. Version-number equality alone cannot identify the runtime.
