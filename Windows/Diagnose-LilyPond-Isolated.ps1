@@ -25,7 +25,7 @@ $sha = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash
 $version = (& $exe --version 2>&1 | Select-Object -First 1 | Out-String).Trim()
 $report = [ordered]@{ sourceSha256=$sha; executable=$exe; version=$version; timeoutSeconds=$TimeoutSeconds; environmentProfile=$EnvironmentProfile; operatingSystem=[Environment]::OSVersion.VersionString; cases=@() }
 foreach ($case in @(
-  @{name='midi'; arguments=@('--verbose','--output=midi','original.ly')},
+  @{name='midi'; arguments=@('-dno-print-pages','--verbose','--output=midi','original.ly')},
   @{name='svg-no-click'; arguments=@('--svg','-dno-point-and-click','--verbose','--output=svg','original.ly')},
   @{name='app-exact'; arguments=@('--svg','-dpoint-and-click','--loglevel=INFO','--output=score','original.ly')},
   @{name='svg-click'; arguments=@('--svg','-dpoint-and-click','--verbose','--output=svg','original.ly')}
@@ -68,7 +68,6 @@ foreach ($case in @(
   [System.IO.File]::WriteAllText($stdout, $(if($outTask.IsCompletedSuccessfully){$outTask.Result}else{'<output incomplete>'}))
   [System.IO.File]::WriteAllText($stderr, $(if($errTask.IsCompletedSuccessfully){$errTask.Result}else{'<output incomplete>'}))
   $outputs = @(Get-ChildItem -Path $work -File | Where-Object { $_.Extension -in @('.midi','.mid','.svg') } | Select-Object -ExpandProperty Name)
-  $expectedExtension = if ($case.name -eq "midi") { @(".midi",".mid") } else { @(".svg") }
   $hasMidi = @($outputs | Where-Object { $_ -match '\.(midi|mid)$' }).Count -gt 0
   $hasSvg = @($outputs | Where-Object { $_ -match '\.svg$' }).Count -gt 0
   $hasExpectedOutput = if ($case.name -eq 'midi') { $hasMidi } elseif ($case.name -eq 'app-exact') { $hasMidi -and $hasSvg } else { $hasSvg }
