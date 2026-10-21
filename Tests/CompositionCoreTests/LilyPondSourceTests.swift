@@ -48,10 +48,10 @@ final class LilyPondSourceTests: XCTestCase {
                            "#(set-paper-size \"a4\") #(system \"anything\")",
                            "#(set-paper-size \"../private\")",
                            "#(set-paper-size \"a4\" 'portrait extra)",
-                           #"#(eval "#(set-paper-size \"a4\")")"#] {
+                           ##"#(eval "#(set-paper-size \"a4\")")"##] {
             XCTAssertThrowsError(try LilyPondSource.prepare("\\score { { c'4 } \\layout {} \\midi {} } " + expression))
         }
-        let source = #"% #(set-paper-size "a4")"# + "\n" + #"\header { title = "#(set-paper-size \"a4\")" }"# + "\n" + #"\score { { c'4 } \layout {} \midi {} }"# + "\n"
+        let source = ##"% #(set-paper-size "a4")"## + "\n" + ##"\header { title = "#(set-paper-size \"a4\")" }"## + "\n" + ##"\score { { c'4 } \layout {} \midi {} }"## + "\n"
         XCTAssertEqual(try LilyPondSource.prepare(source), source)
     }
     func testSharedSelectionNormalizesOnlyLineEndings() throws {
