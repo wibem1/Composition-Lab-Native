@@ -1,4 +1,4 @@
-name: Windows 4.29 compile gate
+name: Windows 4.2.10 compile gate
 on:
   push:
     branches: [v4-cross-platform]
@@ -23,7 +23,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           [xml]$project = Get-Content 'Windows/CompositionLab/CompositionLab.csproj' -Raw
-          if ($project.Project.PropertyGroup.Version -ne '4.2.9') { throw 'Candidate version is not 4.2.9' }
+          if ($project.Project.PropertyGroup.Version -ne '4.2.10') { throw 'Candidate version is not 4.2.10' }
           if (-not (Test-Path 'Windows/CompositionLab/GuileRuntimeManifest.json')) { throw 'Missing Guile runtime verification manifest' }
           $manifest = Get-Content 'Windows/CompositionLab/GuileRuntimeManifest.json' -Raw | ConvertFrom-Json
           if (@($manifest.pairs).Count -ne 374) { throw 'Expected 374 verified Guile source/bytecode pairs' }
