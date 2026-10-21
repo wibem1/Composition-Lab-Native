@@ -1,0 +1,69 @@
+name: Windows 4.29 end-to-end and release
+on:
+  workflow_dispatch:
+  push:
+    branches: [v4-cross-platform]
+    paths:
+      - 'Windows/**'
+      - 'Shared/**'
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Package.swift'
+      - '.github/workflows/windows-v429-release.yml'
+permissions:
+  contents: write
+jobs:
+  native-windows:
+    runs-on: windows-2022
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '6.0'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build shared Swift core
+        shell: pwsh
+        run: |
+          swift build -c release
+          if ($LASTEXITCODE -ne 0) { throw 'Swift core build failed' }
+      - name: Build and test real Windows application and extracted package
+        shell: pwsh
+        run: |
+          ./Windows/Build.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Native build and test failure' }
+      - name: Require complete test evidence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $base = 'Windows/TestResults'
+          foreach ($sub in @('', 'Packaged')) {
+            $dir = Join-Path $base $sub
+            $result = Get-Content (Join-Path $dir 'result.json') -Raw | ConvertFrom-Json
+            if (-not $result.passed) { throw "Native self-test failed for $dir" }
+            $p = Get-Content (Join-Path $dir 'Pastorale-Messung.json') -Raw | ConvertFrom-Json
+            if ($null -eq $p) { throw "Pastorale results absent for $dir" }
+            $guile = Get-Content (Join-Path $dir 'Guile-Extraction-Repair.json') -Raw | ConvertFrom-Json
+            if (-not $guile.passed -or $guile.verifiedPairs -ne 374 -or -not $guile.simulatedUserExtraction) { throw "Guile corruption/repair test failed for $dir" }
+          }
+          if (-not (Test-Path 'Composition-Lab-4.2.9-Windows-x64.zip')) { throw 'Package missing' }
+      - name: Store installable archive and logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: Composition-Lab-4.29-Windows-verified
+          path: |
+            Composition-Lab-4.2.9-Windows-x64.zip
+            Windows/TestResults/**
+          if-no-files-found: error
+      - name: Publish only fully tested release
+        if: ${{ success() && github.ref == 'refs/heads/v4-cross-platform' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v4.2.9 'Composition-Lab-4.2.9-Windows-x64.zip' --repo '${{ github.repository }}' --title 'Composition Lab Windows v4.29' --notes 'Windows application passed native Pastorale processing plus extracted-ZIP regression tests with deliberately inverted Guile timestamps. See workflow run ${{ github.run_id }}.' --verify-tag
