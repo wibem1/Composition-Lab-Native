@@ -5,7 +5,9 @@ import json
 from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 manifest = json.loads((root / 'Windows/LilyPond-Runtime-Manifest.json').read_text())
-data = base64.b64encode(gzip.compress(json.dumps(manifest,separators=(',',':')).encode(),mtime=0)).decode()
+compressed = bytearray(gzip.compress(json.dumps(manifest,separators=(',',':')).encode(),mtime=0))
+compressed[9] = 255  # Gzip OS marker must be identical on Windows and Unix.
+data = base64.b64encode(compressed).decode()
 body = (root / 'Tools/Windows/Repair-LilyPondTimestamps.template.ps1').read_text().replace('@@MANIFEST@@',data)
 wrapper = '''@echo off
 setlocal

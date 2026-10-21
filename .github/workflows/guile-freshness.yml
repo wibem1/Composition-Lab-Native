@@ -7,7 +7,11 @@ permissions:
   contents: read
 jobs:
   released-package:
-    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +26,31 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Guile-Freshness-Regression
+          name: Guile-Freshness-Regression-${{ matrix.os }}
           path: FreshnessResults/
           if-no-files-found: warn
+
+  publish-repair:
+    needs: released-package
+    if: github.event_name == 'push' && github.ref == 'refs/heads/fix/guile-runtime-timestamps'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Guile-Freshness-Regression-*
+          path: SavedResults
+      - name: Publish only after reproduction and repair pass on both Windows systems
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          reports = {p.parent.name:json.loads(p.read_text(encoding='utf-8-sig')) for p in Path('SavedResults').glob('*/result.json')}
+          assert len(reports) == 2 and all(r['passed'] for r in reports.values())
+          Path('Guile-Reparatur-Testbericht.json').write_text(json.dumps(reports,indent=2),encoding='utf-8')
+          PY
+          gh release upload v4.2.7 Windows/LilyPond-Reparatur.cmd Guile-Reparatur-Testbericht.json --repo "$GITHUB_REPOSITORY"
