@@ -36,7 +36,7 @@ jobs:
           import mido
           try:
               mido.MidiFile('audit/romanze.mid')
-          except ValueError as error:
+          except (ValueError, OSError) as error:
               if 'data byte' not in str(error):
                   raise
               print('Independent MIDI parser confirms invalid original note byte:', error)
