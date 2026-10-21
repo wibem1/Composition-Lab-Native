@@ -63,6 +63,7 @@ function Set-InvertedGuileTimes([string]$app) {
 }
 function Assert-GuileFresh([string]$app, [string]$reportPath) {
     $manifest = Get-Content 'Windows/CompositionLab/GuileRuntimeManifest.json' -Raw | ConvertFrom-Json
+    if (@($manifest.pairs).Count -ne 374) { throw 'Guile repair manifest incomplete at release gate' }
     foreach ($pair in $manifest.pairs) {
         $source = Get-Item (Join-Path (Join-Path $app 'LilyPond') $pair.source)
         $compiled = Get-Item (Join-Path (Join-Path $app 'LilyPond') $pair.compiled)
