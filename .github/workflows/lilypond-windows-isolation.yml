@@ -1,0 +1,41 @@
+name: LilyPond Windows isolation
+on:
+  workflow_dispatch:
+  push:
+    branches: [v4-cross-platform]
+    paths:
+      - 'Windows/Diagnose-LilyPond-Isolated.ps1'
+      - 'Windows/Fixtures/Pastorale-20261021.json'
+      - 'Windows/Fixtures/Pastorale-20261021.ly'
+      - '.github/workflows/lilypond-windows-isolation.yml'
+jobs:
+  pastorale:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download pinned bundled LilyPond
+        shell: pwsh
+        run: |
+          $url = 'https://gitlab.com/lilypond/lilypond/-/releases/v2.24.4/downloads/lilypond-2.24.4-mingw-x86_64.zip'
+          Invoke-WebRequest $url -OutFile lilypond.zip
+          $expected = 'E238F5A33EBDE7466FE03D0FBCAA155A44536CA582951972482E0B00CEB0FBF1'
+          if ((Get-FileHash lilypond.zip -Algorithm SHA256).Hash -ne $expected) { throw 'Checksum mismatch' }
+          Expand-Archive lilypond.zip -DestinationPath lilypond-dist
+      - name: Reproduce original Pastorale outside application
+        id: reproduce
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          pwsh -File Windows/Diagnose-LilyPond-Isolated.ps1 -DiagnosticPath Windows/Fixtures/Pastorale-20261021.json -LilyPondExe lilypond-dist/lilypond-2.24.4/bin/lilypond.exe -OutputDirectory LilyPond-Isolation -TimeoutSeconds 120
+      - name: Upload isolation logs even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lilypond-pastorale-isolation
+          path: LilyPond-Isolation/
+          if-no-files-found: warn
+      - name: Fail gate when original does not compile
+        if: steps.reproduce.outcome != 'success'
+        shell: pwsh
+        run: throw 'Original Pastorale LilyPond isolation failed; no release allowed'
