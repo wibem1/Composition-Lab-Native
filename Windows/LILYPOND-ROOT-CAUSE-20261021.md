@@ -49,3 +49,41 @@ Important comparison gap found in branch history: release/v4.2.8 (`2b4e696`) app
 Run https://github.com/wibem1/Composition-Lab-Native/actions/runs/39611300503 at `f4690968c4de6715b074aeafecebbd272f0f3aa2`: both original and released-4.2.8 runtimes pass the exact Pastorale and corrected minimal control, with inherited and application font environments on Windows Server 2022 and 2025. The reported user-machine CPU stall is **not reproduced**. No timeout repair is proven.
 
 `Windows/LilyPond-CPU-Diagnose.cmd` is a standalone, Windows PowerShell 5.1-compatible follow-up: place beside the installed application EXE and double-click. It tests version, minimal score and the embedded exact Pastorale, captures full verbose startup logs and CPU samples with bounded deadlines, and saves a single JSON on Desktop. It does not change the installation, registry, API settings or original composition and makes no network/AI calls. The actual CMD is tested against the released package by CI on both Windows runners. This is diagnostic work, not a product fix or new release.
+
+## Verified continuation: repaired test infrastructure and full native path
+
+Investigation of issue #7 on 2026-10-21; no product release.
+
+### Changes
+
+- `d5e7cd2`: repaired a syntactically corrupted isolation script (truncated regex literals and duplicated report tails). Added `app-exact` with the production CLI arguments; requires BOTH MIDI and SVG. Rerunning old run 39615507269 proved a PowerShell parser failure before LilyPond execution, not an engraving timeout.
+- `6522072`: added exact Pastorale to the full native application path: prepare, compile, MIDI import, two instrument programs, final bar, slot acceptance, document validation and original .ly/.mid exports.
+- `4d011ab`: fixed standalone CMD under a Windows PowerShell 5.1 process inheriting PowerShell 7 module paths; uses its own built-in modules.
+- `30b83ad`: corrected the new test's line-ending comparison and freed its temporary slot before the independent existing score fixture. MIDI remains byte-exact. The first native run correctly blocked on the new test assertion; downloaded .ly artifact matched the original after line-ending normalization.
+
+### Actual completed runs and artifacts
+
+Isolation: https://github.com/wibem1/Composition-Lab-Native/actions/runs/39618748438 (commit `4d011ab2264151ba92d62142c3c18f761278ce0d`): **all eight jobs green**. Windows 2022/2025 × official/released-4.2.8 × inherited/application environments. Every minimal control and exact Pastorale case exited 0 with required output. Exact application case took 6280–10831 ms. Standalone CMD passed against released 4.2.8 on both runners.
+
+Native: https://github.com/wibem1/Composition-Lab-Native/actions/runs/39619876034 (commit `30b83adc0d6daf0ffe8e86ecaa437da6975db7bc`): **Windows, macOS and Linux green**. Windows compiled and tested the application, compressed it, extracted it and tested the extracted package again. Release job skipped.
+
+Downloaded and inspected `Windows-Starttest`, artifact `12353709536`:
+
+| Check | Source bundle | Extracted package |
+| --- | ---: | ---: |
+| Pastorale cold engraving | 8500.1077 ms | 8423.2025 ms |
+| SVG pages | 2 | 2 |
+| Warm cache reused | true | true |
+| Native result passed | true | true |
+| Complete processing stage | completed | completed |
+| Conversion AI calls | 0 | 0 |
+| Violin program / note events / last beat | 40 / 184 / 138 | 40 / 184 / 138 |
+| Cello program / note events / last beat | 42 / 151 / 138 | 42 / 151 / 138 |
+
+Beat 138 is the end of all 46 bars in 6/8. Native assertions validate both tracks, preserved original MIDI, document acceptance and original source/MIDI exports. Independently parsed isolated MIDI and both SVG XML documents also pass. Original source SHA-256 remains `46b79c95ec582b1ff4143f9ada97d2f3bf7b9dbed5cb9d6618c0459342768de5`.
+
+### Remaining blocker and release decision
+
+The user's saved 4.2.8 diagnostic still proves a CPU-bound ~122-second stall, but contains no LilyPond phase output. None of these tests reproduces it. CI uses Windows Server, not the affected Windows installation. The branch application still identifies as 4.2.6; testing it does not silently turn it into released 4.2.8 or a new 4.2.9.
+
+**Root cause on the affected machine remains unproven. No runtime timeout fix has been made, no 4.2.9/4.29 tag or release was created, and issue #7 remains open.** A failing-machine verbose phase trace (the now CI-tested `Windows/LilyPond-CPU-Diagnose.cmd`) is the next missing evidence. It must be collected beside the actually installed application; successful CI alone is not sufficient to claim repair.
