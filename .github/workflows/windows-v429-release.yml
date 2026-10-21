@@ -66,4 +66,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v4.2.9 'Composition-Lab-4.2.9-Windows-x64.zip' --repo '${{ github.repository }}' --title 'Composition Lab Windows v4.29' --notes 'Windows application passed native Pastorale processing plus extracted-ZIP regression tests with deliberately inverted Guile timestamps. See workflow run ${{ github.run_id }}.' --verify-tag
+          gh release create v4.2.9 'Composition-Lab-4.2.9-Windows-x64.zip' --repo '${{ github.repository }}' --title 'Composition Lab Windows v4.29' --notes 'Windows application passed native Pastorale processing plus extracted-ZIP regression tests with deliberately inverted Guile timestamps. See workflow run ${{ github.run_id }}.'
