@@ -63,4 +63,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v4.2.10 'Composition-Lab-4.2.10-Windows-x64.zip' --repo '${{ github.repository }}' --target '${{ github.sha }}' --title 'Composition Lab Windows v4.2.10' --notes 'Windows application passed native Pastorale and original Romanze A4 processing plus extracted-ZIP regression tests with deliberately inverted Guile timestamps. See workflow run ${{ github.run_id }}.'
+          Copy-Item 'Windows/TestResults/Packaged/Romanze.ly' 'Romanze-Bassoktaven-korrigiert.ly'
+          Copy-Item 'Windows/TestResults/Packaged/Romanze.mid' 'Romanze-Bassoktaven-korrigiert.mid'
+          gh release create v4.2.10 'Composition-Lab-4.2.10-Windows-x64.zip' 'Romanze-Bassoktaven-korrigiert.ly' 'Romanze-Bassoktaven-korrigiert.mid' --repo '${{ github.repository }}' --target '${{ github.sha }}' --title 'Composition Lab Windows v4.2.10' --notes 'Windows application passed native Pastorale and original Romanze A4 processing plus extracted-ZIP regression tests with deliberately inverted Guile timestamps. See workflow run ${{ github.run_id }}.'
