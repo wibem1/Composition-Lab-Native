@@ -7,6 +7,9 @@ pause
 exit /b
 # CLAB_POWERSHELL_START
 $ErrorActionPreference = 'Stop'
+# PowerShell 7 callers can pass an incompatible PSModulePath to Windows
+# PowerShell 5.1. Use its own built-in modules for a reproducible diagnostic.
+$env:PSModulePath = Join-Path $PSHOME 'Modules'
 $root = Split-Path -Parent $env:CLAB_CPU_SELF
 $DiagnosticJson = ''
 $ReportPath = ''
