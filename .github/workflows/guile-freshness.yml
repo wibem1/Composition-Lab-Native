@@ -1,0 +1,27 @@
+name: Reproduce and repair Guile cache timestamps
+on:
+  push:
+    branches: [fix/guile-runtime-timestamps]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  released-package:
+    runs-on: windows-2022
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild deterministic single-file repair
+        shell: pwsh
+        run: |
+          python Tools/Windows/build-runtime-repair.py
+          git diff --exit-code -- Windows/LilyPond-Reparatur.cmd
+      - name: Reproduce the broken cache, repair and repeat; reject modified libraries
+        shell: pwsh
+        run: ./Tools/Windows/Test-GuileFreshness.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Guile-Freshness-Regression
+          path: FreshnessResults/
+          if-no-files-found: warn
