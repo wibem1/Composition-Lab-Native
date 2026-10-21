@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
-$destination = Join-Path $PWD 'Windows/Bundle/Composition Lab 4.2.6'
+$destination = Join-Path $PWD 'Windows/Bundle/Composition Lab 4.2.9'
 if (Test-Path $destination) { Remove-Item $destination -Recurse -Force }
 New-Item $destination -ItemType Directory -Force | Out-Null
 dotnet publish 'Windows/CompositionLab/CompositionLab.csproj' -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $destination
@@ -52,7 +52,7 @@ $oldPath = $env:Path
 try {
     $env:Path = "$env:windir/System32;$env:windir"
     $version = & (Join-Path $core 'composition-lab-core.exe') --version
-    if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.2.6') { throw 'Bundled core runtime is incomplete' }
+    if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.2.9') { throw 'Bundled core runtime is incomplete' }
 } finally { $env:Path = $oldPath }
 # Recreate the affected Explorer extraction order before BOTH native tests.
 # Sources and compiled files keep their original bytes, but source is newer.
@@ -79,7 +79,7 @@ $tests = Join-Path $PWD 'Windows/TestResults'
 New-Item $tests -ItemType Directory -Force | Out-Null
 try { Set-DisplayResolution -Width 1600 -Height 1200 -Force -ErrorAction Stop | Out-Null } catch { Write-Output 'Default Windows display retained; GUI scroll reachability is tested.' }
 $start = New-Object System.Diagnostics.ProcessStartInfo
-$start.FileName = Join-Path $destination 'Composition Lab 4.2.6.exe'
+$start.FileName = Join-Path $destination 'Composition Lab 4.2.9.exe'
 $start.Arguments = "--self-test --test-output `"$tests`""
 $start.UseShellExecute = $false
 $start.Environment['PATH'] = "$env:windir/System32;$env:windir"
@@ -93,17 +93,17 @@ $report = Get-Content (Join-Path $tests 'result.json') -Raw | ConvertFrom-Json
 if (-not $report.passed) { throw 'Windows test result is not green' }
 Get-Content (Join-Path $tests 'result.json')
 Assert-GuileFresh $destination (Join-Path $tests 'Guile-Extraction-Repair.json')
-$zip = Join-Path $PWD 'Composition-Lab-4.2.6-Windows-x64.zip'
+$zip = Join-Path $PWD 'Composition-Lab-4.2.9-Windows-x64.zip'
 Compress-Archive -Path $destination -DestinationPath $zip -Force
 Write-Output "Windows test package: $zip"
 
 # The released ZIP, not only the source bundle, must pass the native tests.
 $roundtrip = Join-Path $env:TEMP ('clab-packaged-' + [guid]::NewGuid().ToString('N'))
 Expand-Archive $zip $roundtrip
-Set-InvertedGuileTimes (Join-Path $roundtrip 'Composition Lab 4.2.6')
+Set-InvertedGuileTimes (Join-Path $roundtrip 'Composition Lab 4.2.9')
 $packagedTests = Join-Path $tests 'Packaged'
 New-Item $packagedTests -ItemType Directory -Force | Out-Null
-$start.FileName = Join-Path $roundtrip 'Composition Lab 4.2.6/Composition Lab 4.2.6.exe'
+$start.FileName = Join-Path $roundtrip 'Composition Lab 4.2.9/Composition Lab 4.2.9.exe'
 $start.Arguments = "--self-test --test-output `"$packagedTests`""
 $packagedProcess = [System.Diagnostics.Process]::Start($start)
 if (-not $packagedProcess.WaitForExit(180000)) { $packagedProcess.Kill(); throw 'Packaged Windows test timed out' }
@@ -114,5 +114,5 @@ if ($packagedProcess.ExitCode -ne 0) {
 $packagedReport = Get-Content (Join-Path $packagedTests 'result.json') -Raw | ConvertFrom-Json
 if (-not $packagedReport.passed) { throw 'Packaged Windows test report is not green' }
 Get-Content (Join-Path $packagedTests 'Pastorale-Messung.json')
-Assert-GuileFresh (Join-Path $roundtrip 'Composition Lab 4.2.6') (Join-Path $packagedTests 'Guile-Extraction-Repair.json')
+Assert-GuileFresh (Join-Path $roundtrip 'Composition Lab 4.2.9') (Join-Path $packagedTests 'Guile-Extraction-Repair.json')
 try { Remove-Item $roundtrip -Recurse -Force } catch { Write-Warning 'Temporary test bundle retained because a file is still in use.' }
