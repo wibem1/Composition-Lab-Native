@@ -5,6 +5,7 @@ on:
     branches: [v4-cross-platform]
     paths:
       - 'Windows/Diagnose-LilyPond-Isolated.ps1'
+      - 'Windows/LilyPond-CPU-Diagnose.cmd'
       - 'Windows/Fixtures/Pastorale-20261021.json'
       - 'Windows/Fixtures/Pastorale-20261021.ly'
       - '.github/workflows/lilypond-windows-isolation.yml'
@@ -66,6 +67,20 @@ jobs:
         run: |
           pwsh -File Windows/Diagnose-LilyPond-Isolated.ps1 -DiagnosticPath Windows/Fixtures/Pastorale-20261021.json -LilyPondExe "$env:LILYPOND_TEST_EXE" -OutputDirectory LilyPond-Isolation -TimeoutSeconds 120 -EnvironmentProfile ${{ matrix.environment }}
           exit $LASTEXITCODE
+      - name: Test standalone diagnostic against actual release
+        if: matrix.runtime == 'released-4.2.8' && matrix.environment == 'application'
+        shell: pwsh
+        run: |
+          $app = "$PWD/package/Composition Lab 4.2.8"
+          Copy-Item Windows/LilyPond-CPU-Diagnose.cmd "$app/LilyPond-CPU-Diagnose.cmd"
+          cmd /c "`"$app/LilyPond-CPU-Diagnose.cmd`" < NUL"
+          $desktop = [Environment]::GetFolderPath('Desktop')
+          $report = Get-ChildItem $desktop -Filter 'Composition-Lab-LilyPond-CPU-*.json' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $report) { throw 'Standalone diagnostic did not save its report' }
+          Copy-Item $report.FullName LilyPond-Isolation/cpu-diagnostic.json
+          $result = Get-Content $report.FullName -Raw | ConvertFrom-Json
+          if ($result.error -or @($result.experiments).Count -ne 3) { throw 'Incomplete standalone diagnostic' }
+          if (@($result.experiments | Where-Object { $_.timedOut -or $_.exitCode -ne 0 }).Count) { throw 'Standalone diagnostic failed' }
       - name: Upload isolation logs even on failure
         if: always()
         uses: actions/upload-artifact@v4
