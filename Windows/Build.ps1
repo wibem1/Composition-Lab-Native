@@ -89,8 +89,7 @@ if ($process.ExitCode -ne 0) {
     if (Test-Path (Join-Path $tests 'failure.txt')) { Get-Content (Join-Path $tests 'failure.txt') }
     throw 'Windows UI self-test failed'
 }
-$report = Get-Content (Join-Path $tests 'result.json')
-Assert-GuileFresh $destination (Join-Path $tests 'Guile-Extraction-Repair.json') -Raw | ConvertFrom-Json
+$report = Get-Content (Join-Path $tests 'result.json') -Raw | ConvertFrom-Json
 if (-not $report.passed) { throw 'Windows test result is not green' }
 Get-Content (Join-Path $tests 'result.json')
 Assert-GuileFresh $destination (Join-Path $tests 'Guile-Extraction-Repair.json')
