@@ -77,3 +77,6 @@ $env:CLAB_REPAIR_REPORT=Join-Path $root 'FreshnessResults/modified-source-reject
 & $env:ComSpec /c Windows\LilyPond-Reparatur.cmd
 if ($LASTEXITCODE -eq 0 -or (Get-Item (Join-Path $runtime $first.compiled)).LastWriteTimeUtc -ne $oldDate) { throw 'Edited library accepted or metadata partially changed before full validation' }
 [ordered]@{passed=$true;baseline=$baseline;repairedMilliseconds=$repaired.milliseconds;repeatMilliseconds=$repeated.milliseconds;verifiedPairs=$repaired.verifiedPairs;repairedPairs=$repaired.repairedPairs;modifiedSourceRejected=$true} | ConvertTo-Json -Depth 4 | Tee-Object -FilePath FreshnessResults/result.json
+
+# The rejected-source test deliberately returned 1; all assertions passed.
+exit 0
