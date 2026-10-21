@@ -1,9 +1,9 @@
 name: Composition Lab Native quality gates
 on:
   push:
-    branches: [v4-cross-platform, fix/local-lilypond-startup]
+    branches: [v4-cross-platform, fix/local-lilypond-startup, fix/guile-runtime-timestamps]
   pull_request:
-    branches: [v4-cross-platform, fix/local-lilypond-startup]
+    branches: [v4-cross-platform, fix/local-lilypond-startup, fix/guile-runtime-timestamps]
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
