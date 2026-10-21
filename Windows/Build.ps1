@@ -92,6 +92,7 @@ if ($process.ExitCode -ne 0) {
 }
 $report = Get-Content (Join-Path $tests 'result.json') -Raw | ConvertFrom-Json
 if (-not $report.passed) { throw 'Windows test result is not green' }
+if (-not (Test-Path (Join-Path $tests 'Pastorale-Messung.json'))) { throw 'Pastorale native test report missing' }
 Get-Content (Join-Path $tests 'result.json')
 Assert-GuileFresh $destination (Join-Path $tests 'Guile-Extraction-Repair.json')
 $zip = Join-Path $PWD 'Composition-Lab-4.2.9-Windows-x64.zip'
@@ -114,6 +115,7 @@ if ($packagedProcess.ExitCode -ne 0) {
 }
 $packagedReport = Get-Content (Join-Path $packagedTests 'result.json') -Raw | ConvertFrom-Json
 if (-not $packagedReport.passed) { throw 'Packaged Windows test report is not green' }
+if (-not (Test-Path (Join-Path $packagedTests 'Pastorale-Messung.json'))) { throw 'Packaged Pastorale test report missing' }
 Get-Content (Join-Path $packagedTests 'Pastorale-Messung.json')
 Assert-GuileFresh (Join-Path $roundtrip 'Composition Lab 4.2.9') (Join-Path $packagedTests 'Guile-Extraction-Repair.json')
 try { Remove-Item $roundtrip -Recurse -Force } catch { Write-Warning 'Temporary test bundle retained because a file is still in use.' }
