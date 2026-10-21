@@ -53,4 +53,4 @@ jobs:
           assert len(reports) == 2 and all(r['passed'] for r in reports.values())
           Path('Guile-Reparatur-Testbericht.json').write_text(json.dumps(reports,indent=2),encoding='utf-8')
           PY
-          gh release upload v4.2.7 Windows/LilyPond-Reparatur.cmd Guile-Reparatur-Testbericht.json --repo "$GITHUB_REPOSITORY"
+          gh release upload v4.2.7 Windows/LilyPond-Reparatur.cmd Guile-Reparatur-Testbericht.json --clobber --repo "$GITHUB_REPOSITORY"
