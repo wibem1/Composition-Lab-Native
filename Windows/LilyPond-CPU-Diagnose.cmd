@@ -58,12 +58,11 @@ function Run-Probe([string]$name,[string]$source,[string[]]$options,[int]$second
         $stderr=$p.StandardError.ReadToEndAsync()
         $stdout=$p.StandardOutput.ReadToEndAsync()
         $clock=[Diagnostics.Stopwatch]::StartNew()
+        $loadedModules=@(); $threads=@()
         while (-not $p.HasExited -and $clock.Elapsed.TotalSeconds -lt $seconds) {
             Start-Sleep -Milliseconds 500
             try { $p.Refresh(); $samples+= [ordered]@{ elapsedMs=[int]$clock.Elapsed.TotalMilliseconds; cpuMs=[int]$p.TotalProcessorTime.TotalMilliseconds; workingSetBytes=$p.WorkingSet64 } } catch { }
-        }
-        $loadedModules=@(); $threads=@()
-        if (-not $p.HasExited) {
+        if ($clock.Elapsed.TotalSeconds -ge 1 -and $loadedModules.Count -eq 0 -and -not $p.HasExited) {
             try {
                 $loadedModules=@($p.Modules | ForEach-Object {
                     $module=$_
@@ -75,6 +74,8 @@ function Run-Probe([string]$name,[string]$source,[string[]]$options,[int]$second
                 })
                 $threads=@($p.Threads | ForEach-Object { [ordered]@{ id=$_.Id; cpuMs=[int]$_.TotalProcessorTime.TotalMilliseconds; state=$_.ThreadState.ToString() } })
             } catch { $loadedModules += [ordered]@{ inspectionError=$_.Exception.Message } }
+        }
+
         }
         $timedOut=(-not $p.HasExited)
         if ($timedOut) {
