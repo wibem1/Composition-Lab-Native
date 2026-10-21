@@ -53,6 +53,33 @@ if (-not $env:COMPOSITION_LAB_GIO_SOURCE) {
 if ($LASTEXITCODE -ne 0) { throw 'Local GIO runtime validation failed' }
 & (Get-Command pwsh).Source -NoLogo -NoProfile -File Tools/Windows/Test-GioLoad.ps1 -Bundle (Join-Path $destination 'LilyPond')
 if ($LASTEXITCODE -ne 0) { throw 'Local GIO still loads Windows application enumeration' }
+# Validate bundled Guile bytecode after ZIP extraction. Extracted archive timestamps
+# can make .scm sources appear newer than their matching .go caches, causing
+# long startup delays even when every bundled file has the correct contents.
+# The repair checks pinned SHA-256 hashes before touching timestamps and
+# performs a real offline MIDI/SVG compile; do not ship if it fails.
+Copy-Item 'Windows/LilyPond-Reparatur.cmd' (Join-Path $destination 'LilyPond-Reparatur.cmd')
+$oldRepairTarget = $env:CLAB_REPAIR_TARGET
+$oldRepairNoPause = $env:CLAB_REPAIR_NO_PAUSE
+$oldRepairReport = $env:CLAB_REPAIR_REPORT
+$repairReport = Join-Path $env:TEMP ('clab-build-guile-' + [guid]::NewGuid().ToString('N') + '.json')
+try {
+    $env:CLAB_REPAIR_TARGET = $destination
+    $env:CLAB_REPAIR_NO_PAUSE = '1'
+    $env:CLAB_REPAIR_REPORT = $repairReport
+    & (Join-Path $destination 'LilyPond-Reparatur.cmd')
+    if ($LASTEXITCODE -ne 0) { throw 'Bundled Guile runtime repair or offline engraving smoke test failed' }
+    if (-not (Test-Path -LiteralPath $repairReport)) { throw 'Guile runtime repair produced no report' }
+    $repairResult = Get-Content -LiteralPath $repairReport -Raw | ConvertFrom-Json
+    if (-not $repairResult.passed -or $repairResult.verifiedPairs -lt 1) {
+        throw 'Guile runtime repair verification failed; refusing to publish Windows package'
+    }
+    Write-Output ('Guile cache verified: ' + $repairResult.verifiedPairs + ' pairs; fixed timestamps: ' + $repairResult.repairedPairs)
+} finally {
+    $env:CLAB_REPAIR_TARGET = $oldRepairTarget
+    $env:CLAB_REPAIR_NO_PAUSE = $oldRepairNoPause
+    $env:CLAB_REPAIR_REPORT = $oldRepairReport
+}
 & (Join-Path $destination 'LilyPond/bin/lilypond.exe') --version
 if ($LASTEXITCODE -ne 0) { throw 'Bundled LilyPond cannot start' }
 Copy-Item 'Windows/README-Windows.md' (Join-Path $destination 'LIESMICH.md')
