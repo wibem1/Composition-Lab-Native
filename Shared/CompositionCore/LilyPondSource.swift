@@ -27,10 +27,22 @@ enum LilyPondSource {
     }
     static func prepare(_ source: String) throws -> String {
         let notation = try maskedNotation(source)
+        // A paper-size constructor takes a literal name, which maskedNotation
+        // blanks along with all other strings. Recognize it against the original
+        // text, but only when its # is actual notation, never inside a comment
+        // or quoted title. Keep offsets and newlines unchanged for later checks.
+        let policyNotation = NSMutableString(string: notation)
+        let paper = try NSRegularExpression(pattern: #"#\(set-paper-size\s+"[a-zA-Z][a-zA-Z0-9-]{0,63}"\s*(?:'landscape\s*)?\)"#)
+        for token in paper.matches(in: source, range: NSRange(location: 0, length: (source as NSString).length)).reversed() {
+            guard (notation as NSString).substring(with: NSRange(location: token.range.location, length: 2)) == "#(" else { continue }
+            let value = (source as NSString).substring(with: token.range)
+            let blank = value.utf16.map { ($0 == 10 || $0 == 13) ? $0 : 32 }
+            policyNotation.replaceCharacters(in: token.range, with: String(decoding: blank, as: UTF16.self))
+        }
         // Permit only literal duration constructors used by notation spacing.
         // No nested calls, symbols, or arbitrary Scheme evaluation.
         let allowed = try NSRegularExpression(pattern: #"##[tf]\b|#\(set-global-staff-size\s+\d+(?:\.\d+)?\s*\)|#\(ly:make-moment\s+[0-9]+(?:/[1-9][0-9]*|\s+[1-9][0-9]*)\s*\)"#)
-        let checked = allowed.stringByReplacingMatches(in: notation, range: NSRange(location: 0, length: (notation as NSString).length), withTemplate: " ")
+        let checked = allowed.stringByReplacingMatches(in: policyNotation as String, range: NSRange(location: 0, length: policyNotation.length), withTemplate: " ")
         guard match(#"\\(?:include|includeSpecial|bookOutputName|bookOutputSuffix|applyContext|applyOutput|displayScheme|scheme|load)\b|\$|#(?!#[tf]\b|[-+]?\d+(?:\.\d+)?)"#, in: checked) == nil else {
             throw APIError.badResponse("Die LilyPond-Datei enthält externe Dateien, veränderte Ausgabepfade oder ausführbare Scheme-Ausdrücke. Für die direkte Ausgabe bitte reine Notation verwenden.")
         }

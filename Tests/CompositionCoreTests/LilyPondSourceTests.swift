@@ -34,6 +34,26 @@ final class LilyPondSourceTests: XCTestCase {
             XCTAssertThrowsError(try LilyPondSource.prepare("\\score { { c'4 } \\layout {} \\midi {} } " + expression))
         }
     }
+    func testRomanzeDiagnosticAcceptsLiteralPaperSizeUnchanged() throws {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "romanze-violin-piano-a4", withExtension: "ly", subdirectory: "Fixtures"))
+        let source = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(source.contains("#(set-paper-size \"a4\")"))
+        XCTAssertEqual(try LilyPondSource.prepare(source), source)
+        let landscape = source.replacingOccurrences(of: "#(set-paper-size \"a4\")", with: "#(set-paper-size \"a4\" 'landscape)")
+        XCTAssertEqual(try LilyPondSource.prepare(landscape), landscape)
+    }
+    func testPaperSizeOnlyAcceptsLiteralArguments() throws {
+        for expression in ["#(set-paper-size (system \"anything\"))",
+                           "#(set-paper-size \"a4\" (system \"anything\"))",
+                           "#(set-paper-size \"a4\") #(system \"anything\")",
+                           "#(set-paper-size \"../private\")",
+                           "#(set-paper-size \"a4\" 'portrait extra)",
+                           #"#(eval "#(set-paper-size \"a4\")")"#] {
+            XCTAssertThrowsError(try LilyPondSource.prepare("\\score { { c'4 } \\layout {} \\midi {} } " + expression))
+        }
+        let source = #"% #(set-paper-size "a4")"# + "\n" + #"\header { title = "#(set-paper-size \"a4\")" }"# + "\n" + #"\score { { c'4 } \layout {} \midi {} }"# + "\n"
+        XCTAssertEqual(try LilyPondSource.prepare(source), source)
+    }
     func testSharedSelectionNormalizesOnlyLineEndings() throws {
         let source = "c'4 d'4\r\n<e' g'>2\r\n"
         let editor = source.replacingOccurrences(of: "\r\n", with: "\n")

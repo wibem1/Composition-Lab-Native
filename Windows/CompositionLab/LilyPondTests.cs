@@ -187,6 +187,33 @@ internal sealed partial class MainForm
             if (!File.ReadAllBytes(Path.Combine(output, "Pastorale.mid")).SequenceEqual(pastoraleOutput.Midi))
                 throw new Exception("Pastorale-MIDI-Export verändert die Originalbytes.");
             AtomicFile.WriteText(Path.Combine(output, "Pastorale-Verarbeitung.json"), pastoraleResult.ToJsonString());
+            // Regression for the uploaded 4.2.9 Romanze diagnostic: A4 paper
+            // and literal spacing must pass the same local pipeline unchanged.
+            string romanzePath = Path.Combine(Path.GetDirectoryName(Environment.GetEnvironmentVariable("COMPOSITION_LAB_BACKUP_FIXTURE"))!, "romanze-violin-piano-a4.ly");
+            string romanze = await File.ReadAllTextAsync(romanzePath);
+            if (await LilyPondCompiler.PrepareAsync(romanze) != romanze) throw new Exception("Romanze-A4-Original wird verändert.");
+            var romanzeOutput = await Engraver.CompileAsync(romanze);
+            var romanzeResult = await CompileCompositionAsync(romanze, new JsonObject { ["provider"] = "gemini", ["model"] = "offline-romanze" }, CancellationToken.None);
+            var romanzeTracks = romanzeResult["score"]!["tr"]!.AsArray().OfType<JsonObject>().Where(t => t["nt"]!.AsArray().Count > 0).ToArray();
+            if (!romanzeTracks.Any(t => t["pg"]!.GetValue<int>() == 40) || !romanzeTracks.Any(t => t["pg"]!.GetValue<int>() == 0))
+                throw new Exception("Romanze verliert Violine oder Klavier.");
+            foreach (var track in romanzeTracks) {
+                double end = track["nt"]!.AsArray().OfType<JsonArray>().Max(n => n[0]!.GetValue<double>() + n[1]!.GetValue<double>());
+                if (end < 147 || end > 149) throw new Exception("Romanze wird vor dem 37. Takt abgeschnitten: " + end);
+            }
+            documents[free] = null;
+            await AcceptCompositionAsync(romanzeResult, free, "Romanze-A4-Test", "gemini", "offline-romanze");
+            if (currentMidi == null || !currentMidi.SequenceEqual(romanzeOutput.Midi) || currentLilyPond?.Pages.Length != romanzeOutput.Pages.Length || romanzeOutput.Pages.Length == 0)
+                throw new Exception("Romanze verliert Original-MIDI oder SVG-Seiten.");
+            await core.RunAsync(new JsonObject { ["operation"] = "validate-document", ["document"] = Current!.DeepClone() });
+            await WriteMusicExportAsync(Path.Combine(output, "Romanze.ly"), "ly");
+            await WriteMusicExportAsync(Path.Combine(output, "Romanze.mid"), "mid");
+            if (File.ReadAllText(Path.Combine(output, "Romanze.ly")).ReplaceLineEndings("\n") != ExtractLilyPond(romanze).ReplaceLineEndings("\n") || !File.ReadAllBytes(Path.Combine(output, "Romanze.mid")).SequenceEqual(romanzeOutput.Midi))
+                throw new Exception("Romanze-Export verändert Originalquelle oder MIDI.");
+            AtomicFile.WriteText(Path.Combine(output, "Romanze-Messung.json"), new JsonObject {
+                ["passed"] = true, ["coldEngravingMilliseconds"] = romanzeOutput.Milliseconds,
+                ["pages"] = romanzeOutput.Pages.Length, ["tracks"] = romanzeTracks.Length, ["bars"] = 37
+            }.ToJsonString());
             // Release the test slot before accepting the independent second score.
             documents[free] = null;
             await AcceptCompositionAsync(result, free, "Lokaler Test", "gemini", "test-local");

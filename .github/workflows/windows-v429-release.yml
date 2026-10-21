@@ -1,4 +1,4 @@
-name: Windows 4.29 end-to-end and release
+name: Windows 4.2.10 end-to-end and release
 on:
   workflow_dispatch:
   push:
@@ -25,7 +25,7 @@ jobs:
       - name: Download tested Windows archive from regression job
         uses: actions/download-artifact@v4
         with:
-          name: Composition-Lab-4.2.9-Windows-x64
+          name: Composition-Lab-4.2.10-Windows-x64
           path: .
       - name: Download matching native and extracted-package test evidence
         uses: actions/download-artifact@v4
@@ -43,16 +43,18 @@ jobs:
             if (-not $result.passed) { throw "Native self-test failed for $dir" }
             $p = Get-Content (Join-Path $dir 'Pastorale-Messung.json') -Raw | ConvertFrom-Json
             if ($null -eq $p) { throw "Pastorale results absent for $dir" }
+            $r = Get-Content (Join-Path $dir 'Romanze-Messung.json') -Raw | ConvertFrom-Json
+            if (-not $r.passed -or $r.pages -lt 1 -or $r.bars -ne 37) { throw "Romanze A4 regression failed for $dir" }
             $guile = Get-Content (Join-Path $dir 'Guile-Extraction-Repair.json') -Raw | ConvertFrom-Json
             if (-not $guile.passed -or $guile.verifiedPairs -ne 374 -or -not $guile.simulatedUserExtraction) { throw "Guile corruption/repair test failed for $dir" }
           }
-          if (-not (Test-Path 'Composition-Lab-4.2.9-Windows-x64.zip')) { throw 'Package missing' }
+          if (-not (Test-Path 'Composition-Lab-4.2.10-Windows-x64.zip')) { throw 'Package missing' }
       - name: Store installable archive and logs
         uses: actions/upload-artifact@v4
         with:
-          name: Composition-Lab-4.29-Windows-verified
+          name: Composition-Lab-4.2.10-Windows-verified
           path: |
-            Composition-Lab-4.2.9-Windows-x64.zip
+            Composition-Lab-4.2.10-Windows-x64.zip
             Windows/TestResults/**
           if-no-files-found: error
       - name: Publish only fully tested release
@@ -61,4 +63,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v4.2.9 'Composition-Lab-4.2.9-Windows-x64.zip' --repo '${{ github.repository }}' --target '${{ github.sha }}' --title 'Composition Lab Windows v4.29' --notes 'Windows application passed native Pastorale processing plus extracted-ZIP regression tests with deliberately inverted Guile timestamps. See workflow run ${{ github.run_id }}.'
+          gh release create v4.2.10 'Composition-Lab-4.2.10-Windows-x64.zip' --repo '${{ github.repository }}' --target '${{ github.sha }}' --title 'Composition Lab Windows v4.2.10' --notes 'Windows application passed native Pastorale and original Romanze A4 processing plus extracted-ZIP regression tests with deliberately inverted Guile timestamps. See workflow run ${{ github.run_id }}.'
