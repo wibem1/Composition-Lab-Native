@@ -54,11 +54,13 @@ foreach ($case in @(
   [System.IO.File]::WriteAllText($stdout, $(if($outTask.IsCompletedSuccessfully){$outTask.Result}else{'<output incomplete>'}))
   [System.IO.File]::WriteAllText($stderr, $(if($errTask.IsCompletedSuccessfully){$errTask.Result}else{'<output incomplete>'}))
   $outputs = @(Get-ChildItem -Path $work -File | Where-Object { $_.Extension -in @('.midi','.mid','.svg') } | Select-Object -ExpandProperty Name)
-  $report.cases += [ordered]@{ name=$case.name; timedOut=(-not $finished); exitCode=$(if($finished){$process.ExitCode}else{$null}); elapsedMilliseconds=[Math]::Round($stopwatch.Elapsed.TotalMilliseconds); cpuMilliseconds=$cpuMs; memoryBytes=$memory; outputs=$outputs; stdout=$stdout; stderr=$stderr }
+  $expectedExtension = if ($case.name -eq "midi") { @(".midi",".mid") } else { @(".svg") }
+  $hasExpectedOutput = @($outputs | Where-Object { $name = $_; @($expectedExtension | Where-Object { $name.EndsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 }).Count -gt 0
+  $report.cases += [ordered]@{ name=$case.name; hasExpectedOutput=$hasExpectedOutput; timedOut=(-not $finished); exitCode=$(if($finished){$process.ExitCode}else{$null}); elapsedMilliseconds=[Math]::Round($stopwatch.Elapsed.TotalMilliseconds); cpuMilliseconds=$cpuMs; memoryBytes=$memory; outputs=$outputs; stdout=$stdout; stderr=$stderr }
   $process.Dispose()
 }
 $reportPath = Join-Path $dir 'report.json'
 $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $reportPath -Encoding utf8
 Write-Output "Isolation report: $reportPath"
 Get-Content -LiteralPath $reportPath
-if (@($report.cases | Where-Object { $_.timedOut -or $_.exitCode -ne 0 }).Count) { exit 2 }
+if (@($report.cases | Where-Object { $_.timedOut -or $_.exitCode -ne 0 -or -not $_.hasExpectedOutput }).Count) { exit 2 }
