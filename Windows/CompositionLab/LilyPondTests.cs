@@ -26,6 +26,23 @@ internal sealed partial class MainForm
             catch (OperationCanceledException) { cancelledByUser = true; }
             if (!cancelledByUser) throw new Exception("Benutzerabbruch wird mit Zeitlimit verwechselt.");
         }
+        // Parent exits, descendant retains both inherited pipe handles. The old
+        // implementation stopped enforcing its deadline after parent exit.
+        var heldPipeStart = new ProcessStartInfo(probeStart.FileName) {
+            UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardOutput = true, RedirectStandardError = true
+        };
+        foreach (string arg in new[] { "-NoProfile", "-NonInteractive", "-Command",
+            "[Console]::Error.Write('inherited-pipe-marker['); [Console]::Error.Flush(); $s=[Diagnostics.ProcessStartInfo]::new($env:ComSpec, '/c ping -n 16 127.0.0.1 >nul'); $s.UseShellExecute=$false; $s.CreateNoWindow=$true; [void][Diagnostics.Process]::Start($s)" }) heldPipeStart.ArgumentList.Add(arg);
+        bool inheritedPipeBounded = false;
+        try { await EngravingProcess.RunAsync(heldPipeStart, TimeSpan.FromSeconds(2), CancellationToken.None); }
+        catch (EngravingTimeoutException e) {
+            inheritedPipeBounded = e.Log.Contains("inherited-pipe-marker[") && e.Milliseconds < 10000;
+        }
+        if (!inheritedPipeBounded) throw new Exception("Offene geerbte Prozesskanäle umgehen das Zeitlimit oder verlieren das Teilprotokoll.");
+        if (LilyPondCompiler.ProgressMessage("(process:25856): GLib-GIO-WARNING **: Failed to open application manifest C:\\Windows") != null ||
+            LilyPondCompiler.ProgressMessage("Parsing...") == null)
+            throw new Exception("Bibliothekswarnungen verdrängen die Notensatz-Statusanzeige.");
         await ScoreSourceMapper.SelfTestAsync();
         WorkspaceRevisionGate.SelfTest();
         ProjectPieceCodec.SelfTest();

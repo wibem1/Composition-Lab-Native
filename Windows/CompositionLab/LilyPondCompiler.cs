@@ -13,6 +13,15 @@ internal sealed class LilyPondCompiler(string cacheRoot)
 {
     public const string Version = "2.24.4";
     readonly SemaphoreSlim gate = new(1, 1);
+    internal static string? ProgressMessage(string line)
+    {
+        if (line.StartsWith("Parsing", StringComparison.Ordinal) || line.StartsWith("Analysiere", StringComparison.Ordinal)) return "Notentext wird eingelesen …";
+        if (line.StartsWith("Interpreting music", StringComparison.Ordinal) || line.StartsWith("Interpretiere Musik", StringComparison.Ordinal)) return "Stimmen und MIDI werden verarbeitet …";
+        if (line.StartsWith("Fitting music", StringComparison.Ordinal) || line.StartsWith("Finding the ideal", StringComparison.Ordinal)) return "Seiten werden aufgeteilt …";
+        if (line.StartsWith("Drawing systems", StringComparison.Ordinal) || line.StartsWith("Zeichne", StringComparison.Ordinal)) return "Notenbild wird gezeichnet …";
+        return null; // Full library warnings and file paths belong in the diagnostic log.
+    }
+
     public static async Task<string> PrepareAsync(string source, CancellationToken cancellation = default)
     {
         try {

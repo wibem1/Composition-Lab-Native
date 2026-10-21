@@ -69,7 +69,7 @@ internal sealed partial class MainForm
         SetStatus("LilyPond erzeugt MIDI und Originalnoten lokal …");
         string notation = ExtractLilyPond(music);
         var watch = Stopwatch.StartNew();
-        var compiled = await Engraver.CompileAsync(notation, token, line => { if (busy) SetStatus("Notensatz · " + line); });
+        var compiled = await Engraver.CompileAsync(notation, token, line => { if (busy && LilyPondCompiler.ProgressMessage(line) is { } message) SetStatus("Notensatz · " + message); });
         string title = Regex.Match(notation, "\\btitle\\s*=\\s*\"([^\"]+)\"") is { Success: true } m ? m.Groups[1].Value : "Komposition";
         var imported = await core.RunAsync(new JsonObject { ["operation"] = "import-midi", ["data"] = Convert.ToBase64String(compiled.Midi), ["title"] = title }, token);
         var score = imported["score"]!.DeepClone().AsObject(); score["ti"] = title;
