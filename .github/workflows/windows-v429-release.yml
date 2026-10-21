@@ -12,6 +12,7 @@ on:
       - '.github/workflows/windows-v429-release.yml'
 permissions:
   contents: write
+  actions: read
 jobs:
   regression:
     uses: ./.github/workflows/v4-core.yml
