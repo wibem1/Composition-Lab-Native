@@ -15,10 +15,10 @@ internal sealed partial class MainForm
             UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true
         };
-        foreach (string arg in new[] { "-NoProfile", "-NonInteractive", "-Command", "[Console]::Error.WriteLine('engraving-timeout-probe'); Start-Sleep -Seconds 30" }) probeStart.ArgumentList.Add(arg);
+        foreach (string arg in new[] { "-NoProfile", "-NonInteractive", "-Command", "[Console]::Error.Write('engraving-timeout-probe['); [Console]::Error.Flush(); Start-Sleep -Seconds 30" }) probeStart.ArgumentList.Add(arg);
         bool deadlineReported = false;
         try { await EngravingProcess.RunAsync(probeStart, TimeSpan.FromSeconds(3), CancellationToken.None); }
-        catch (EngravingTimeoutException e) { deadlineReported = e.Log.Contains("engraving-timeout-probe") && e.Milliseconds >= 2500; }
+        catch (EngravingTimeoutException e) { deadlineReported = e.Log.Contains("engraving-timeout-probe[") && e.Milliseconds >= 2500; }
         if (!deadlineReported) throw new Exception("Notensatz-Zeitlimit verliert Ursache oder Prozessprotokoll.");
         using (var stop = new CancellationTokenSource()) {
             stop.CancelAfter(TimeSpan.FromMilliseconds(250)); bool cancelledByUser = false;

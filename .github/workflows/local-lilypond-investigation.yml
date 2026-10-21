@@ -1,0 +1,44 @@
+name: Local LilyPond startup investigation
+on:
+  push:
+    branches: [v4-cross-platform]
+    paths: ['Tools/Windows/**', '.github/workflows/local-lilypond-investigation.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  local-runtime:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-meson
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-python
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-libffi
+            mingw-w64-x86_64-pcre
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-gettext
+      - name: Build GLib with lazy Windows application enumeration
+        shell: msys2 {0}
+        run: bash Tools/Windows/build-lazy-gio.sh
+      - name: Compare original and candidate on local notation jobs
+        shell: pwsh
+        run: ./Tools/Windows/Test-LocalLilyPond.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Local-LilyPond-Investigation
+          path: |
+            RuntimeReports/
+            RuntimeCandidate/
+            runtime-source/build/meson-logs/meson-log.txt
+          if-no-files-found: warn

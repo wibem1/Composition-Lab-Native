@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 
 namespace CompositionLab;
 
@@ -9,18 +10,38 @@ internal sealed class EngravingTimeoutException(string message, string log, doub
     public double Milliseconds { get; } = milliseconds;
 }
 
-// Own the child process, timeout and both output pipes for every engraving.
+// Capture bytes as they arrive: LilyPond's startup marker and GLib diagnostics
+// need not end in a newline. A deadline must cover inherited output handles too.
 internal static class EngravingProcess
 {
-    static async Task<string> ReadLogAsync(StreamReader reader, IProgress<string>? progress)
+    sealed class Capture
     {
-        var log = new System.Text.StringBuilder();
-        while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line) {
-            log.AppendLine(line);
-            if (!string.IsNullOrWhiteSpace(line)) progress?.Report(line);
+        readonly StringBuilder text = new();
+        readonly object sync = new();
+        public string Snapshot() { lock (sync) return text.ToString(); }
+        public async Task ReadAsync(StreamReader reader, IProgress<string>? progress)
+        {
+            var buffer = new char[2048];
+            var line = new StringBuilder();
+            int count;
+            while ((count = await reader.ReadAsync(buffer.AsMemory()).ConfigureAwait(false)) != 0) {
+                lock (sync) {
+                    // Retain the start and last part without unbounded memory use.
+                    text.Append(buffer, 0, count);
+                    if (text.Length > 1024 * 1024) text.Remove(16384, text.Length - 512 * 1024);
+                }
+                for (int i = 0; i < count; i++) {
+                    char c = buffer[i];
+                    if (c is '\n' or '\r') {
+                        if (line.Length != 0) progress?.Report(line.ToString());
+                        line.Clear();
+                    } else if (line.Length < 512) line.Append(c);
+                }
+            }
+            if (line.Length != 0) progress?.Report(line.ToString());
         }
-        return log.ToString();
     }
+
     internal static async Task<(int ExitCode, string Log, double Milliseconds)> RunAsync(
         ProcessStartInfo start, TimeSpan limit, CancellationToken cancellation, IProgress<string>? progress = null)
     {
@@ -28,21 +49,27 @@ internal static class EngravingProcess
         using var process = new Process { StartInfo = start };
         var watch = Stopwatch.StartNew();
         process.Start();
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = ReadLogAsync(process.StandardError, progress);
+        var output = new Capture(); var error = new Capture();
+        var stdout = output.ReadAsync(process.StandardOutput, null);
+        var stderr = error.ReadAsync(process.StandardError, progress);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         deadline.CancelAfter(limit);
-        try { await process.WaitForExitAsync(deadline.Token); }
+        try {
+            await process.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
+            await Task.WhenAll(stdout, stderr).WaitAsync(deadline.Token).ConfigureAwait(false);
+        }
         catch (OperationCanceledException)
         {
-            try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
-            catch (InvalidOperationException) { }
-            // Bound pipe cleanup too: never wait indefinitely for inherited handles.
-            try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)); }
+            string processState = "";
+            try {
+                processState = "\nLilyPond-Prozess: CPU " + Math.Round(process.TotalProcessorTime.TotalMilliseconds) + " ms; Arbeitsspeicher " + process.WorkingSet64 + " Bytes.\n";
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+            } catch (InvalidOperationException) { }
+            try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false); }
             catch (TimeoutException) { }
-            string captured = "";
-            try { captured = (await stderr.WaitAsync(TimeSpan.FromSeconds(5))) + (await stdout.WaitAsync(TimeSpan.FromSeconds(5))); }
-            catch (TimeoutException) { captured = "Das Prozessprotokoll konnte nach dem Abbruch nicht vollständig gelesen werden."; }
+            try { await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
+            catch (TimeoutException) { } // Snapshot remains available even with inherited handles.
+            string captured = error.Snapshot() + output.Snapshot() + processState;
             watch.Stop();
             cancellation.ThrowIfCancellationRequested();
             throw new EngravingTimeoutException(
@@ -50,8 +77,7 @@ internal static class EngravingProcess
                 " Sekunden. Die Originalkomposition bleibt zur erneuten Übernahme gespeichert.\n" + captured[..Math.Min(8000, captured.Length)],
                 captured, watch.Elapsed.TotalMilliseconds);
         }
-        string log = (await stderr) + (await stdout);
         watch.Stop();
-        return (process.ExitCode, log, watch.Elapsed.TotalMilliseconds);
+        return (process.ExitCode, error.Snapshot() + output.Snapshot(), watch.Elapsed.TotalMilliseconds);
     }
 }
