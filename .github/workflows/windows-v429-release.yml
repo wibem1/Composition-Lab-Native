@@ -22,26 +22,16 @@ jobs:
     timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
-      - uses: compnerd/gha-setup-swift@bbae8ce86bac5a3449f3992b3d88bc4ca25f2057
+      - name: Download tested Windows archive from regression job
+        uses: actions/download-artifact@v4
         with:
-          swift-version: swift-6.1.2-release
-          swift-build: 6.1.2-RELEASE
-      - uses: actions/setup-dotnet@v4
+          name: Composition-Lab-4.2.9-Windows-x64
+          path: .
+      - name: Download matching native and extracted-package test evidence
+        uses: actions/download-artifact@v4
         with:
-          dotnet-version: '8.0.x'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Build shared Swift core
-        shell: pwsh
-        run: |
-          swift build -c release
-          if ($LASTEXITCODE -ne 0) { throw 'Swift core build failed' }
-      - name: Build and test real Windows application and extracted package
-        shell: pwsh
-        run: |
-          ./Windows/Build.ps1
-          if ($LASTEXITCODE -ne 0) { throw 'Native build and test failure' }
+          name: Windows-Starttest
+          path: Windows/TestResults
       - name: Require complete test evidence
         shell: pwsh
         run: |
