@@ -62,13 +62,13 @@ foreach ($case in @(
   $cpuMs = $null; $memory = $null
   try { $cpuMs = [Math]::Round($process.TotalProcessorTime.TotalMilliseconds); $memory=$process.WorkingSet64 } catch {}
   if (-not $finished) { try { $process.Kill($true) } catch {}; try { $process.WaitForExit(3000) | Out-Null } catch {} }
-  try { [System.Threading.Tasks.Task]::WaitAll(@($outTask,$errTask), 3000) | Out-Null } catch {}
+  try { [System.Threading.Tasks.Task]::WaitAll([System.Threading.Tasks.Task[]]@($outTask,$errTask), 3000) | Out-Null } catch {}
   $stopwatch.Stop()
   [System.IO.File]::WriteAllText($stdout, $(if($outTask.IsCompletedSuccessfully){$outTask.Result}else{'<output incomplete>'}))
   [System.IO.File]::WriteAllText($stderr, $(if($errTask.IsCompletedSuccessfully){$errTask.Result}else{'<output incomplete>'}))
   $outputs = @(Get-ChildItem -Path $work -File | Where-Object { $_.Extension -in @('.midi','.mid','.svg') } | Select-Object -ExpandProperty Name)
   $expectedExtension = if ($case.name -eq "midi") { @(".midi",".mid") } else { @(".svg") }
-  $hasExpectedOutput = @($outputs | Where-Object { $name = $_; @($expectedExtension | Where-Object { $name.EndsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 }).Count -gt 0
+  $hasExpectedOutput = @($outputs | Where-Object { $fileName = $_; @($expectedExtension | Where-Object { $fileName.EndsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 }).Count -gt 0
   $report.cases += [ordered]@{ name=$case.name; hasExpectedOutput=$hasExpectedOutput; timedOut=(-not $finished); exitCode=$(if($finished){$process.ExitCode}else{$null}); elapsedMilliseconds=[Math]::Round($stopwatch.Elapsed.TotalMilliseconds); cpuMilliseconds=$cpuMs; memoryBytes=$memory; outputs=$outputs; stdout=$stdout; stderr=$stderr }
   $process.Dispose()
 }
