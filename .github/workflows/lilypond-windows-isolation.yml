@@ -82,10 +82,11 @@ jobs:
           if (-not $report) { throw 'Standalone diagnostic did not save its report' }
           Copy-Item $report.FullName LilyPond-Isolation/cpu-diagnostic.json
           $result = Get-Content $report.FullName -Raw | ConvertFrom-Json
-          if ($result.version -ne 3 -or $result.appFolder -notlike '*Downloads*') { throw 'Auto-discovery did not select the test installation' }
+          if ($result.version -ne 4 -or $result.appFolder -notlike '*Downloads*') { throw 'Auto-discovery did not select the test installation' }
+          if (@($result.bootstrapFiles).Count -lt 2) { throw 'Guile bootstrap inventory missing' }
           $original = $result.experiments | Where-Object name -eq '03-original-pastorale'
           if (@($original.loadedModules | Where-Object { $_.name -eq 'lilypond.exe' -and $_.sha256 }).Count -ne 1) { throw 'Runtime module capture missing' }
-          if ($result.error -or @($result.experiments).Count -ne 3) { throw 'Incomplete standalone diagnostic' }
+          if ($result.error -or @($result.experiments).Count -ne 4) { throw 'Incomplete standalone diagnostic' }
           if (@($result.experiments | Where-Object { $_.timedOut -or $_.exitCode -ne 0 }).Count) { throw 'Standalone diagnostic failed' }
       - name: Upload isolation logs even on failure
         if: always()
