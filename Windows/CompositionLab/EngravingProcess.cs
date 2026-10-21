@@ -18,6 +18,8 @@ internal static class EngravingProcess
     {
         readonly StringBuilder text = new();
         readonly object sync = new();
+        readonly Stopwatch clock;
+        public Capture(Stopwatch clock) { this.clock = clock; }
         public string Snapshot() { lock (sync) return text.ToString(); }
         public async Task ReadAsync(StreamReader reader, IProgress<string>? progress)
         {
@@ -27,6 +29,7 @@ internal static class EngravingProcess
             while ((count = await reader.ReadAsync(buffer.AsMemory()).ConfigureAwait(false)) != 0) {
                 lock (sync) {
                     // Retain the start and last part without unbounded memory use.
+                    text.Append("[+" + clock.Elapsed.TotalSeconds.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + "s] ");
                     text.Append(buffer, 0, count);
                     if (text.Length > 1024 * 1024) text.Remove(16384, text.Length - 512 * 1024);
                 }
@@ -49,7 +52,28 @@ internal static class EngravingProcess
         using var process = new Process { StartInfo = start };
         var watch = Stopwatch.StartNew();
         process.Start();
-        var output = new Capture(); var error = new Capture();
+        var output = new Capture(watch); var error = new Capture(watch);
+        var diagnostics = new StringBuilder();
+        var diagnosticLock = new object();
+        void Sample(string stage) {
+            try {
+                process.Refresh();
+                var children = "";
+                var cpu = process.TotalProcessorTime.TotalMilliseconds;
+                var ram = process.WorkingSet64;
+                var row = $"[+{watch.Elapsed.TotalSeconds:F3}s] {stage} pid={process.Id} cpuMs={cpu:F0} workingSetBytes={ram} exited={process.HasExited}";
+                lock (diagnosticLock) diagnostics.AppendLine(row);
+            } catch (InvalidOperationException) { }
+        }
+        Sample("started");
+        using var sampleStop = new CancellationTokenSource();
+        var sampler = Task.Run(async () => {
+            while (!sampleStop.IsCancellationRequested) {
+                try { await Task.Delay(TimeSpan.FromSeconds(2), sampleStop.Token).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
+                Sample("running");
+            }
+        });
         var stdout = output.ReadAsync(process.StandardOutput, null);
         var stderr = error.ReadAsync(process.StandardError, progress);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
@@ -69,7 +93,11 @@ internal static class EngravingProcess
             catch (TimeoutException) { }
             try { await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
             catch (TimeoutException) { } // Snapshot remains available even with inherited handles.
-            string captured = error.Snapshot() + output.Snapshot() + processState;
+            sampleStop.Cancel();
+            await sampler.ConfigureAwait(false);
+            string timeline;
+            lock (diagnosticLock) timeline = diagnostics.ToString();
+            string captured = "LilyPond timeline:\n" + timeline + "\nSTDERR:\n" + error.Snapshot() + "\nSTDOUT:\n" + output.Snapshot() + processState;
             watch.Stop();
             cancellation.ThrowIfCancellationRequested();
             throw new EngravingTimeoutException(
@@ -77,7 +105,12 @@ internal static class EngravingProcess
                 " Sekunden. Die Originalkomposition bleibt zur erneuten Übernahme gespeichert.\n" + captured[..Math.Min(8000, captured.Length)],
                 captured, watch.Elapsed.TotalMilliseconds);
         }
+        sampleStop.Cancel();
+        await sampler.ConfigureAwait(false);
+        Sample("finished");
+        string successfulTimeline;
+        lock (diagnosticLock) successfulTimeline = diagnostics.ToString();
         watch.Stop();
-        return (process.ExitCode, error.Snapshot() + output.Snapshot(), watch.Elapsed.TotalMilliseconds);
+        return (process.ExitCode, "LilyPond timeline:\n" + successfulTimeline + "\nSTDERR:\n" + error.Snapshot() + "\nSTDOUT:\n" + output.Snapshot(), watch.Elapsed.TotalMilliseconds);
     }
 }
