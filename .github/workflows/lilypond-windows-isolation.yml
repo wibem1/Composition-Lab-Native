@@ -4,11 +4,19 @@ on:
   push:
     branches: [v4-cross-platform]
     paths:
-      - 'Windows/Diagnose-LilyPond-Isolated.ps1'
-      - 'Windows/LilyPond-CPU-Diagnose.cmd'
-      - 'Windows/Fixtures/Pastorale-20261021.json'
-      - 'Windows/Fixtures/Pastorale-20261021.ly'
-      - '.github/workflows/lilypond-windows-isolation.yml'
+      - 'Windows/**'
+      - 'Shared/**'
+      - 'Tools/**'
+      - 'Package.swift'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [v4-cross-platform]
+    paths:
+      - 'Windows/**'
+      - 'Shared/**'
+      - 'Tools/**'
+      - 'Package.swift'
+      - '.github/workflows/**'
 jobs:
   pastorale:
     strategy:
