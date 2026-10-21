@@ -12,6 +12,7 @@ internal sealed record LilyPondOutput(byte[] Midi, string[] Pages, string Log, d
 internal sealed class LilyPondCompiler(string cacheRoot)
 {
     public const string Version = "2.24.4";
+    bool runtimeChecked;
     readonly SemaphoreSlim gate = new(1, 1);
     internal static string? ProgressMessage(string line)
     {
@@ -36,7 +37,7 @@ internal sealed class LilyPondCompiler(string cacheRoot)
     public async Task<LilyPondOutput> CompileAsync(string source, CancellationToken cancellation = default, Action<string>? progress = null)
     {
         string prepared = await PrepareAsync(source, cancellation);
-        string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Version + "\npoint-and-click-v1\n" + prepared)));
+        string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Version + "\n" + GuileRuntime.Profile + "\npoint-and-click-v1\n" + prepared)));
         string final = Path.Combine(cacheRoot, hash);
         await gate.WaitAsync(cancellation);
         string? temporary = null;
@@ -49,6 +50,12 @@ internal sealed class LilyPondCompiler(string cacheRoot)
             }
             var executable = Path.Combine(AppContext.BaseDirectory, "LilyPond", "bin", "lilypond.exe");
             if (!File.Exists(executable)) throw new FileNotFoundException("Der mitgelieferte LilyPond-Notensatz fehlt. Bitte das gesamte ZIP in einen neuen Ordner entpacken.");
+            int repairedPairs = 0;
+            if (!runtimeChecked) {
+                progress?.Invoke("Guile-Startdateien werden geprüft …");
+                repairedPairs = await Task.Run(() => GuileRuntime.EnsureBytecodeFresh(Path.Combine(AppContext.BaseDirectory, "LilyPond")), cancellation);
+                runtimeChecked = true;
+            }
             Directory.CreateDirectory(cacheRoot);
             temporary = Path.Combine(cacheRoot, ".work-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(temporary);
             await File.WriteAllTextAsync(Path.Combine(temporary, "source.ly"), prepared, new UTF8Encoding(false), cancellation);
@@ -67,7 +74,7 @@ internal sealed class LilyPondCompiler(string cacheRoot)
             // Keep the existing deadline; preserve the actual process log on timeout.
             var reporter = progress == null ? null : new Progress<string>(progress);
             var run = await EngravingProcess.RunAsync(start, TimeSpan.FromMinutes(2), cancellation, reporter);
-            string log = run.Log;
+            string log = "Guile-Laufzeit: " + GuileRuntime.Profile + "; korrigierte Zeitstempel: " + repairedPairs + "\n" + run.Log;
             await File.WriteAllTextAsync(Path.Combine(temporary, "compile.log"), log, cancellation);
             if (run.ExitCode != 0) throw new InvalidDataException("LilyPond konnte die Originalkomposition nicht setzen. Es wurde keine KI-Übersetzung gestartet.\n" + log[..Math.Min(8000, log.Length)]);
             // Verify every output before publishing the cache atomically.

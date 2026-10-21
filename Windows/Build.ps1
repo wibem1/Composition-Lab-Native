@@ -52,6 +52,22 @@ try {
     $version = & (Join-Path $core 'composition-lab-core.exe') --version
     if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.2.6') { throw 'Bundled core runtime is incomplete' }
 } finally { $env:Path = $oldPath }
+# Recreate the affected Explorer extraction order before BOTH native tests.
+# Sources and compiled files keep their original bytes, but source is newer.
+function Set-InvertedGuileTimes([string]$app) {
+    Get-ChildItem (Join-Path $app 'LilyPond') -Recurse -Filter '*.scm' | ForEach-Object { $_.LastWriteTimeUtc = [DateTime]::Parse('2026-10-21T10:51:29Z').ToUniversalTime() }
+    Get-ChildItem (Join-Path $app 'LilyPond') -Recurse -Filter '*.go' | ForEach-Object { $_.LastWriteTimeUtc = [DateTime]::Parse('2026-10-21T10:51:16Z').ToUniversalTime() }
+}
+function Assert-GuileFresh([string]$app, [string]$reportPath) {
+    $manifest = Get-Content 'Windows/CompositionLab/GuileRuntimeManifest.json' -Raw | ConvertFrom-Json
+    foreach ($pair in $manifest.pairs) {
+        $source = Get-Item (Join-Path (Join-Path $app 'LilyPond') $pair.source)
+        $compiled = Get-Item (Join-Path (Join-Path $app 'LilyPond') $pair.compiled)
+        if ($compiled.LastWriteTimeUtc -le $source.LastWriteTimeUtc) { throw 'Application did not repair Guile extraction timestamps' }
+    }
+    @{ passed=$true; verifiedPairs=@($manifest.pairs).Count; simulatedUserExtraction=$true } | ConvertTo-Json | Set-Content $reportPath
+}
+Set-InvertedGuileTimes $destination
 # CI must exercise a real native browser, not only managed bitmap painting.
 try { [void][Microsoft.Win32.Registry]::GetValue('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F1E7E558-F3C6-4A58-B13A-B17E7164CA09}', 'pv', $null) } catch { }
 $bootstrap = Join-Path $env:TEMP 'MicrosoftEdgeWebview2Setup.exe'
@@ -71,9 +87,11 @@ if ($process.ExitCode -ne 0) {
     if (Test-Path (Join-Path $tests 'failure.txt')) { Get-Content (Join-Path $tests 'failure.txt') }
     throw 'Windows UI self-test failed'
 }
-$report = Get-Content (Join-Path $tests 'result.json') -Raw | ConvertFrom-Json
+$report = Get-Content (Join-Path $tests 'result.json')
+Assert-GuileFresh $destination (Join-Path $tests 'Guile-Extraction-Repair.json') -Raw | ConvertFrom-Json
 if (-not $report.passed) { throw 'Windows test result is not green' }
 Get-Content (Join-Path $tests 'result.json')
+Assert-GuileFresh $destination (Join-Path $tests 'Guile-Extraction-Repair.json')
 $zip = Join-Path $PWD 'Composition-Lab-4.2.6-Windows-x64.zip'
 Compress-Archive -Path $destination -DestinationPath $zip -Force
 Write-Output "Windows test package: $zip"
@@ -81,6 +99,7 @@ Write-Output "Windows test package: $zip"
 # The released ZIP, not only the source bundle, must pass the native tests.
 $roundtrip = Join-Path $env:TEMP ('clab-packaged-' + [guid]::NewGuid().ToString('N'))
 Expand-Archive $zip $roundtrip
+Set-InvertedGuileTimes (Join-Path $roundtrip 'Composition Lab 4.2.6')
 $packagedTests = Join-Path $tests 'Packaged'
 New-Item $packagedTests -ItemType Directory -Force | Out-Null
 $start.FileName = Join-Path $roundtrip 'Composition Lab 4.2.6/Composition Lab 4.2.6.exe'
@@ -94,4 +113,5 @@ if ($packagedProcess.ExitCode -ne 0) {
 $packagedReport = Get-Content (Join-Path $packagedTests 'result.json') -Raw | ConvertFrom-Json
 if (-not $packagedReport.passed) { throw 'Packaged Windows test report is not green' }
 Get-Content (Join-Path $packagedTests 'Pastorale-Messung.json')
+Assert-GuileFresh (Join-Path $roundtrip 'Composition Lab 4.2.6') (Join-Path $packagedTests 'Guile-Extraction-Repair.json')
 try { Remove-Item $roundtrip -Recurse -Force } catch { Write-Warning 'Temporary test bundle retained because a file is still in use.' }

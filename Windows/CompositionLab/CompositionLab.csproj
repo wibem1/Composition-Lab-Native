@@ -14,6 +14,7 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="../../Shared/CompositionCore/Resources/ScorePreview.html" LogicalName="CompositionLab.ScorePreview.html" />
+    <EmbeddedResource Include="GuileRuntimeManifest.json" LogicalName="CompositionLab.GuileRuntimeManifest.json" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
   </ItemGroup>
 </Project>
