@@ -66,7 +66,7 @@ function Assert-GuileFresh([string]$app, [string]$reportPath) {
     foreach ($pair in $manifest.pairs) {
         $source = Get-Item (Join-Path (Join-Path $app 'LilyPond') $pair.source)
         $compiled = Get-Item (Join-Path (Join-Path $app 'LilyPond') $pair.compiled)
-        if ($compiled.LastWriteTimeUtc -le $source.LastWriteTimeUtc) { throw 'Application did not repair Guile extraction timestamps' }
+        if ($compiled.LastWriteTimeUtc -le $source.LastWriteTimeUtc.AddSeconds(2)) { throw "Guile bytecode remains stale after native self-test: $($pair.compiled)" }
     }
     @{ passed=$true; verifiedPairs=@($manifest.pairs).Count; simulatedUserExtraction=$true } | ConvertTo-Json | Set-Content $reportPath
 }
