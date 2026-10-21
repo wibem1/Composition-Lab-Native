@@ -25,7 +25,8 @@ $version = (& $exe --version 2>&1 | Select-Object -First 1 | Out-String).Trim()
 $report = [ordered]@{ sourceSha256=$sha; executable=$exe; version=$version; timeoutSeconds=$TimeoutSeconds; cases=@() }
 foreach ($case in @(
   @{name='midi'; arguments=@('--loglevel=INFO','--output=midi','original.ly')},
-  @{name='svg'; arguments=@('--svg','-dpoint-and-click','--loglevel=INFO','--output=svg','original.ly')}
+  @{name='svg-no-click'; arguments=@('--svg','-dno-point-and-click','--loglevel=INFO','--output=svg','original.ly')},
+  @{name='svg-click'; arguments=@('--svg','-dpoint-and-click','--loglevel=INFO','--output=svg','original.ly')}
 )) {
   $work = Join-Path $dir $case.name
   New-Item -ItemType Directory -Path $work -Force | Out-Null
@@ -38,7 +39,7 @@ foreach ($case in @(
   foreach($arg in $case.arguments) { [void]$start.ArgumentList.Add($arg) }
   $process = New-Object System.Diagnostics.Process
   $process.StartInfo = $start
-  # OS-level file redirection avoids blocking a full pipe in the test harness.
+  # Drain stdout and stderr concurrently to avoid process-pipe deadlocks.
   $start.RedirectStandardOutput = $true
   $start.RedirectStandardError = $true
   $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
