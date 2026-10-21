@@ -70,7 +70,21 @@ function Assert-GuileFresh([string]$app, [string]$reportPath) {
     }
     @{ passed=$true; verifiedPairs=@($manifest.pairs).Count; simulatedUserExtraction=$true } | ConvertTo-Json | Set-Content $reportPath
 }
+# Prove the simulated extraction is actually broken before asking the app to repair it.
+function Assert-GuileInverted([string]$app) {
+    $manifest = Get-Content 'Windows/CompositionLab/GuileRuntimeManifest.json' -Raw | ConvertFrom-Json
+    $pairs = @($manifest.pairs)
+    if ($pairs.Count -ne 374) { throw "Unexpected Guile manifest pair count: $($pairs.Count)" }
+    foreach ($pair in $pairs) {
+        $source = Get-Item -LiteralPath (Join-Path (Join-Path $app 'LilyPond') $pair.source)
+        $compiled = Get-Item -LiteralPath (Join-Path (Join-Path $app 'LilyPond') $pair.compiled)
+        if ($compiled.LastWriteTimeUtc -ge $source.LastWriteTimeUtc) {
+            throw "Guile corruption fixture was not applied to $($pair.compiled)"
+        }
+    }
+}
 Set-InvertedGuileTimes $destination
+Assert-GuileInverted $destination
 # CI must exercise a real native browser, not only managed bitmap painting.
 try { [void][Microsoft.Win32.Registry]::GetValue('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F1E7E558-F3C6-4A58-B13A-B17E7164CA09}', 'pv', $null) } catch { }
 $bootstrap = Join-Path $env:TEMP 'MicrosoftEdgeWebview2Setup.exe'
@@ -105,6 +119,7 @@ Write-Output "Windows test package: $zip"
 $roundtrip = Join-Path $env:TEMP ('clab-packaged-' + [guid]::NewGuid().ToString('N'))
 Expand-Archive $zip $roundtrip
 Set-InvertedGuileTimes (Join-Path $roundtrip 'Composition Lab 4.2.9')
+Assert-GuileInverted (Join-Path $roundtrip 'Composition Lab 4.2.9')
 $packagedTests = Join-Path $tests 'Packaged'
 New-Item $packagedTests -ItemType Directory -Force | Out-Null
 $start.FileName = Join-Path $roundtrip 'Composition Lab 4.2.9/Composition Lab 4.2.9.exe'
