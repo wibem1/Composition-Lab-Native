@@ -164,6 +164,27 @@ internal sealed partial class MainForm
         var savedHistory = pieceHistory.Select(d => d.DeepClone().AsObject()).ToArray();
         try
         {
+            // Exact reported Pastorale must traverse the real import, document,
+            // preview and export path, rather than only producing compiler files.
+            var pastoraleResult = await CompileCompositionAsync(pastorale, new JsonObject { ["provider"] = "gemini", ["model"] = "offline-pastorale" }, CancellationToken.None);
+            var pastoraleTracks = pastoraleResult["score"]!["tr"]!.AsArray().OfType<JsonObject>()
+                .Where(t => t["nt"]!.AsArray().Count > 0).ToArray();
+            if (pastoraleTracks.Length != 2 || !pastoraleTracks.Any(t => t["pg"]!.GetValue<int>() == 40) || !pastoraleTracks.Any(t => t["pg"]!.GetValue<int>() == 42))
+                throw new Exception("Pastorale verliert Violine oder Violoncello beim MIDI-Import.");
+            foreach (var track in pastoraleTracks) {
+                double end = track["nt"]!.AsArray().OfType<JsonArray>().Max(n => n[0]!.GetValue<double>() + n[1]!.GetValue<double>());
+                // 46 bars in 6/8 = 138 quarter-note beats (MIDI note-off can be shortened).
+                if (end < 137 || end > 139) throw new Exception("Pastorale wird vor dem 46. Takt abgeschnitten: " + end);
+            }
+            await AcceptCompositionAsync(pastoraleResult, free, "Pastorale-Test", "gemini", "offline-pastorale");
+            if (currentMidi == null || !currentMidi.SequenceEqual(pastoraleOutput.Midi) || currentLilyPond?.Pages.Length != pastoraleOutput.Pages.Length)
+                throw new Exception("Pastorale verliert Original-MIDI oder Notenseiten bei der Übernahme.");
+            await core.RunAsync(new JsonObject { ["operation"] = "validate-document", ["document"] = Current!.DeepClone() });
+            await WriteMusicExportAsync(Path.Combine(output, "Pastorale.ly"), "ly");
+            await WriteMusicExportAsync(Path.Combine(output, "Pastorale.mid"), "mid");
+            if (File.ReadAllText(Path.Combine(output, "Pastorale.ly")) != pastorale || !File.ReadAllBytes(Path.Combine(output, "Pastorale.mid")).SequenceEqual(pastoraleOutput.Midi))
+                throw new Exception("Pastorale-Export verändert Originalquelle oder MIDI.");
+            AtomicFile.WriteText(Path.Combine(output, "Pastorale-Verarbeitung.json"), pastoraleResult.ToJsonString());
             await AcceptCompositionAsync(result, free, "Lokaler Test", "gemini", "test-local");
             if (currentLilyPond == null || currentMidi == null || !currentMidi.SequenceEqual(generated.Midi)) throw new Exception("Wiedergabe verwendet nicht das originale LilyPond-MIDI.");
             string file = Path.Combine(output, "Original-LilyPond.clab"); AtomicFile.WriteText(file, Current!.ToJsonString());
