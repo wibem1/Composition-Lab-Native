@@ -52,39 +52,57 @@ function openEditor(){
 }
 open.addEventListener('click',openEditor);
 document.getElementById('clearSelection').addEventListener('click',clear);
-// Single click toggles notes. Dragging across anchored notes selects
-// a contiguous range, including beamed passages and multiple notes.
-let dragStart=null,dragEnd=null,didDrag=false,suppressClick=false;
+// Pointer capture keeps the drag active when the pointer leaves an SVG anchor.
+// Hit testing accepts nearby note shapes, not only the anchor's exact pixel.
+let dragStart=null,dragEnd=null,didDrag=false,suppressClick=false,activePointer=null;
+function hitNote(x,y){
+  const at=document.elementFromPoint(x,y);
+  const direct=nearestLink(at);
+  if(linkLocation(direct))return direct;
+  let best=null,distance=Infinity;
+  for(const a of links){
+    if(a.closest('.page')?.hidden)continue;
+    const rect=a.getBoundingClientRect();
+    const dx=Math.max(rect.left-x,0,x-rect.right),dy=Math.max(rect.top-y,0,y-rect.bottom);
+    const d=Math.hypot(dx,dy);
+    if(d<distance){best=a;distance=d}
+  }
+  return distance<=22?best:null;
+}
 host.addEventListener('pointerdown',event=>{
   if(event.button!==0)return;
-  const a=nearestLink(event.target);if(!linkLocation(a))return;
-  dragStart=a;dragEnd=a;didDrag=false;
+  const a=hitNote(event.clientX,event.clientY);
+  if(!a)return;
+  dragStart=a;dragEnd=a;didDrag=false;activePointer=event.pointerId;
+  host.setPointerCapture?.(event.pointerId);
   event.preventDefault();
 });
 host.addEventListener('pointermove',event=>{
-  if(!dragStart || !(event.buttons&1))return;
-  const at=document.elementFromPoint(event.clientX,event.clientY);
-  const fromPoint=nearestLink(at);
-  const a=linkLocation(fromPoint)?fromPoint:nearestLink(event.target);
-  if(!linkLocation(a)||a===dragEnd)return;
+  if(!dragStart || activePointer!==event.pointerId || !(event.buttons&1))return;
+  const a=hitNote(event.clientX,event.clientY);
+  if(!a||a===dragEnd)return;
   dragEnd=a;didDrag=true;markRange(dragStart,dragEnd);
   event.preventDefault();
 });
-document.addEventListener('pointerup',event=>{
-  if(!dragStart)return;
-  const last=dragEnd,first=dragStart,wasDrag=didDrag;
-  dragStart=null;dragEnd=null;didDrag=false;
-  suppressClick=true;
-  if(wasDrag)markRange(first,last);
-  else setNote(first,!chosen.has(first));
+function finishPointer(event,cancelled){
+  if(!dragStart||activePointer!==event.pointerId)return;
+  const first=dragStart,last=dragEnd,wasDrag=didDrag;
+  dragStart=null;dragEnd=null;didDrag=false;activePointer=null;
+  if(host.hasPointerCapture?.(event.pointerId))host.releasePointerCapture(event.pointerId);
+  if(!cancelled){
+    suppressClick=true;
+    if(wasDrag)markRange(first,last);
+    else setNote(first,!chosen.has(first));
+  }
   event.preventDefault();
-});
+}
+host.addEventListener('pointerup',event=>finishPointer(event,false));
+host.addEventListener('pointercancel',event=>finishPointer(event,true));
 host.addEventListener('click',event=>{
   const a=nearestLink(event.target);
   if(!linkLocation(a))return;
   event.preventDefault();
   if(suppressClick){suppressClick=false;return}
-  // Also supports keyboard-activated links and synthetic clicks.
   setNote(a,!chosen.has(a));
 });
 host.addEventListener('dragstart',event=>event.preventDefault());
