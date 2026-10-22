@@ -3960,7 +3960,8 @@ extension MainViewController {
                 do {
                     let work = try result.get()
                     guard calls == 1, work.score.tr.flatMap({ $0.nt }).allSatisfy({ $0[2] < 96 }),
-                          work.metadata["originalLilyPond"] == .string(bad) else { throw APIError.badResponse("Native Oktavkorrektur nicht geprüft.") }
+                          work.metadata["originalLilyPond"] == .string(bad),
+                           work.metadata["lilyPondSource"] == .string(good) else { throw APIError.badResponse("Native Oktavkorrektur hat korrigierte LilyPond-Quelle verloren.") }
                     self.runNativeInputSelfTest(output: output, completion: completion)
                 } catch { completion(error) }
             }
