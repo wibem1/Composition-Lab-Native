@@ -14,6 +14,7 @@ permissions:
   contents: write
   actions: read
 jobs:
+  # Only the standalone shared quality workflow publishes the joint release.
   regression:
     uses: ./.github/workflows/v4-core.yml
   native-windows:
