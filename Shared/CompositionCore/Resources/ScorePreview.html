@@ -71,7 +71,8 @@ function hitNote(x,y){
 }
 host.addEventListener('pointerdown',event=>{
   if(event.button!==0)return;
-  const a=hitNote(event.clientX,event.clientY);
+  const direct=nearestLink(event.target);
+  const a=linkLocation(direct)?direct:hitNote(event.clientX,event.clientY);
   if(!a)return;
   dragStart=a;dragEnd=a;didDrag=false;activePointer=event.pointerId;
   host.setPointerCapture?.(event.pointerId);
