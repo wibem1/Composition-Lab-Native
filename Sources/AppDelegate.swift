@@ -123,9 +123,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         w.delegate = nil
         defer { w.setFrame(original, display: false); w.delegate = self; saveMainWindowFrame() }
         saveMainWindowFrame()
-        w.setFrameOrigin(NSPoint(x: original.minX + 15, y: original.minY + 15))
+        restoreMainWindowFrame(w) // Initial CI window can exceed the monitor.
+        let expected = w.frame
+        saveMainWindowFrame()
+        w.setFrame(NSRect(x: expected.minX + 15, y: expected.minY + 15, width: expected.width + 20, height: expected.height + 20), display: false)
         restoreMainWindowFrame(w)
-        guard w.frame == original else { throw APIError.badResponse("Mac-Fenstergeometrie wird nicht wiederhergestellt.") }
+        guard w.frame == expected else { throw APIError.badResponse("Mac-Fenstergeometrie wird nicht wiederhergestellt: \(NSStringFromRect(expected)) -> \(NSStringFromRect(w.frame)).") }
         AppPreferences.standard.set(NSStringFromRect(NSRect(x: 90000,y: 90000,width: 1000,height: 700)), forKey: mainWindowFrameKey)
         restoreMainWindowFrame(w)
         guard NSScreen.screens.contains(where: { $0.visibleFrame.intersects(w.frame) }) else {
