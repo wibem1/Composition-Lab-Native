@@ -32,18 +32,17 @@ final class MIDIPlaybackController {
         if let u = tempURL { try? FileManager.default.removeItem(at: u) }
     }
 
-    func load(score: Score, data: Data) throws {
-        _ = data // Export-MIDI bleibt Referenz; der Player baut eine eigene gepufferte Kopie.
+    func load(score: Score, data: Data, preserveOriginal: Bool = false) throws {
         stop()
         loadedScore = score
-        externalPlayer.load(score: score)
+        externalPlayer.load(score: score, data: preserveOriginal ? data : nil)
         if let u = tempURL { try? FileManager.default.removeItem(at: u) }
         let u = FileManager.default.temporaryDirectory.appendingPathComponent("composition-lab-\(UUID().uuidString).mid")
 
         // Für die interne Wiedergabe wird eine Player-Kopie mit Nachklang erzeugt.
         // Exportierte MIDI-Dateien bleiben unverändert. Der zusätzliche Track-End-Abstand
         // verhindert, dass AVMIDIPlayer den Synthesizer direkt nach dem letzten Note-Off beendet.
-        let playbackData = MIDIBuilder.build(score, endPaddingSeconds: 3.00)
+        let playbackData = preserveOriginal ? data : MIDIBuilder.build(score, endPaddingSeconds: 3.00)
         try playbackData.write(to: u)
         tempURL = u
         let bankPath = "/System/Library/Components/CoreAudio.component/Contents/Resources/gs_instruments.dls"

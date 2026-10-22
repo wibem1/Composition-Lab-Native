@@ -1,0 +1,139 @@
+$ErrorActionPreference = 'Stop'
+Set-Location (Split-Path $PSScriptRoot -Parent)
+$destination = Join-Path $PWD 'Windows/Bundle/Composition Lab 4.2.11'
+if (Test-Path $destination) { Remove-Item $destination -Recurse -Force }
+New-Item $destination -ItemType Directory -Force | Out-Null
+dotnet publish 'Windows/CompositionLab/CompositionLab.csproj' -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $destination
+if ($LASTEXITCODE -ne 0) { throw 'Windows publish failed' }
+$core = Join-Path $destination 'Core'
+New-Item $core -ItemType Directory | Out-Null
+Copy-Item '.build/release/composition-lab-core.exe' $core
+# Include Swift runtime DLLs rather than requiring a developer installation.
+$swiftBin = Split-Path (Get-Command swift).Source -Parent
+$runtimeDirectories = @($swiftBin) + @($env:Path.Split(';') | Where-Object { $_ -match 'Swift' -and (Test-Path $_ -PathType Container) })
+foreach ($directory in ($runtimeDirectories | Select-Object -Unique)) {
+    Get-ChildItem $directory -Filter '*.dll' -File | Copy-Item -Destination $core -Force
+}
+foreach ($name in @('vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll','concrt140.dll')) {
+    $file = Join-Path $env:windir "System32/$name"
+    if (Test-Path $file) { Copy-Item $file $core }
+}
+python -m pip install --quiet pefile==2024.8.26
+if ($LASTEXITCODE -ne 0) { throw 'PE dependency inspector installation failed' }
+python 'Windows/trim_runtime.py' $core
+if ($LASTEXITCODE -ne 0) { throw 'Runtime dependency inspection failed' }
+Copy-Item 'LICENSE' (Join-Path $destination 'LICENSE-Composition-Lab.txt')
+Copy-Item 'Windows/Notices' (Join-Path $destination 'Notices') -Recurse
+foreach ($package in @('microsoft.web.webview2','microsoft.netcore.app.runtime.win-x64','microsoft.windowsdesktop.app.runtime.win-x64')) {
+    $directory = Join-Path $env:USERPROFILE ".nuget/packages/$package"
+    if (Test-Path $directory) {
+        $latest = Get-ChildItem $directory -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        foreach ($name in @('LICENSE.txt','LICENSE.TXT','LICENSE','THIRD-PARTY-NOTICES.TXT','NOTICE')) {
+            $notice = Join-Path $latest.FullName $name
+            if (Test-Path $notice) { Copy-Item $notice (Join-Path $destination "Notices/$package-$name") -Force }
+        }
+    }
+}
+# Preserve the exact released 4.2.8 runtime, including its validated local GIO
+# fix. Do not silently regress to the unpatched official DLLs while fixing Guile.
+$lilyArchive = Join-Path $env:TEMP 'clab-verified-4.2.8-runtime.zip'
+Invoke-WebRequest 'https://github.com/wibem1/Composition-Lab-Native/releases/download/v4.2.8/Composition-Lab-4.2.8-Windows-x64.zip' -OutFile $lilyArchive
+if ((Get-FileHash $lilyArchive -Algorithm SHA256).Hash -ne '5702DD4F05C641BDAECF44FC46E3962A02D2378949A290120A6242F9B358D2D0') { throw 'Released runtime archive checksum mismatch' }
+$lilyExtract = Join-Path $env:TEMP ('clab-lily-' + [guid]::NewGuid().ToString('N'))
+Expand-Archive $lilyArchive $lilyExtract
+$releasedApp = Join-Path $lilyExtract 'Composition Lab 4.2.8'
+Copy-Item (Join-Path $releasedApp 'LilyPond') (Join-Path $destination 'LilyPond') -Recurse
+Copy-Item (Join-Path $releasedApp 'Notices/*') (Join-Path $destination 'Notices') -Recurse -Force
+& (Join-Path $destination 'LilyPond/bin/lilypond.exe') --version
+if ($LASTEXITCODE -ne 0) { throw 'Bundled LilyPond cannot start' }
+Copy-Item 'Windows/README-Windows.md' (Join-Path $destination 'LIESMICH.md')
+# A normal user must not need the Swift compiler/toolchain on PATH.
+$oldPath = $env:Path
+try {
+    $env:Path = "$env:windir/System32;$env:windir"
+    $version = & (Join-Path $core 'composition-lab-core.exe') --version
+    # The packaged core and native shell must identify the same tested release.
+    if ($LASTEXITCODE -ne 0 -or $version -notmatch '4.2.11') { throw 'Bundled core runtime is incomplete' }
+} finally { $env:Path = $oldPath }
+# Recreate the affected Explorer extraction order before BOTH native tests.
+# Sources and compiled files keep their original bytes, but source is newer.
+function Set-InvertedGuileTimes([string]$app) {
+    Get-ChildItem (Join-Path $app 'LilyPond') -Recurse -Filter '*.scm' | ForEach-Object { $_.LastWriteTimeUtc = [DateTime]::Parse('2026-10-21T10:51:29Z').ToUniversalTime() }
+    Get-ChildItem (Join-Path $app 'LilyPond') -Recurse -Filter '*.go' | ForEach-Object { $_.LastWriteTimeUtc = [DateTime]::Parse('2026-10-21T10:51:16Z').ToUniversalTime() }
+}
+function Assert-GuileFresh([string]$app, [string]$reportPath) {
+    $manifest = Get-Content 'Windows/CompositionLab/GuileRuntimeManifest.json' -Raw | ConvertFrom-Json
+    if (@($manifest.pairs).Count -ne 374) { throw 'Guile repair manifest incomplete at release gate' }
+    foreach ($pair in $manifest.pairs) {
+        $source = Get-Item (Join-Path (Join-Path $app 'LilyPond') $pair.source)
+        $compiled = Get-Item (Join-Path (Join-Path $app 'LilyPond') $pair.compiled)
+        if ($compiled.LastWriteTimeUtc -le $source.LastWriteTimeUtc.AddSeconds(2)) { throw "Guile bytecode remains stale after native self-test: $($pair.compiled)" }
+    }
+    @{ passed=$true; verifiedPairs=@($manifest.pairs).Count; simulatedUserExtraction=$true } | ConvertTo-Json | Set-Content $reportPath
+}
+# Prove the simulated extraction is actually broken before asking the app to repair it.
+function Assert-GuileInverted([string]$app) {
+    $manifest = Get-Content 'Windows/CompositionLab/GuileRuntimeManifest.json' -Raw | ConvertFrom-Json
+    $pairs = @($manifest.pairs)
+    if ($pairs.Count -ne 374) { throw "Unexpected Guile manifest pair count: $($pairs.Count)" }
+    foreach ($pair in $pairs) {
+        $source = Get-Item -LiteralPath (Join-Path (Join-Path $app 'LilyPond') $pair.source)
+        $compiled = Get-Item -LiteralPath (Join-Path (Join-Path $app 'LilyPond') $pair.compiled)
+        if ($compiled.LastWriteTimeUtc -ge $source.LastWriteTimeUtc) {
+            throw "Guile corruption fixture was not applied to $($pair.compiled)"
+        }
+    }
+}
+Set-InvertedGuileTimes $destination
+Assert-GuileInverted $destination
+# CI must exercise a real native browser, not only managed bitmap painting.
+try { [void][Microsoft.Win32.Registry]::GetValue('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F1E7E558-F3C6-4A58-B13A-B17E7164CA09}', 'pv', $null) } catch { }
+$bootstrap = Join-Path $env:TEMP 'MicrosoftEdgeWebview2Setup.exe'
+Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $bootstrap
+Start-Process $bootstrap -ArgumentList '/silent /install' -Wait
+$tests = Join-Path $PWD 'Windows/TestResults'
+# Never permit artefacts from a previous build to satisfy release assertions.
+if (Test-Path -LiteralPath $tests) { Remove-Item -LiteralPath $tests -Recurse -Force }
+New-Item $tests -ItemType Directory -Force | Out-Null
+try { Set-DisplayResolution -Width 1600 -Height 1200 -Force -ErrorAction Stop | Out-Null } catch { Write-Output 'Default Windows display retained; GUI scroll reachability is tested.' }
+$start = New-Object System.Diagnostics.ProcessStartInfo
+$start.FileName = Join-Path $destination 'Composition Lab 4.2.11.exe'
+$start.Arguments = "--self-test --test-output `"$tests`""
+$start.UseShellExecute = $false
+$start.Environment['PATH'] = "$env:windir/System32;$env:windir"
+$process = [System.Diagnostics.Process]::Start($start)
+if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Windows UI self-test timed out' }
+if ($process.ExitCode -ne 0) {
+    if (Test-Path (Join-Path $tests 'failure.txt')) { Get-Content (Join-Path $tests 'failure.txt') }
+    throw 'Windows UI self-test failed'
+}
+$report = Get-Content (Join-Path $tests 'result.json') -Raw | ConvertFrom-Json
+if (-not $report.passed) { throw 'Windows test result is not green' }
+if (-not (Test-Path (Join-Path $tests 'Pastorale-Messung.json'))) { throw 'Pastorale native test report missing' }
+Get-Content (Join-Path $tests 'result.json')
+Assert-GuileFresh $destination (Join-Path $tests 'Guile-Extraction-Repair.json')
+$zip = Join-Path $PWD 'Composition-Lab-4.2.11-Windows-x64.zip'
+Compress-Archive -Path $destination -DestinationPath $zip -Force
+Write-Output "Windows test package: $zip"
+
+# The released ZIP, not only the source bundle, must pass the native tests.
+$roundtrip = Join-Path $env:TEMP ('clab-packaged-' + [guid]::NewGuid().ToString('N'))
+Expand-Archive $zip $roundtrip
+Set-InvertedGuileTimes (Join-Path $roundtrip 'Composition Lab 4.2.11')
+Assert-GuileInverted (Join-Path $roundtrip 'Composition Lab 4.2.11')
+$packagedTests = Join-Path $tests 'Packaged'
+New-Item $packagedTests -ItemType Directory -Force | Out-Null
+$start.FileName = Join-Path $roundtrip 'Composition Lab 4.2.11/Composition Lab 4.2.11.exe'
+$start.Arguments = "--self-test --test-output `"$packagedTests`""
+$packagedProcess = [System.Diagnostics.Process]::Start($start)
+if (-not $packagedProcess.WaitForExit(180000)) { $packagedProcess.Kill(); throw 'Packaged Windows test timed out' }
+if ($packagedProcess.ExitCode -ne 0) {
+    if (Test-Path (Join-Path $packagedTests 'failure.txt')) { Get-Content (Join-Path $packagedTests 'failure.txt') }
+    throw 'Packaged Windows self-test failed'
+}
+$packagedReport = Get-Content (Join-Path $packagedTests 'result.json') -Raw | ConvertFrom-Json
+if (-not $packagedReport.passed) { throw 'Packaged Windows test report is not green' }
+if (-not (Test-Path (Join-Path $packagedTests 'Pastorale-Messung.json'))) { throw 'Packaged Pastorale test report missing' }
+Get-Content (Join-Path $packagedTests 'Pastorale-Messung.json')
+Assert-GuileFresh (Join-Path $roundtrip 'Composition Lab 4.2.11') (Join-Path $packagedTests 'Guile-Extraction-Repair.json')
+try { Remove-Item $roundtrip -Recurse -Force } catch { Write-Warning 'Temporary test bundle retained because a file is still in use.' }

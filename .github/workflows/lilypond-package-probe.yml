@@ -1,0 +1,49 @@
+name: LilyPond packaged ZIP roundtrip
+on:
+  push:
+    branches: [v4-cross-platform]
+    paths: ['.github/workflows/lilypond-package-probe.yml']
+permissions:
+  contents: read
+jobs:
+  roundtrip:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reproduce release compression and extraction
+        shell: pwsh
+        run: |
+          Invoke-WebRequest 'https://gitlab.com/lilypond/lilypond/-/releases/v2.26.0/downloads/lilypond-2.26.0-mingw-x86_64.zip' -OutFile original.zip
+          if ((Get-FileHash original.zip -Algorithm SHA256).Hash -ne '14DDDDC233B469EF60D4FFC1C7F35520F15AC6B58E38CAB458C60BDCC3AF650C') { throw 'Checksum mismatch' }
+          Expand-Archive original.zip Original
+          $destination = Join-Path $PWD 'Pack/Composition Lab 4.2.5'
+          New-Item $destination -ItemType Directory -Force | Out-Null
+          Copy-Item Original/lilypond-2.26.0 "$destination/LilyPond" -Recurse
+          Compress-Archive -Path $destination -DestinationPath Repacked.zip
+          Expand-Archive Repacked.zip Unpacked
+          $unpacked = Join-Path $PWD 'Unpacked/Composition Lab 4.2.5'
+          $before = @(Get-ChildItem Original/lilypond-2.26.0 -File -Recurse -Force)
+          $after = @(Get-ChildItem "$unpacked/LilyPond" -File -Recurse -Force)
+          Write-Output "File counts before=$($before.Count) after=$($after.Count)"
+          $beforeRoot = (Resolve-Path Original/lilypond-2.26.0).Path
+          $missing = @($before | Where-Object { -not (Test-Path (Join-Path "$unpacked/LilyPond" $_.FullName.Substring($beforeRoot.Length + 1))) })
+          $missing | ForEach-Object { Write-Output "MISSING: $($_.FullName)" }
+          Copy-Item Windows/LilyPond-Starttest.cmd $unpacked
+      - name: Run original user probe against extracted release contents
+        shell: cmd
+        env:
+          CLAB_PROBE_NO_PAUSE: '1'
+        run: '"Unpacked\Composition Lab 4.2.5\LilyPond-Starttest.cmd"'
+      - name: Inspect roundtrip result
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem 'Unpacked/Composition Lab 4.2.5/LilyPond-Starttest-*.json' | Select-Object -First 1
+          Get-Content $file
+          $report = Get-Content $file -Raw | ConvertFrom-Json
+          if ($report.error -or $report.probes.Count -ne 2 -or $report.svgCount -lt 1 -or $report.midiCount -lt 1) { throw 'Roundtrip probe failed' }
+          foreach ($probe in $report.probes) { if ($probe.timedOut -or $probe.error -or $probe.exitCode -ne 0) { throw 'Roundtrip process failed' } }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LilyPond-ZIP-Roundtrip-Report
+          path: Unpacked/Composition Lab 4.2.5/LilyPond-Starttest-*.json

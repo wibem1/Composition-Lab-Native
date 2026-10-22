@@ -23,6 +23,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         buildMenus()
         createMainWindowIfNeeded()
         DispatchQueue.main.async { [weak self] in self?.showMainWindow() }
+        if let index = CommandLine.arguments.firstIndex(of: "--native-self-test"), CommandLine.arguments.count > index + 1 {
+            guard ProcessInfo.processInfo.environment["COMPOSITION_LAB_TEST_DOMAIN"] != nil else { print("Native tests require an isolated preferences domain."); exit(2) }
+            let output = CommandLine.arguments[index + 1]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                do { try self?.testWindowPersistence() } catch { print(error); exit(1) }
+                self?.mainVC?.runNativeSelfTest(output: output) { error in
+                    if let error { print("Native Mac self-test failed: " + error.localizedDescription); exit(1) }
+                    exit(0)
+                }
+            }
+        }
+        if let index = CommandLine.arguments.firstIndex(of: "--capture-gui-reference"), CommandLine.arguments.count > index + 1 {
+            let output = CommandLine.arguments[index + 1]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.captureGUIReference(output) }
+        }
+    }
+
+    private func captureGUIReference(_ output: String) {
+        guard let window, let content = window.contentView else { exit(2) }
+        NSApp.appearance = NSAppearance(named: .aqua)
+        window.setContentSize(NSSize(width: 1260, height: 950))
+        func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap { descendants($0) } }
+        guard let navigation = descendants(content).compactMap({ $0 as? NSSegmentedControl }).first(where: { $0.segmentCount == 3 && $0.label(forSegment: 0) == "Main" }) else { exit(3) }
+        do {
+            try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
+            var frames: [[String: Any]] = []
+            for page in 0..<3 {
+                navigation.selectedSegment = page
+                if let action = navigation.action { navigation.sendAction(action, to: navigation.target) }
+                content.layoutSubtreeIfNeeded()
+                guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { exit(4) }
+                content.cacheDisplay(in: content.bounds, to: bitmap)
+                guard let png = bitmap.representation(using: .png, properties: [:]) else { exit(5) }
+                try png.write(to: URL(fileURLWithPath: output).appendingPathComponent("Mac-" + ["Main", "Noten", "Technik"][page] + ".png"))
+                for view in descendants(content) where !view.isHiddenOrHasHiddenAncestor {
+                    let text = (view as? NSTextField)?.stringValue ?? (view as? NSButton)?.title ?? ""
+                    let frame = view.convert(view.bounds, to: content)
+                    if !text.isEmpty { frames.append(["page": page, "text": text, "frame": NSStringFromRect(frame)]) }
+                }
+            }
+            try JSONSerialization.data(withJSONObject: frames, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: output).appendingPathComponent("Mac-GUI-Frames.json"))
+            NSApp.terminate(nil)
+        } catch { print(error); exit(6) }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -44,15 +87,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         w.isReleasedWhenClosed = false
         w.delegate = self
 
-        let defaults = UserDefaults.standard
+        restoreMainWindowFrame(w)
+
+        mainVC = vc
+        window = w
+    }
+
+    private func restoreMainWindowFrame(_ w: NSWindow) {
+        let defaults = AppPreferences.standard
         if let saved = defaults.string(forKey: mainWindowFrameKey), !saved.isEmpty {
             let restored = NSRectFromString(saved)
             if restored.width >= w.minSize.width,
                restored.height >= w.minSize.height,
+               restored.origin.x.isFinite, restored.origin.y.isFinite,
                restored.width.isFinite,
                restored.height.isFinite {
                 w.setFrame(restored, display: false)
-                if let screen = NSScreen.screens.first(where: { $0.frame.intersects(w.frame) }) {
+                if let screen = NSScreen.screens.first(where: { $0.frame.intersects(w.frame) }) ?? NSScreen.main {
                     var f = w.frame
                     let visible = screen.visibleFrame
                     f.size.width = min(f.width, visible.width)
@@ -64,8 +115,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             } else { w.center() }
         } else { w.center() }
 
-        mainVC = vc
-        window = w
+    }
+
+    private func testWindowPersistence() throws {
+        guard let w = window else { throw APIError.badResponse("Testfenster fehlt.") }
+        let original = w.frame
+        w.delegate = nil
+        defer { w.setFrame(original, display: false); w.delegate = self; saveMainWindowFrame() }
+        saveMainWindowFrame()
+        restoreMainWindowFrame(w) // Initial CI window can exceed the monitor.
+        let expected = w.frame
+        saveMainWindowFrame()
+        w.setFrame(NSRect(x: expected.minX + 15, y: expected.minY + 15, width: expected.width + 20, height: expected.height + 20), display: false)
+        restoreMainWindowFrame(w)
+        guard w.frame == expected else { throw APIError.badResponse("Mac-Fenstergeometrie wird nicht wiederhergestellt: \(NSStringFromRect(expected)) -> \(NSStringFromRect(w.frame)).") }
+        AppPreferences.standard.set(NSStringFromRect(NSRect(x: 90000,y: 90000,width: 1000,height: 700)), forKey: mainWindowFrameKey)
+        restoreMainWindowFrame(w)
+        guard NSScreen.screens.contains(where: { $0.visibleFrame.intersects(w.frame) }) else {
+            throw APIError.badResponse("Mac-Fenster bleibt auf entferntem Monitor.")
+        }
     }
 
     func windowDidResize(_ notification: Notification) { saveMainWindowFrame() }
@@ -75,8 +143,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func saveMainWindowFrame() {
         guard let w = window, !w.frame.isEmpty else { return }
-        UserDefaults.standard.set(NSStringFromRect(w.frame), forKey: mainWindowFrameKey)
-        UserDefaults.standard.synchronize()
+        AppPreferences.standard.set(NSStringFromRect(w.frame), forKey: mainWindowFrameKey)
+        AppPreferences.standard.synchronize()
     }
 
     private func showMainWindow() {
@@ -118,6 +186,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         file.addItem(withTitle: "MIDI-Vorlage löschen", action: #selector(MainViewController.menuClearImportedMIDI), keyEquivalent: "")
         file.addItem(NSMenuItem.separator())
         file.addItem(withTitle: "MIDI sichern …", action: #selector(MainViewController.menuSaveMIDI), keyEquivalent: "m")
+        file.addItem(withTitle: "LilyPond sichern …", action: #selector(MainViewController.menuSaveLilyPond), keyEquivalent: "")
+        file.addItem(withTitle: "An Hacklily übergeben", action: #selector(MainViewController.menuOpenHacklily), keyEquivalent: "")
         file.addItem(withTitle: "JSON sichern …", action: #selector(MainViewController.menuSaveJSON), keyEquivalent: "j")
         fileItem.submenu = file
         main.addItem(fileItem)
@@ -126,6 +196,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let edit = NSMenu(title: "Bearbeiten")
         edit.addItem(withTitle: "Rückgängig", action: Selector(("undo:")), keyEquivalent: "z")
         edit.addItem(withTitle: "Wiederholen", action: Selector(("redo:")), keyEquivalent: "Z")
+        edit.addItem(withTitle: "Partituränderung rückgängig", action: #selector(MainViewController.menuUndoScore), keyEquivalent: "")
+        edit.addItem(withTitle: "Partituränderung wiederholen", action: #selector(MainViewController.menuRedoScore), keyEquivalent: "")
         edit.addItem(NSMenuItem.separator())
         edit.addItem(withTitle: "Ausschneiden", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         edit.addItem(withTitle: "Kopieren", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
@@ -139,11 +211,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let c = NSMenuItem(title: "Mit gewählter KI komponieren", action: #selector(MainViewController.menuCompose), keyEquivalent: "\r")
         c.keyEquivalentModifierMask = [.command]
         comp.addItem(c)
+        comp.addItem(withTitle: "Gesicherte Originalantwort übernehmen", action: #selector(MainViewController.menuRecoverOriginal), keyEquivalent: "")
+        comp.addItem(withTitle: "Oktavlagen prüfen und korrigieren", action: #selector(MainViewController.menuReviewRegisters), keyEquivalent: "")
+        comp.addItem(withTitle: "Anfrage abbrechen", action: #selector(MainViewController.menuCancelRequest), keyEquivalent: ".")
         compItem.submenu = comp
         main.addItem(compItem)
 
         let technicalItem = NSMenuItem(title: "Technisches", action: nil, keyEquivalent: "")
         let technical = NSMenu(title: "Technisches")
+        technical.addItem(withTitle: "KI-Modelle aktualisieren", action: #selector(MainViewController.menuRefreshModels), keyEquivalent: "")
         technical.addItem(withTitle: "API-Schlüssel …", action: #selector(MainViewController.menuAPIKeys), keyEquivalent: "")
         technical.addItem(withTitle: "MIDI-Ausgabe …", action: #selector(MainViewController.menuMIDIOutput), keyEquivalent: "")
         technical.addItem(NSMenuItem.separator())

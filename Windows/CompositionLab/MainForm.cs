@@ -1,0 +1,719 @@
+using System.Text;
+using System.Diagnostics;
+using System.Text.RegularExpressions;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
+
+namespace CompositionLab;
+
+internal sealed partial class MainForm : Form
+{
+    const string Version = "4.2.11";
+    readonly CoreClient core = new();
+    readonly MidiPlayer player = new();
+    readonly string dataDirectory;
+    readonly SecretStore secrets;
+    Dictionary<string, string> keys = [];
+    readonly Dictionary<string, string> sessionKeys = [];
+    string ProviderKey(string name) => sessionKeys.GetValueOrDefault(name, keys.GetValueOrDefault(name, ""));
+    readonly Dictionary<string, string> models = new()
+    { ["anthropic"] = "claude-sonnet-5", ["openai"] = "gpt-5.6-sol", ["gemini"] = "gemini-3.7-flash" };
+    readonly SlotDocumentStore documents = new(10);
+    readonly Dictionary<int, string> slotDrafts = [];
+    readonly ListBox slots = new() { Dock = DockStyle.Fill, IntegralHeight = false };
+    readonly ComboBox provider = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 155 };
+    readonly ComboBox model = new() { Width = 250, DropDownStyle = ComboBoxStyle.DropDownList, DropDownWidth = 190 };
+    readonly ComboBox effort = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 145 };
+    readonly TextBox apiKey = new() { Width = 240, UseSystemPasswordChar = true };
+    readonly CheckBox remember = new() { Text = "Schlüssel speichern", AutoSize = true };
+    readonly TextBox assignment = new() { Multiline = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill };
+    readonly RichTextBox chat = new() { Dock = DockStyle.Fill, ReadOnly = true, BackColor = Color.White, DetectUrls = true };
+    readonly RichTextBox diagnostic = new() { Dock = DockStyle.Fill, ReadOnly = true, Font = new Font("Consolas", 10) };
+    readonly RichTextBox composition = new() { Dock = DockStyle.Fill, ReadOnly = true, BackColor = Color.White };
+    readonly ComboBox measures = new() { Width = 55, DropDownStyle = ComboBoxStyle.DropDown, AutoCompleteMode = AutoCompleteMode.None };
+    readonly TextBox tempo = new() { Width = 55 };
+    readonly TextBox musicalKey = new() { Width = 90 };
+    readonly TextBox ensemble = new() { Width = 130, PlaceholderText = "optional" };
+    readonly CheckBox useSource = new() { Text = "Aktuelles Stück als Vorlage", AutoSize = true };
+    readonly Button compose = new StudioButton() { Text = "Komponieren", AutoSize = true, Primary = true };
+    readonly Button send = new StudioButton() { Text = "Chat", AutoSize = true };
+    readonly Button cancel = new StudioButton() { Text = "Abbrechen", AutoSize = true, Enabled = false };
+    readonly ToolStripStatusLabel status = new() { Text = "Bereit", Spring = true, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 12f, FontStyle.Bold) };
+    readonly ToolStripStatusLabel cost = new() { Text = "Kosten: –" };
+    readonly Label pieceTitle = new() { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8), Text = "Kein Stück geladen" };
+    readonly Label playback = new() { AutoSize = true, Padding = new Padding(10, 7, 0, 0), Text = "00:00 / 00:00" };
+    readonly Panel notationHost = new() { Dock = DockStyle.Fill, BackColor = Color.White };
+    readonly WebView2 web = new() { Dock = DockStyle.Fill };
+    readonly System.Windows.Forms.Timer playbackTimer = new() { Interval = 300 };
+    readonly WorkspaceHost tabs = new() { Dock = DockStyle.Fill };
+    readonly List<Button> slotCards = [];
+    readonly List<StudioButton> navButtons = [];
+    readonly Label libraryCount = new();
+    readonly Label pieceInfo = new();
+    readonly List<Button> slotActions = [];
+    readonly ToolTip slotTips = new();
+    readonly bool testMode;
+    CancellationTokenSource? pending;
+    bool loadingSettings;
+    bool webReady;
+    string activeProvider = "anthropic";
+    byte[]? currentMidi;
+    string? currentXML;
+    string? currentPath;
+    JsonObject? lastDiagnostic;
+    JsonObject? pendingComposition;
+    bool busy;
+    readonly WorkspaceRevisionGate workspaceRevisions = new();
+    bool refreshingSlots;
+    JsonObject? Current => slots.SelectedIndex >= 0 ? documents[slots.SelectedIndex] : null;
+    JsonObject? Score => Current?["score"]?.AsObject();
+
+    public MainForm(bool testMode)
+    {
+        SuspendLayout();
+        this.testMode = testMode;
+        dataDirectory = testMode ? Path.Combine(Path.GetTempPath(), "clab-v4-test-" + Guid.NewGuid().ToString("N"))
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Klangwerke", "Composition Lab 4.0");
+        secrets = new SecretStore(dataDirectory);
+        Text = "Composition Lab Native · Windows · " + Version;
+        MinimumSize = new Size(900, 680); ClientSize = new Size(1260, 950);
+        StartPosition = FormStartPosition.CenterScreen;
+        Font = MacFont(13); ForeColor = StudioTheme.Ink;
+        BackColor = StudioTheme.Canvas;
+        AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleDimensions = new SizeF(96, 96);
+        BuildUI();
+        ResumeLayout(true);
+        LoadLocalState();
+        RestoreWindowPlacement();
+        mainSplitReady = true;
+        RefreshSlots();
+        slots.SelectedIndex = 0;
+        Shown += async (_, _) =>
+        {
+            if (!testMode)
+            {
+                // Fit after Windows has applied the monitor DPI; keep the title bar reachable.
+                var area = Screen.FromControl(this).WorkingArea;
+                MinimumSize = new Size(Math.Min(MinimumSize.Width, area.Width - 40), Math.Min(MinimumSize.Height, area.Height - 40));
+                if (!windowPlacementRestored)
+                {
+                    Size = new Size(Math.Min(Width, area.Width - 40), Math.Min(Height, area.Height - 40));
+                    Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + (area.Height - Height) / 2);
+                }
+                await InitializeNotationAsync();
+                _ = RefreshModelsAsync(false);
+            }
+            try
+            {
+                var result = await core.RunAsync(new JsonObject { ["operation"] = "version" });
+                SetStatus("Bereit · gemeinsamer Kern " + result["version"]?.GetValue<string>());
+            }
+            catch (Exception e) { SetStatus(e.Message, true); }
+        };
+        FormClosing += (_, _) => { pending?.Cancel(); SaveWindowPlacement(); SaveLocalState(); player.Close(); };
+        playbackTimer.Tick += (_, _) =>
+        {
+            if (!player.Loaded) return;
+            try { UpdateTransport(); }
+            catch (Exception e) { SetStatus(e.Message, true); playbackTimer.Stop(); }
+        };
+        playbackTimer.Start();
+    }
+
+    void BuildUI() => BuildMacUI();
+
+    static TableLayoutPanel Grid(int columns, int rows)
+    {
+        var grid = new BufferedGrid { Dock = DockStyle.Fill, ColumnCount = columns, RowCount = rows, Margin = Padding.Empty, BackColor = Color.Transparent };
+        for (int i = 0; i < columns; i++) grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / columns));
+        return grid;
+    }
+    static Control Field(string title, Control control)
+    {
+        var field = Grid(1, 2); field.Margin = new Padding(3, 0, 5, 4);
+        field.RowStyles.Add(new RowStyle(SizeType.Absolute, 19)); field.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        field.Controls.Add(new Label { Text = title, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 8.5f), ForeColor = StudioTheme.Muted }, 0, 0);
+        control.Dock = DockStyle.Top; control.Margin = Padding.Empty;
+        if (control is TextBox box) { box.BorderStyle = BorderStyle.FixedSingle; box.BackColor = Color.White; }
+        field.Controls.Add(control, 0, 1); return field;
+    }
+    static Control TextSurface(string title, string subtitle, RichTextBox text)
+    {
+        var surface = new StudioSurface { Dock = DockStyle.Fill, Padding = new Padding(14) };
+        var grid = Grid(1, 3); grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 26)); grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 24)); grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        grid.Controls.Add(new Label { Text = title, Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = StudioTheme.Ink, Dock = DockStyle.Fill }, 0, 0);
+        grid.Controls.Add(new Label { Text = subtitle, Font = new Font("Segoe UI", 9), ForeColor = StudioTheme.Muted, Dock = DockStyle.Fill, AutoEllipsis = true }, 0, 1);
+        text.BorderStyle = BorderStyle.None; text.ForeColor = StudioTheme.Ink; text.Font = new Font(title == "Komposition" ? "Consolas" : "Segoe UI", 10);
+        grid.Controls.Add(text, 0, 2); surface.Controls.Add(grid); return surface;
+    }
+
+    static FlowLayoutPanel Row() => new() { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(4, 2, 4, 2) };
+    static void Add(Control row, string label, Control field)
+    { row.Controls.Add(new Label { Text = label, AutoSize = true, Padding = new Padding(5, 7, 0, 0) }); row.Controls.Add(field); }
+    StudioButton AddButton(Control row, string title, Func<Task> action)
+    {
+        var button = new StudioButton { Text = title, AutoSize = true };
+        button.Click += async (_, _) => { try { await action(); } catch (Exception e) { SetStatus(e.Message, true); } };
+        row.Controls.Add(button); guiChecks.Add(button); return button;
+    }
+
+    void ProviderChanged()
+    {
+        if (loadingSettings) return;
+        models[activeProvider] = SelectedModelId;
+        activeProvider = provider.SelectedIndex switch { 1 => "anthropic", 2 => "openai", _ => "gemini" };
+        apiKey.Text = ProviderKey(activeProvider); remember.Checked = keys.ContainsKey(activeProvider);
+        SelectModel(); SaveLocalState();
+        if (!testMode) _ = RefreshModelsAsync(false);
+    }
+
+    void StoreKey()
+    {
+        sessionKeys[activeProvider] = apiKey.Text.Trim();
+        if (remember.Checked && apiKey.Text.Trim().Length > 0) keys[activeProvider] = apiKey.Text.Trim();
+        else keys.Remove(activeProvider);
+        secrets.Save(keys);
+        SetStatus(remember.Checked ? "Schlüssel verschlüsselt gespeichert." : "Schlüssel wird nur in dieser Sitzung verwendet.");
+    }
+
+    void SaveDiagnostic()
+    {
+        if (lastDiagnostic == null) throw new InvalidOperationException("Noch keine Diagnose vorhanden.");
+        using var dialog = new SaveFileDialog { Filter = "Diagnose|*.json", FileName = "Composition-Lab-Windows-Diagnose.json", OverwritePrompt = true };
+        if (dialog.ShowDialog(this) == DialogResult.OK) AtomicFile.WriteText(dialog.FileName, diagnostic.Text);
+    }
+    void UpdateDiagnostic() => diagnostic.Text = lastDiagnostic?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
+
+    async Task InitializeNotationAsync()
+    {
+        try
+        {
+            var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(dataDirectory, "WebView2"));
+            await web.EnsureCoreWebView2Async(environment);
+            webReady = true; web.CoreWebView2.WebMessageReceived += async (_, e) =>
+            {
+                try
+                {
+                    var message = JsonNode.Parse(e.WebMessageAsJson)!;
+                    if (message["action"]?.GetValue<string>() == "select-source")
+                    {
+                        if (e.Source != currentLilyPondPreviewUri) return;
+                        await SelectLilyPondSourceAsync(message);
+                        return;
+                    }
+                    if (message["page"] != null) previewPage.Text = "Seite " + message["page"] + " / " + message["count"];
+                    if (message["zoom"] != null) previewZoom.Text = message["zoom"] + " %";
+                }
+                catch (Exception error) when (error is JsonException or InvalidOperationException or FormatException or IOException)
+                {
+                    SetStatus("Ungültige Notenauswahl: " + error.Message, true);
+                }
+            }; web.CoreWebView2.Settings.AreDevToolsEnabled = false;
+            web.CoreWebView2.Settings.IsStatusBarEnabled = false;
+            web.CoreWebView2.NewWindowRequested += (_, e) => e.Handled = true;
+            RenderNotation();
+        }
+        catch (Exception e)
+        {
+            web.Visible = false;
+            notationHost.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(20), Text =
+                "Die eingebettete Notenanzeige ist nicht verfügbar. MIDI-Wiedergabe und MusicXML-Export funktionieren unabhängig davon.\n\n" +
+                "Installiere Microsoft Edge WebView2 Runtime und starte die App neu.\n\n" + e.Message });
+        }
+    }
+    void RenderNotation()
+    {
+        if (!webReady) return;
+        if (currentLilyPond != null) { RenderLilyPond(); return; }
+        if (testMode) return;
+        var xml = JsonSerializer.Serialize(currentXML ?? "");
+        var html = """
+            <!doctype html><html><head><meta charset="utf-8"><style>
+            body{font:13px Segoe UI,sans-serif;margin:10px;background:white;color:#222} svg{display:block;max-width:100%;height:auto}button{padding:5px 12px;margin-right:8px}
+            </style></head><body><div><span id="msg">Notensatz wird geladen …</span></div><div id="score"></div>
+            <script>let toolkit,scale=40,currentPage=1;const xml=XML_VALUE;
+            function render(){if(!xml){document.getElementById('msg').textContent='Kein Stück geladen.';return}try{toolkit.setOptions({scale:scale,pageWidth:1700,pageHeight:2400,adjustPageHeight:true});toolkit.loadData(xml);currentPage=Math.max(1,Math.min(currentPage,toolkit.getPageCount()));document.getElementById('score').innerHTML=toolkit.renderToSVG(currentPage);document.getElementById('msg').textContent='';window.chrome.webview.postMessage({page:currentPage,count:toolkit.getPageCount(),zoom:Math.round(scale/40*100)})}catch(e){document.getElementById('msg').textContent='Notensatz: '+e.message}}
+            function page(delta){currentPage+=delta;if(toolkit)render()}
+            function zoom(delta){scale=Math.max(20,Math.min(100,scale+delta*0.4));if(toolkit)render()}
+            function ready(){toolkit=new verovio.toolkit();render()}
+            const script=document.createElement('script');script.src='https://www.verovio.org/javascript/latest/verovio-toolkit-wasm.js';script.onload=()=>{if(verovio.module.calledRun||verovio.module.runtimeInitialized)ready();else verovio.module.onRuntimeInitialized=ready};script.onerror=()=>document.getElementById('msg').textContent='Verovio konnte nicht geladen werden. Internetverbindung prüfen.';document.head.appendChild(script);
+            </script></body></html>
+            """;
+        // JSON serialization escapes < as \u003C, including an embedded </script>.
+        web.NavigateToString(html.Replace("XML_VALUE", xml));
+    }
+
+    void LoadLocalState()
+    {
+        loadingSettings = true;
+        try
+        {
+            keys = secrets.Load(); LoadModelCatalogs();
+            string path = Path.Combine(dataDirectory, "workspace.json");
+            if (File.Exists(path))
+            {
+                var state = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+                if (state["slots"] is JsonArray list)
+                    for (int i = 0; i < Math.Min(10, list.Count); i++) documents[i] = list[i]?.DeepClone().AsObject();
+                automaticRegisterReview = state["automaticRegisterReview"]?.GetValue<bool>() ?? false;
+                player.OutputDevice = state["midiOutputDevice"]?.GetValue<int>() ?? -1;
+                compositionReference = state["compositionReference"]?.DeepClone().AsObject();
+                dialogueSourceSlots = state["dialogueSourceSlots"]?.AsArray().Select(n => n!.GetValue<int>()).Where(n => n is >= 1 and <= 10).ToArray() ?? [];
+                chat.Text = state["chat"]?.GetValue<string>() ?? "";
+                lastDiagnostic = state["diagnostic"]?.DeepClone().AsObject();
+                pendingComposition = state["pendingComposition"]?.DeepClone().AsObject(); UpdateDiagnostic();
+                if (state["models"] is JsonObject savedModels)
+                    foreach (var pair in savedModels) if (models.ContainsKey(pair.Key)) models[pair.Key] = pair.Value?.GetValue<string>() ?? models[pair.Key];
+                activeProvider = state["provider"]?.GetValue<string>() ?? "anthropic";
+                if (!models.ContainsKey(activeProvider)) activeProvider = "anthropic";
+                if (state["slotDrafts"] is JsonObject drafts) foreach (var item in drafts) if (int.TryParse(item.Key, out int slot) && slot is >= 0 and < 10) slotDrafts[slot] = item.Value?.GetValue<string>() ?? "";
+                editableIdea = state["editableIdea"]?.GetValue<string>() ?? ""; loadingIdea = true; composition.Text = editableIdea; loadingIdea = false;
+                if (state["slotDrafts"] == null && !string.IsNullOrEmpty(editableIdea)) { int free = documents.FirstFreeIndex(); if (free >= 0) slotDrafts[free] = editableIdea; }
+                mainSplitRatio = Math.Clamp(state["mainSplitRatio"]?.GetValue<double>() ?? .5, .15, .85); ArrangeMainSplit();
+                meter.Text = state["meter"]?.GetValue<string>() ?? "";
+                if (state["history"] is JsonArray savedHistory) foreach (var item in savedHistory.OfType<JsonObject>()) pieceHistory.Add(item.DeepClone().AsObject()); RefreshHistory();
+                projectName = state["projectName"]?.GetValue<string>() ?? "Unbenannt";
+                workspaceExtensions = state["workspaceExtensions"]?.DeepClone().AsObject() ?? new JsonObject();
+                if (state["notation"] is JsonArray notationState && notationState.Count == 9) { updatingNotation = true; for (int i = 0; i < 9; i++) notationSettings[i].SelectedIndex = Math.Clamp(notationState[i]!.GetValue<int>(), 0, notationSettings[i].Items.Count - 1); splitBeats.Checked = state["splitBeats"]?.GetValue<bool>() ?? true; updatingNotation = false; notationOptions = BuildNotationOptions(); }
+                assignment.Text = state["assignment"]?.GetValue<string>() ?? assignment.Text;
+                measures.Text = state["measures"]?.GetValue<string>() ?? "";
+                tempo.Text = state["tempo"]?.GetValue<string>() ?? "";
+                musicalKey.Text = state["key"]?.GetValue<string>() ?? "";
+                ensemble.Text = state["ensemble"]?.GetValue<string>() ?? "";
+            }
+        }
+        catch (Exception e) { SetStatus("Gespeicherter Stand konnte nicht geladen werden: " + e.Message, true); }
+        finally
+        {
+            provider.SelectedIndex = activeProvider switch { "openai" => 2, "gemini" => 0, _ => 1 };
+            SelectModel(); apiKey.Text = ProviderKey(activeProvider);
+            remember.Checked = keys.ContainsKey(activeProvider); loadingSettings = false;
+        }
+    }
+    void SaveLocalState()
+    {
+        if (loadingSettings) return;
+        try
+        {
+            models[activeProvider] = SelectedModelId;
+            var state = new JsonObject { ["format"] = "composition-lab-windows-workspace", ["version"] = 1,
+                ["slots"] = new JsonArray(documents.Select(d => d?.DeepClone()).ToArray()), ["chat"] = chat.Text,
+                ["diagnostic"] = lastDiagnostic?.DeepClone(), ["pendingComposition"] = pendingComposition?.DeepClone(), ["provider"] = activeProvider,
+                ["models"] = JsonSerializer.SerializeToNode(models), ["assignment"] = assignment.Text,
+                ["workspaceExtensions"] = workspaceExtensions.DeepClone(), ["compositionReference"] = compositionReference?.DeepClone(),
+                ["slotDrafts"] = JsonSerializer.SerializeToNode(slotDrafts), ["mainSplitRatio"] = mainSplitRatio, ["editableIdea"] = editableIdea, ["meter"] = meter.Text, ["projectName"] = projectName, ["history"] = new JsonArray(pieceHistory.Select(d => d.DeepClone()).ToArray()), ["notation"] = new JsonArray(notationSettings.Select(c => (JsonNode?)JsonValue.Create(c.SelectedIndex)).ToArray()), ["automaticRegisterReview"] = automaticRegisterReview, ["midiOutputDevice"] = player.OutputDevice, ["dialogueSourceSlots"] = new JsonArray(dialogueSourceSlots.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()), ["splitBeats"] = splitBeats.Checked,
+                ["measures"] = measures.Text, ["tempo"] = tempo.Text, ["key"] = musicalKey.Text, ["ensemble"] = ensemble.Text };
+            AtomicFile.WriteText(Path.Combine(dataDirectory, "workspace.json"), state.ToJsonString());
+        }
+        catch (Exception e) { SetStatus("Speichern fehlgeschlagen: " + e.Message, true); }
+    }
+    string statusMessage = "";
+    bool statusIsError;
+    void SetStatus(string text, bool error = false)
+    {
+        statusMessage = text; statusIsError = error; RenderStatus();
+    }
+    void RenderStatus()
+    {
+        status.Text = busy && !statusIsError ? "● KI arbeitet · " + statusMessage : statusMessage;
+        status.ForeColor = statusIsError ? Color.DarkRed : busy ? Color.ForestGreen : Color.Black;
+    }
+    static string FormatTime(int ms) => TimeSpan.FromMilliseconds(ms).ToString(@"mm\:ss");
+    static string SafeName(string title) => string.Concat(title.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+    static string RepairLegacyText(string text)
+    {
+        if (!text.Contains("Ã") && !text.Contains("â€") && !text.Contains("Â")) return text;
+        try
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            var legacy = Encoding.GetEncoding(1252, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+            return new UTF8Encoding(false, true).GetString(legacy.GetBytes(text));
+        }
+        catch (ArgumentException) { return text; }
+    }
+
+    public async Task<string> RunSelfTestAsync(string output)
+    {
+        Directory.CreateDirectory(output);
+        TestWindowPlacement(output);
+        // Terminal messages are set before RequestAIAsync's finally clears busy.
+        // The visible label and controls must settle together for every outcome.
+        foreach (var outcome in new[] {
+            (Text: "Antwort erhalten.", Error: false),
+            (Text: "Anfrage lokal abgebrochen.", Error: false),
+            (Text: "Original gespeichert; Notensatz fehlgeschlagen.", Error: true) })
+        {
+            SetBusy(true); SetStatus(outcome.Text, outcome.Error); SetBusy(false);
+            if (busy || status.Text != outcome.Text || !compose.Enabled || !send.Enabled || cancel.Enabled ||
+                status.ForeColor != (outcome.Error ? Color.DarkRed : Color.Black))
+                throw new Exception("Abgeschlossene Anfrage bleibt als aktiv markiert oder verliert ihre Fehleranzeige.");
+        }
+        // Guard the intentionally compact V4.14 interface against button/menu duplication.
+        var topMenus = MainMenuStrip?.Items.OfType<ToolStripMenuItem>().ToArray()
+            ?? throw new Exception("V4.14-Menüleiste fehlt.");
+        if (!topMenus.Select(item => item.Text).SequenceEqual(new[] {
+                "Datei", "Bearbeiten", "Komposition", "Einstellungen", "Hilfe"
+            })) throw new Exception("V4.14-Menüstruktur ist nicht konsolidiert.");
+        var menuLabels = topMenus.SelectMany(item => item.DropDownItems.OfType<ToolStripMenuItem>())
+            .Select(item => item.Text).ToHashSet();
+        foreach (string essential in new[] {
+            "Diagnose importieren …", "MusicXML exportieren …", "LilyPond exportieren …",
+            "Motiv vorbereiten …", "Entwicklungsstand / Über Composition Lab …"
+        }) if (!menuLabels.Contains(essential))
+            throw new Exception("Menüfunktion fehlt: " + essential);
+        await ModelCatalogTests.RunAsync();
+        await RunModelDialogTestsAsync(output);
+        modelCatalogs["anthropic"] = new ModelSnapshot(DateTimeOffset.UtcNow, Enumerable.Range(0, 235).Select(i => new CatalogModel("future-" + i, "Future " + i, "Test-Katalog")).ToList());
+        SelectModel();
+        if (model.Items.Count != 236) throw new Exception("Vollständiger Modellkatalog fehlt in der Auswahl.");
+        models["anthropic"] = "future-234"; SelectModel();
+        if (SelectedModelId != "future-234") throw new Exception("Dynamisches Modell nicht auswählbar.");
+        AtomicFile.WriteText(CatalogPath, JsonSerializer.Serialize(modelCatalogs)); modelCatalogs.Clear(); LoadModelCatalogs();
+        if (modelCatalogs["anthropic"].Models.Count != 235 || File.ReadAllText(CatalogPath).Contains("catalog-test-key")) throw new Exception("Modellcache beschädigt oder enthält Schlüssel.");
+        modelCatalogs.Clear(); models["anthropic"] = "claude-sonnet-5"; SelectModel();
+        const string probe = "ÄÖÜ äöü ß – musikalischer Dialog";
+        var version = await core.RunAsync(new JsonObject { ["operation"] = "version", ["title"] = probe });
+        if (version["titleEcho"]?.GetValue<string>() != probe) throw new Exception("UTF-8-Prozesskommunikation beschädigt.");
+        if (version["version"]?.GetValue<string>() != "4.2.11") throw new Exception("Falscher Kern.");
+        var fixture = JsonNode.Parse("""{"ti":"Windows Starttest","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,0,1],[1,1,64,80,0,1],[2,2,67,80,0,1]]}]}""")!.AsObject();
+        documents[0] = CreateDocument(fixture, "Automatischer Test ohne KI-Kosten."); RefreshSlots();
+        await DisplayCurrentAsync();
+        if (currentMidi == null || currentXML == null || !currentXML.Contains("score-partwise")) throw new Exception("Export fehlgeschlagen.");
+        var round = await core.RunAsync(new JsonObject { ["operation"] = "import-midi", ["data"] = Convert.ToBase64String(currentMidi), ["title"] = "Test" });
+        if (round["score"]?["tr"]?[0]?["nt"]?.AsArray().Count != 3) throw new Exception("MIDI-Rückimport fehlgeschlagen.");
+        await core.RunAsync(new JsonObject { ["operation"] = "validate-document", ["document"] = Current!.DeepClone() });
+        string clab = Path.Combine(output, "Windows-Starttest.clab"); AtomicFile.WriteText(clab, Current!.ToJsonString());
+        await ImportPathAsync(clab);
+        // Explicit imports replace only their requested slot; deletion leaves neighbours intact.
+        var neighbour = documents[0]!.ToJsonString();
+        await ImportIntoSlotAsync(clab, 7);
+        if (documents[7] == null || documents[0]!.ToJsonString() != neighbour) throw new Exception("Gezielter Slotimport fehlgeschlagen.");
+        string invalid = Path.Combine(output, "invalid.clab"); AtomicFile.WriteText(invalid, "{}");
+        var before = documents[7]!.ToJsonString();
+        bool rejected = false;
+        try { await ImportIntoSlotAsync(invalid, 7); }
+        catch (Exception e) when (e is InvalidOperationException or CoreRequestException) { rejected = true; }
+        if (!rejected) throw new Exception("Ungültiger Import akzeptiert.");
+        if (documents[7]!.ToJsonString() != before) throw new Exception("Fehlgeschlagener Import überschreibt das Stück.");
+        await DeleteSlotAsync(7);
+        if (documents[7] != null || documents[0]!.ToJsonString() != neighbour) throw new Exception("Einzellöschung fehlgeschlagen.");
+        const string lily = "\\version \"2.24.0\"\n\\score { { c'4 d' e' f' } }";
+        var extracted = ExtractLilyPond("Einleitung\n```lilypond\n" + lily + "\n```\nNachwort");
+        if (extracted != lily + "\n") throw new Exception("LilyPond-Code verändert.");
+        // Raw music must survive a translation failure and application restart.
+        string broken = "KI: ```lilypond\n\\version \"2.24.0\"\n\\score { c'4\n```";
+        chat.Text = broken;
+        PreservePendingComposition(broken, new JsonObject { ["estimatedCostUSD"] = 0d }, "Testauftrag", "gemini", "test-model");
+        var snapshot = JsonNode.Parse(File.ReadAllText(Path.Combine(dataDirectory, "workspace.json")))!.AsObject();
+        if (snapshot["pendingComposition"]?["composition"]?.GetValue<string>() != broken ||
+            snapshot["chat"]?.GetValue<string>() != broken)
+            throw new Exception("Unvollständige Komposition ging vor der Slot-Übernahme verloren.");
+        chat.Text = ""; pendingComposition = null; SaveLocalState();
+        string lyPath = Path.Combine(output, "Windows-Starttest.ly"); await File.WriteAllTextAsync(lyPath, extracted, new UTF8Encoding(false));
+        string longSource = extracted + "\n% " + string.Concat(Enumerable.Repeat("Übergabe # + = & <script> 𝄞\n% ", 2500));
+        string handoff = HacklilySourceUri(longSource);
+        if (Uri.UnescapeDataString(handoff[(handoff.IndexOf("#src=", StringComparison.Ordinal) + 5)..]) != longSource || handoff.Contains('\n')) throw new Exception("Hacklily-Übergabe kürzt oder verändert Quelltext.");
+        string launcher = HacklilyHandoffHtml(longSource);
+        if (!launcher.Contains(JsonSerializer.Serialize(handoff)) || !launcher.Contains("location.replace(target)")) throw new Exception("Hacklily-Startdatei verliert die Übergabe.");
+        AtomicFile.WriteText(Path.Combine(output, "Hacklily-Uebergabe.html"), launcher);
+        if (await File.ReadAllTextAsync(lyPath) != extracted) throw new Exception("LilyPond-Export beschädigt.");
+        try { ExtractLilyPond("Import: test.mid"); throw new Exception("Import fälschlich als LilyPond erkannt."); } catch (InvalidOperationException) { }
+        var recoveryScore = JsonNode.Parse("""{"ti":"Format-Rettung","bpm":96,"ts":{"n":4,"d":4},"k":"C major","sm":"","tr":[{"nm":"Piano","ch":0,"pg":0,"nt":[[0,1,60,80,1,1],[1,1,64,80,1,1],[2,2,67,80,1,1]],"ev":[{"t":"slur","staff":1,"ranges":[[0,4]]},{"b":0,"t":"dynamic","staff":1,"v":"p"},{"b":0,"t":"tempo","qpm":96,"text":"Mäßig"}]}]}""")!;
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        const string recoveredText = "Für Klavier – vollständiges Stück";
+        var oldEncodingText = Encoding.GetEncoding(1252).GetString(Encoding.UTF8.GetBytes(recoveredText));
+        // Diagnostics saved after a conversion failure may contain the usable score
+        // only in the nested source snapshot. Empty outer fields must not mask it.
+        const string diagnosticMusic = "\\version \"2.24.0\"\\n\\score { { c'4 d' e' f' } \\layout {} \\midi {} }";
+        var nestedRecovery = new JsonObject {
+            ["text"] = "Antwort ohne Noten",
+            ["sourceDiagnostic"] = new JsonObject { ["composition"] = diagnosticMusic }
+        };
+        if (FinishedMusicFromDiagnostic(nestedRecovery) != diagnosticMusic)
+            throw new Exception("Fertige Komposition in verschachtelter Fehlerdiagnose nicht gefunden.");
+        string recoveryFile = Path.Combine(output, "Diagnose-Starttest.json");
+        AtomicFile.WriteText(recoveryFile, new JsonObject { ["scoreResponse"] = recoveryScore.ToJsonString(),
+            ["composition"] = oldEncodingText, ["assignment"] = "Test", ["estimatedCostUSD"] = 0.1 }.ToJsonString());
+        await ImportPathAsync(recoveryFile);
+        if (Current?["concept"]?.GetValue<string>() != recoveredText) throw new Exception("Ältere Diagnose nicht korrekt gerettet.");
+        keys["anthropic"] = "SELF-TEST-NO-REAL-KEY"; secrets.Save(keys);
+        if (secrets.Load()["anthropic"] != "SELF-TEST-NO-REAL-KEY") throw new Exception("DPAPI-Rückprüfung fehlgeschlagen.");
+        if (Encoding.UTF8.GetString(File.ReadAllBytes(Path.Combine(dataDirectory, "keys.dpapi"))).Contains("SELF-TEST-NO-REAL-KEY")) throw new Exception("Unverschlüsselter Schlüssel.");
+        SaveLocalState();
+        if (File.ReadAllText(Path.Combine(dataDirectory, "workspace.json")).Contains("SELF-TEST-NO-REAL-KEY")) throw new Exception("Schlüssel in Projektdatei.");
+        bool midiDevice = false; string playbackInfo = "";
+        try { player.Load(currentMidi); player.Play(); await Task.Delay(500); midiDevice = player.Position > 0; playbackInfo = midiDevice ? "Sequencer läuft; hörbarer Klang nicht automatisch geprüft." : "Kein Positionsfortschritt."; player.Stop(); }
+        catch (Exception e) { playbackInfo = "Runner ohne nutzbaren MIDI-Synthesizer: " + e.Message; }
+        const string finishedMusic = "Meine fertige Komposition\n```lilypond\n\\version \"2.24.0\"\n\\score { { c'4 d'4 } }\n```";
+        if (!ContainsFinishedMusic(finishedMusic) || ContainsFinishedMusic("Wie schreibt man eine Melodie?")) throw new Exception("Chat-Komposition nicht eindeutig erkannt.");
+        int freeDestination = documents.FirstFreeIndex();
+        var occupiedBefore = documents[0]!.ToJsonString();
+        var translatedResult = new JsonObject { ["score"] = fixture.DeepClone(), ["composition"] = finishedMusic,
+            ["estimatedCostUSD"] = .1, ["inputTokens"] = 140, ["outputTokens"] = 3850 };
+        await AcceptCompositionAsync(translatedResult, freeDestination, "Schon fertiges Stück", "openai", "test");
+        if (slots.SelectedIndex != freeDestination || documents[freeDestination]?["concept"]?.GetValue<string>() != finishedMusic || currentMidi == null || Encoding.ASCII.GetString(currentMidi, 0, 4) != "MThd") throw new Exception("Chat-Komposition ohne aktiven Slot oder MIDI.");
+        if (documents[0]!.ToJsonString() != occupiedBefore) throw new Exception("Chat-Komposition überschreibt vorhandenes Stück.");
+        // Exercise the actual Compose handler: stale settings must never recompose notation.
+        string preservedPiece = documents[0]!.ToJsonString();
+        string finishedDuo = "\\version \"2.24.0\"\n\\score { << \\new Staff { \\set Staff.midiInstrument = \"violin\" c''4 d'' e'' f'' } \\new PianoStaff << \\new Staff { g'4 a' b' c'' } \\new Staff { \\clef bass c4 d e f } >> >> \\layout {} \\midi {} }";
+        composition.Text = finishedDuo; chatInput.Clear(); ensemble.Text = "Klavier"; apiKey.Clear();
+        sessionKeys[activeProvider] = "OFFLINE-LOCAL-IMPORT-KEY";
+        int localDestination = documents.FirstFreeIndex();
+        await RequestAIAsync(true);
+        if (sessionKeys.GetValueOrDefault(activeProvider) != "OFFLINE-LOCAL-IMPORT-KEY")
+            throw new Exception("Lokale Übernahme verändert Zugangsdaten.");
+        if (documents[localDestination]?["concept"]?.GetValue<string>() != finishedDuo)
+            throw new Exception("Lokale Übernahme verliert den Originaltext: " + lastDiagnostic?.ToJsonString());
+        if (documents[localDestination]?["score"]?["tr"]?.AsArray().Sum(t => t!["nt"]!.AsArray().Count) != 12)
+            throw new Exception("Lokale Violin-/Klavierpartitur verliert Noten.");
+        if (busy || status.Text.StartsWith("● KI arbeitet", StringComparison.Ordinal) || !compose.Enabled || cancel.Enabled)
+            throw new Exception("Echter Komponieren-Ablauf beendet den sichtbaren Arbeitsstatus nicht.");
+        if (lastDiagnostic?["compositionAICalls"]?.GetValue<int>() != 0)
+            throw new Exception("Diagnose verliert den Nachweis der lokalen Übernahme ohne KI-Aufruf.");
+        if (documents[0]!.ToJsonString() != preservedPiece)
+            throw new Exception("Lokale Übernahme verändert das vorherige Stück.");
+        // Synthetic demo music for visual QA; no user composition or real API call.
+        documents[0] = CreateDocument(fixture.DeepClone().AsObject(), "Elegie im Abendlicht\n\n" + lily, "Ein ruhiges Klavierstück mit einer klaren musikalischen Idee.");
+        documents[0]!["title"] = "Elegie im Abendlicht"; documents[0]!["ensemble"] = "Klavier";
+        documents[2] = CreateDocument(fixture.DeepClone().AsObject(), lily); documents[2]!["title"] = "Kleine Fuge";
+        documents[4] = CreateDocument(fixture.DeepClone().AsObject(), lily); documents[4]!["title"] = "Tanz der Schatten";
+        RefreshSlots(); slots.SelectedIndex = 0; await DisplayCurrentAsync();
+        chat.Text = "Du: Ein ruhiges Klavierstück mit einer klaren musikalischen Idee.\n\nKI: Stück fertig: Elegie im Abendlicht\n\nDu: Die Melodie soll beim nächsten Abschnitt etwas mehr Raum bekommen.";
+        SetStatus("Bereit · alle Windows-Prüfungen bestanden.");
+        composition.Text = "Eine ruhige, gesangliche Melodie mit Raum zum Atmen.\n\nDie Begleitung trägt die Linie und entwickelt sich mit ihr. Ein kurzer Kontrast führt zum ursprünglichen Gedanken zurück.";
+        const string firstDescription = "Eigenständige Beschreibung der Elegie";
+        composition.Text = firstDescription;
+        string originalSource = documents[0]!["concept"]!.GetValue<string>();
+        slots.SelectedIndex = 2; await DisplayCurrentAsync();
+        if (composition.Text != documents[2]!["description"]!.GetValue<string>()) throw new Exception("Stückbeschreibung wird nicht geladen.");
+        composition.Text = "Eigene Beschreibung der Fuge";
+        slots.SelectedIndex = 0; await DisplayCurrentAsync();
+        if (composition.Text != firstDescription || documents[0]!["concept"]!.GetValue<string>() != originalSource) throw new Exception("Stückbeschreibung geht verloren oder überschreibt Musikquelle.");
+        SaveLocalState();
+        var savedDescriptions = JsonNode.Parse(File.ReadAllText(Path.Combine(dataDirectory, "workspace.json")))!;
+        if (savedDescriptions["slots"]![0]!["description"]!.GetValue<string>() != firstDescription) throw new Exception("Stückbeschreibung nicht gespeichert.");
+        composition.Text = "Ein ruhiges Klavierstück mit einer klaren musikalischen Idee.";
+        var decimalTempo = fixture.DeepClone().AsObject(); decimalTempo["bpm"] = 81.25; documents[9] = CreateDocument(decimalTempo, "Tempo-Rückprüfung"); RefreshSlots(); slots.SelectedIndex = 9; await DisplayCurrentAsync(); if (currentMidi == null || playerBpm != 81) throw new Exception("Dezimaltempo nicht lesbar.");
+        slots.SelectedIndex = 0; await DisplayCurrentAsync();
+        var midiBefore = currentMidi!.ToArray(); notationSettings[0].SelectedIndex = 1; await NotationChangedAsync(0);
+        if (!midiBefore.SequenceEqual(currentMidi!)) throw new Exception("Notationsprofil verändert MIDI.");
+        static IEnumerable<Control> Descendants(Control root)
+        {
+            foreach (Control child in root.Controls) { yield return child; foreach (var nested in Descendants(child)) yield return nested; }
+        }
+        chatInput.Text = "Erste Zeile\r\nZweite Zeile mit einem längeren musikalischen Auftrag.";
+        if (!chatInput.Multiline || !chatInput.WordWrap || !chatInput.AcceptsReturn || chatInput.Lines.Length != 2 || chatInput.Height < 80) throw new Exception("Auftragsfeld ist nicht ausreichend mehrzeilig.");
+        tabs.SelectedIndex = 1; await InitializeNotationAsync();
+        if (!webReady) throw new Exception("Native WebView2-Testumgebung fehlt.");
+        await RunLilyPondTestsAsync(output);
+        await RunRegisterReviewTestsAsync(output);
+        await RunLaboratoryTestsAsync(output);
+        var navigationReady = new TaskCompletionSource<bool>();
+        string scrollTestPath = Path.Combine(output, "NativeScrollTest.html");
+        AtomicFile.WriteText(scrollTestPath, "<!doctype html><html><body style='margin:0'><div style='height:2400px;background:linear-gradient(white,#8ac)'>Native Notenvorschau · Scrolltest</div></body></html>");
+        var scrollTestUri = new Uri(Path.GetFullPath(scrollTestPath));
+        ulong scrollNavigation = 0;
+        void ScrollStarting(object? sender, CoreWebView2NavigationStartingEventArgs e) { if (new Uri(e.Uri) == scrollTestUri) scrollNavigation = e.NavigationId; }
+        void ScrollLoaded(object? sender, CoreWebView2NavigationCompletedEventArgs e) { if (scrollNavigation != 0 && e.NavigationId == scrollNavigation) navigationReady.TrySetResult(e.IsSuccess); }
+        web.CoreWebView2.NavigationStarting += ScrollStarting; web.CoreWebView2.NavigationCompleted += ScrollLoaded;
+        try
+        {
+            web.CoreWebView2.Navigate(scrollTestUri.AbsoluteUri);
+            if (!await navigationReady.Task.WaitAsync(TimeSpan.FromSeconds(20))) throw new Exception("Native Vorschau lädt nicht.");
+        }
+        finally { web.CoreWebView2.NavigationStarting -= ScrollStarting; web.CoreWebView2.NavigationCompleted -= ScrollLoaded; }
+        int normalPreviewHeight = web.Height;
+        toggleLargePreview?.Invoke(); await Task.Delay(100);
+        if (web.Height <= normalPreviewHeight || web.Width <= 0) throw new Exception("Große Notenansicht vergrößert Vorschau nicht.");
+        if (notationTransport == null || !notationTransport.Visible || notationTransport.Height <= 0) throw new Exception("Player fehlt in großer Notenansicht.");
+        toggleLargePreview?.Invoke(); await Task.Delay(100);
+        var nativeBounds = web.Bounds;
+        for (int cycle = 0; cycle < 12; cycle++)
+        {
+            await web.ExecuteScriptAsync("window.scrollTo(0,600)");
+            tabs.SelectedIndex = 0; await Task.Delay(15); tabs.SelectedIndex = 2; await Task.Delay(15); tabs.SelectedIndex = 1; await Task.Delay(30);
+            if (!web.Visible || web.Bounds != nativeBounds) throw new Exception("Native Vorschau nach Tabwechsel instabil.");
+            string browserState = await web.ExecuteScriptAsync("JSON.stringify({width:innerWidth,height:innerHeight,y:scrollY})");
+            var state = JsonNode.Parse(JsonSerializer.Deserialize<string>(browserState)!)!;
+            if (state["width"]!.GetValue<int>() < 100 || state["height"]!.GetValue<int>() < 100 || state["y"]!.GetValue<int>() != 600) throw new Exception("Native Vorschau verliert ihren sichtbaren Ausschnitt.");
+        }
+        using (var capture = File.Create(Path.Combine(output, "Native-WebView2-Scroll.png"))) await web.CoreWebView2.CapturePreviewAsync(Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, capture);
+        // Synthetic browser geometry is checked independently of online Verovio engraving.
+        var tabSwitchMeasurements = new List<object>();
+        float previousScale = 1;
+        foreach (float scale in new[] { 1f, 1.25f, 1.5f, 2f })
+        {
+            // Exercise real WinForms layout with scaled geometry AND font metrics.
+            // CI has one 96-DPI monitor, so this explicitly simulates the other monitor scales.
+            float ratio = scale / previousScale;
+            var fonts = Descendants(this).Prepend(this).ToDictionary(c => c, c => (c.Font.FontFamily, c.Font.Size, c.Font.Style));
+            SuspendLayout(); testLayoutScale = scale;
+            Scale(new SizeF(ratio, ratio));
+            foreach (var entry in fonts) entry.Key.Font = new Font(entry.Value.FontFamily, entry.Value.Size * ratio, entry.Value.Style);
+            ResumeLayout(true); previousScale = scale;
+        MinimumSize = new Size(640, 480);
+        foreach (var size in new[] { new Size(1500, 1100), new Size(1000, 700) })
+        {
+            Size = size;
+            tabs.SelectedIndex = 0;
+            var workspace = mainSplit!.Parent!.Parent as WorkspacePanel ?? throw new Exception("Hauptansicht ohne stabilen Scroll-Container.");
+            workspace.AutoScrollPosition = Point.Empty;
+            await Task.Delay(20);
+            workspace.AutoScrollPosition = new Point(0, 180);
+            await Task.Delay(20);
+            int layoutCount = 0; LayoutEventHandler countLayout = (_, _) => layoutCount++;
+            mainSplit.Parent.Layout += countLayout;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            for (int cycle = 0; cycle < 6; cycle++)
+            {
+                compose.Focus(); await Task.Delay(5);
+                chat.Select(chat.TextLength, 0); chat.ScrollToCaret();
+                int expectedChatTop = chat.GetCharIndexFromPosition(new Point(1, 1));
+                var expectedScroll = workspace.AutoScrollPosition;
+                var expectedPosition = provider.RectangleToScreen(provider.ClientRectangle).Location;
+                double expectedSplit = mainSplitRatio;
+                tabs.SelectedIndex = 1; await Task.Delay(5);
+                tabs.SelectedIndex = 2; await Task.Delay(5);
+                tabs.SelectedIndex = 0; await Task.Delay(10);
+                if (workspace.AutoScrollPosition != expectedScroll) throw new Exception($"Tabzustand verloren bei {scale * 100}%: erwartet {expectedScroll}, erhalten {workspace.AutoScrollPosition}");
+                if (chat.GetCharIndexFromPosition(new Point(1, 1)) != expectedChatTop) throw new Exception("Tabwechsel verliert den Textausschnitt im Chat.");
+                if (mainSplitRatio != expectedSplit) throw new Exception("Tabwechsel verändert die Fensteraufteilung.");
+                if (!provider.Visible || !chat.Visible || !composition.Visible || !compose.Visible || slotCards.Any(c => !c.Visible)) throw new Exception("Element nach Tabwechsel verschwunden.");
+                if (provider.RectangleToScreen(provider.ClientRectangle).Location != expectedPosition) throw new Exception("Instabile Parameterposition nach Tabwechsel.");
+            }
+            watch.Stop(); mainSplit.Parent.Layout -= countLayout;
+            await Task.Delay(40);
+            if (layoutCount > 1000) throw new Exception($"Zu viele Layoutdurchläufe beim Tabwechsel: {layoutCount}");
+            tabSwitchMeasurements.Add(new { scale, requestedWidth = size.Width, switches = 18, layoutCount, milliseconds = watch.ElapsedMilliseconds });
+            for (int page = 0; page < 3; page++)
+            {
+                tabs.SelectedIndex = page; PerformLayout(); await Task.Delay(40);
+                if (page == 0)
+                {
+                    ArrangeMainSplit();
+                    if (mainSplit == null || mainSplit.Panel2.Width < Math.Min(LayoutPixels(220), mainSplit.Width / 3)) throw new Exception("Kompositionsidee zu schmal.");
+                    var right = mainSplit.Panel2.RectangleToScreen(mainSplit.Panel2.ClientRectangle);
+                    var viewport = tabs.RectangleToScreen(tabs.ClientRectangle);
+                    if (right.Left < viewport.Left || right.Right > viewport.Right) throw new Exception("Kompositionsidee außerhalb der sichtbaren Fensterbreite.");
+                    var deckBounds = slotCards[0].Parent!.RectangleToScreen(slotCards[0].Parent!.ClientRectangle);
+                    foreach (var card in slotCards)
+                    {
+                        if (!deckBounds.Contains(card.RectangleToScreen(card.ClientRectangle))) throw new Exception("Slot-Button außerhalb der Leiste.");
+                        if (card.Width < 30) throw new Exception("Slot-Button zu schmal.");
+                    }
+                    if (slotCards[0].Parent is ScrollableControl deckScroll && deckScroll.AutoScroll) throw new Exception("Slot-Leiste besitzt Scrollbalken.");
+                    int previousDistance = mainSplit.SplitterDistance;
+                    mainSplitDragging = true;
+                    mainSplit.SplitterDistance = mainSplit.Panel1MinSize;
+                    if (mainSplit.SplitterDistance >= previousDistance || mainSplit.Panel2.Width <= 0) throw new Exception("Trennlinie nicht verstellbar.");
+                    double savedRatio = mainSplitRatio; SaveLocalState();
+                    var saved = JsonNode.Parse(File.ReadAllText(Path.Combine(dataDirectory, "workspace.json")))!;
+                    if (Math.Abs(saved["mainSplitRatio"]!.GetValue<double>() - savedRatio) > .001) throw new Exception("Trennlinie nicht gespeichert.");
+                    mainSplitRatio = .5; ArrangeMainSplit();
+                }
+                if (page == 1)
+                {
+                    void CheckNotationPlayer()
+                    {
+                        if (notationTransport == null || !notationTransport.Visible) throw new Exception($"Player fehlt bei {scale * 100}% / {size}.");
+                        var viewportBounds = tabs.RectangleToScreen(tabs.ClientRectangle);
+                        foreach (var control in Descendants(notationTransport).Where(c => c.Visible && !c.HasChildren))
+                        {
+                            var bounds = control.RectangleToScreen(control.ClientRectangle);
+                            if (control.Width <= 0 || control.Height <= 0 || !viewportBounds.Contains(bounds) ||
+                                !notationTransport.RectangleToScreen(notationTransport.ClientRectangle).Contains(bounds))
+                                {
+                                using var failureImage = new Bitmap(Width, Height); DrawToBitmap(failureImage, new Rectangle(Point.Empty, Size));
+                                failureImage.Save(Path.Combine(output, "Player-Failure.png"));
+                                throw new Exception($"Player abgeschnitten: {control.GetType().Name} {control.Text} bei {scale * 100}% / {size}. Element {bounds}, Player {notationTransport.RectangleToScreen(notationTransport.ClientRectangle)}, Fenster {viewportBounds}, große Ansicht {largePreview}.");
+                            }
+                        }
+                    }
+                    CheckNotationPlayer();
+                    toggleLargePreview?.Invoke(); await Task.Delay(30); CheckNotationPlayer();
+                    toggleLargePreview?.Invoke(); await Task.Delay(30); CheckNotationPlayer();
+                    if (!splitBeats.Visible || splitBeats.Width < 80 || splitBeats.ClientSize.Height < splitBeats.Font.Height + 4)
+                        throw new Exception("Notenwerte-Kontrollkästchen fehlt oder ist abgeschnitten.");
+                    var settingControls = notationSettings[0].Parent!.Controls.Cast<Control>().ToArray();
+                    foreach (var setting in settingControls)
+                    {
+                        // Native dropdown height may differ from WinForms PreferredHeight
+                        // by its theme border. Check the usable glyph area itself.
+                        if (setting is ComboBox combo && combo.ClientSize.Height < combo.Font.Height + 4)
+                            throw new Exception($"Noten-Auswahltext abgeschnitten: {combo.Text}, Innenhöhe {combo.ClientSize.Height}, Schrift {combo.Font.Height}, DPI {scale}, Fenster {size}.");
+                        foreach (var other in settingControls.Where(c => c != setting))
+                            if (setting.Bounds.IntersectsWith(other.Bounds)) throw new Exception($"Notenoptionen überlappen: {setting.Text} / {other.Text}.");
+                    }
+                    foreach (var choice in notationSettings)
+                    {
+                        if (!choice.Visible || choice.Width < 50) throw new Exception("Notenoption fehlt.");
+                        for (Control? parent = choice.Parent; parent != null; parent = parent.Parent)
+                            if (parent is ScrollableControl scroll && scroll.AutoScroll) scroll.ScrollControlIntoView(choice);
+                        var bounds = choice.RectangleToScreen(choice.ClientRectangle);
+                        var host = choice.Parent!.Parent!;
+                        if (bounds.Left < host.PointToScreen(Point.Empty).X || bounds.Right > host.RectangleToScreen(host.ClientRectangle).Right)
+                            throw new Exception("Notenoption horizontal abgeschnitten.");
+                    }
+                }
+                if (page == 1)
+                {
+                    var settingsViewport = (ScrollableControl)notationSettings[0].Parent!.Parent!;
+                    var expectedSettingsScroll = settingsViewport.AutoScrollPosition;
+                    tabs.SelectedIndex = 2; await Task.Delay(15); tabs.SelectedIndex = 1; await Task.Delay(40);
+                    if (settingsViewport.AutoScrollPosition != expectedSettingsScroll) throw new Exception("Tabwechsel verliert den Ausschnitt der Notenoptionen.");
+                }
+                foreach (var label in Descendants(this).OfType<Label>())
+                {
+                    if (!label.Visible || !label.AutoSize || label.AutoEllipsis) continue;
+                    // TableLayoutPanel may legitimately wrap an AutoSize heading in a narrow column.
+                    // Measure at its actual available width and check the full wrapped height.
+                    var required = label.GetPreferredSize(new Size(label.Width, 0));
+                    if (label.Width < required.Width || label.Height < required.Height)
+                        throw new Exception($"Beschriftung abgeschnitten bei {scale * 100}%: {label.Text} / {label.Size} / benötigt {required}");
+                }
+                foreach (var choice in new[] { provider, effort }.Where(c => c.Visible))
+                {
+                    int required = choice.Items.Cast<object>().Select(item => TextRenderer.MeasureText(item.ToString(), choice.Font).Width).DefaultIfEmpty(0).Max();
+                    if (choice.ClientSize.Width < required + SystemInformation.VerticalScrollBarWidth + 4)
+                        throw new Exception($"Auswahltext abgeschnitten: {choice.Text} bei {scale * 100}%.");
+                }
+                foreach (var inputControl in new Control[] { provider, model, effort, measures, meter, tempo, musicalKey, ensemble })
+                    if (inputControl.Visible && inputControl.Height < inputControl.Font.Height + inputControl.Padding.Vertical + 4)
+                        throw new Exception($"Eingabefeld zu flach bei {scale * 100}%: {inputControl.Name}");
+                foreach (var control in slotCards.Cast<Control>().Concat(guiChecks))
+                {
+                    if (!control.Visible) continue;
+                    if (control.Width < 10 || control.Height < 10) throw new Exception("Bedienelement unbedienbar: " + control.Text);
+                    for (Control? ancestor = control.Parent; ancestor != null; ancestor = ancestor.Parent)
+                    {
+                        if (ancestor is ScrollableControl viewport && viewport.AutoScroll) break;
+                        if (!ancestor.RectangleToScreen(ancestor.ClientRectangle).Contains(control.RectangleToScreen(control.ClientRectangle)))
+                            throw new Exception("Bedienelement außerhalb seines Panels: " + control.Text + " / " + ancestor.GetType().Name + " / " + control.Bounds + " / parent " + ancestor.ClientRectangle);
+                    }
+                    // Native Mac has a horizontal card deck; Windows also allows the full
+                    // fixed layout to scroll when smaller than the original minimum content.
+                    for (Control? parent = control.Parent; parent != null; parent = parent.Parent)
+                        if (parent is ScrollableControl scroll && scroll.AutoScroll) { scroll.ScrollControlIntoView(control); }
+                }
+                if (page == 0)
+                {
+                    for (Control? parent = slotCards[0].Parent; parent != null; parent = parent.Parent) if (parent is ScrollableControl scroll && scroll.AutoScroll) scroll.AutoScrollPosition = Point.Empty;
+                }
+                using var bitmap = new Bitmap(Width, Height); DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size));
+                bitmap.Save(Path.Combine(output, $"DPI-{scale * 100:0}-" + (size.Width == 1500 ? "Windows-" : "Windows-Klein-") + new[] { "Main", "Noten", "Technik" }[page] + ".png"));
+            }
+        }
+        }
+        tabs.SelectedIndex = 0;
+        return JsonSerializer.Serialize(new { passed = true, version = Version, tests = new[] { "UI start", "original Romanze A4: unchanged paper/spacing source, violin and piano through 37 bars, SVG, document and exact MIDI/source export", "terminal success, cancellation and error states settle label, color and buttons; actual Compose handler clears busy label", "finished violin/piano notation Compose handler imports locally without key despite stale ensemble", "portable AES-GCM backup compatibility, wrong password rejection, native laboratories and exact stored MIDI bytes", "shared register detection; explicit bounded octave repair, unchanged music validation, costs and rejection", "edited LilyPond refresh updates notation, MIDI, export source and persisted score; syntax errors retain last valid output", "bundled LilyPond compiles original pickup score into MIDI and SVG locally, cache and source preserved, page/zoom and workspace roundtrip", "model picker opens immediately, key acceptance loads models, cached selection without key prompt, session keys survive provider changes, inline HTTP error and cancelled credentials", "complete provider model catalogs with paginated Anthropic and Gemini responses, future and specialized models, safe failure, deduplication and cache persistence", "notation player stays fully visible in short windows and large score view at every tested DPI", "notation settings wrap within their sidebar without horizontal clipping", "provider and model choices fit their full text", "multiline wrapped request input", "native WebView2 scroll viewport retained across 36 tab switches", "large score view expands without browser reparenting", "UTF-8 process roundtrip", "diagnostic recovery with range events", "legacy text recovery", "bundled core", "MIDI export/import", "MusicXML export", "CLAB save/load", "targeted slot import", "failed import retains piece", "individual slot deletion", "LilyPond source export", "Hacklily direct source handoff, long source and Unicode roundtrip without clipboard", "DPAPI", "no secrets in workspace", "Mac layout builders and ten responsive slot cards without scrollbars", "piece-specific editable descriptions load on slot selection and save without altering original music", "MusicXML settings do not alter MIDI", "fractional imported MIDI tempo", "three Mac workspaces, large/small window with reachable scroll content", "unclipped label and input sizes at simulated 100/125/150/200 percent geometry and font metrics", "visible right pane with movable and persisted splitter at every tested window width and scale", "repeated tab switches restore previous scroll position, splitter and controls at every DPI", "finished chat music commits into a free active slot with MIDI, original source and no overwrite", "all ten slot buttons fit inside an unscrolled deck at every tested width and scale" }, tabSwitchMeasurements, midiDevice, playbackInfo }, new JsonSerializerOptions { WriteIndented = true });
+    }
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) { pending?.Cancel(); playbackTimer.Dispose(); player.Dispose(); modelsHttp.Dispose(); web.Dispose(); slotTips.Dispose(); }
+        base.Dispose(disposing);
+    }
+}
+

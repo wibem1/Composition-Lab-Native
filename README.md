@@ -1,3 +1,37 @@
+# Composition Lab Native – Entwicklung zu Version 4.2
+
+Arbeitszweig: `v4-cross-platform`. Die Veröffentlichung von Version 4.2 erfolgt erst nach vollständig erfolgreichem Freigabelauf.
+`main` und die bisherigen Referenzzweige bleiben unverändert.
+
+Mac und Windows verwenden denselben Swift-Kern mit eigenständigen nativen
+Oberflächen (AppKit bzw. WinForms). Gemeinsame Module übernehmen KI-Zugriff,
+Modellkatalog, Formaterkennung, MIDI/MusicXML, portable Dokumente, LilyPond-
+Quellprüfung und die Zuordnung von SVG-Noten zum Editor. Gemeinsame Dienste
+regeln außerdem MusicChat, Labore, Oktavprüfung und Partiturrevisionen.
+
+Der Hauptkompositionsweg bewahrt die Originalantwort. LilyPond wird lokal mit
+mitgeliefertem 2.26.0 gesetzt; unbekannte Formate lösen keine ungefragte zweite
+KI-Anfrage aus. Fehlerhafte Bearbeitungen erhalten die letzte gültige Fassung.
+Mac und Windows verwenden dieselbe interaktive SVG-Vorlage. Die automatischen
+REAPER-/Studio-Pro-Dateibrücken sind entfernt; normale Ein-/Ausgaben bleiben.
+
+- [Aktueller Prüfstand und Freigabesperren](V4.2-AUDIT.md)
+- [Modulverträge und Entwicklungsprotokoll](DEVELOPMENT-MODULES.md)
+- [Builds und native Tests](https://github.com/wibem1/Composition-Lab-Native/actions)
+- Kerntests: `swift test`
+- Mac-Build: `bash 'Build Native App.command'` (Intel und Apple Silicon)
+- Mac-Funktionstest: `COMPOSITION_LAB_TEST_DOMAIN=de.klangwerke.compositionlab.ci 'Composition Lab 4.2.app/Contents/MacOS/Composition Lab 4.2' --native-self-test /tmp/CompositionLab-Test`
+- Windows-Bundle und GUI-Tests: `pwsh Windows/Build.ps1` nach `swift build -c release`
+
+Die bisherigen Datenpfade und Bundle-IDs bleiben stabil. Pakete und Apps sind
+eindeutig mit 4.2 bezeichnet. Ein grüner Build bedeutet bestandene automatische Prüfungen; noch offene
+Funktionsunterschiede stehen im aktuellen Audit. Der Release-Job erzeugt `v4.2.0` nur nach erfolgreicher Pflichtmatrix.
+
+Die nachfolgende historische Dokumentation beschreibt 3.5.3 und frühere Stände.
+
+
+---
+
 # Composition Lab Native
 
 > **CURRENT TEST CANDIDATE: V3.5.3 Build 3503** on `main`.
@@ -39,3 +73,7 @@ CompositionLab bleibt die Referenz für das gemeinsame `.clab`-Projektdokument. 
 Keine neue Funktion, solange eine Änderung nicht gegen den gemeinsamen Core-Vertrag geprüft wurde. Der Referenzbranch `reference-v5.0.11` bleibt unverändert.
 
 Die systemweiten Regeln stehen in `wibem1/Composer-Lab` unter `SYSTEM-ARCHITECTURE.md`, `CORE-CONTRACT.md` und `DEVELOPMENT-RULES.md`.
+
+## Entwicklungsdokumentation und Modulverträge
+
+Die fortlaufende Entwicklungsdokumentation einschließlich Modulverzeichnis, Aufgaben, Ein-/Ausgabeparametern, Architekturregeln, offenen Schwachstellen und Änderungsprotokoll steht in [DEVELOPMENT-MODULES.md](DEVELOPMENT-MODULES.md). Die tatsächliche Modularisierung ist noch nicht abgeschlossen; Zielmodule sind ausdrücklich als Planung gekennzeichnet.

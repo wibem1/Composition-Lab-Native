@@ -45,12 +45,12 @@ private enum LocalSecretsStore {
 
     private static var directoryURL: URL? {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Composition Lab", isDirectory: true)
+            .appendingPathComponent("Composition Lab 4.0", isDirectory: true)
     }
     private static var fileURL: URL? { directoryURL?.appendingPathComponent("api-secrets.dat") }
 
     private static func localKey() -> SymmetricKey {
-        let defaults = UserDefaults.standard
+        let defaults = AppPreferences.standard
         if let encoded = defaults.string(forKey: keyDefaultsName), let data = Data(base64Encoded: encoded), data.count == 32 {
             return SymmetricKey(data: data)
         }
@@ -95,63 +95,6 @@ private enum LocalSecretsStore {
 }
 
 
-struct CompositionLabProject: Codable {
-    var format = "composition-lab-native-project"
-    var version = 1
-    var name: String
-    var savedAt = Date()
-    var settings: AppSettings
-    var concept: String
-    var score: Score?
-    var source: Score?
-    var sourceName: String?
-    var history: [HistoryItem]
-    var experimentConcept: String
-    var experimentScore: Score?
-}
-
-
-struct CompositionLabDocument: Codable {
-    var format = "composition-lab-document"
-    var version = 1
-    var savedAt = Date()
-    var title: String
-    var score: Score
-    var concept: String
-    var provider: Provider?
-    var model: String?
-    var measures: String
-    var meter: String
-    var tempo: String
-    var musicalKey: String
-    var ensemble: String
-    var assignment: String
-    var sourceName: String?
-    var sourceScore: Score?
-
-    /// Legacy-Felder aus CLAB V4.7.1–V4.7.3.
-    /// Sie bleiben zum Lesen alter Dateien erhalten, werden aber nicht mehr neu befüllt.
-    /// Exportdarstellungen werden immer frisch aus `score` erzeugt.
-    var midiData: Data?
-    var musicXMLData: Data?
-
-    /// Bei Import einer MusicXML-Datei zusätzlich das unveränderte Original.
-    var originalMusicXMLData: Data?
-
-    var costUSD: Double?
-    var inputTokens: Int?
-    var outputTokens: Int?
-}
-
-struct CompositionLabBackupPayload: Codable {
-    var format = "composition-lab-native-backup-payload"
-    var version = 1
-    var savedAt = Date()
-    var settings: AppSettings
-    var history: [HistoryItem]
-    var apiKeys: [String:String]
-}
-
 private struct CompositionLabBackupEnvelope: Codable {
     var format = "composition-lab-native-backup"
     var version = 1
@@ -194,13 +137,14 @@ enum BackupCrypto {
 
     static func decrypt(_ data: Data, password: String) throws -> CompositionLabBackupPayload {
         guard let env = try? JSONDecoder().decode(CompositionLabBackupEnvelope.self, from:data),
-              env.format == "composition-lab-native-backup",
-              let salt = Data(base64Encoded:env.salt),
+              env.format == "composition-lab-native-backup", env.version == 1,
+              let salt = Data(base64Encoded:env.salt), salt.count == 16,
               let combined = Data(base64Encoded:env.combined),
               let box = try? AES.GCM.SealedBox(combined:combined)
         else { throw BackupCryptoError.invalidFile }
         do {
             let plain = try AES.GCM.open(box, using:key(password:password, salt:salt))
+            try CoreServices.validateBackup(plain)
             return try JSONDecoder().decode(CompositionLabBackupPayload.self, from:plain)
         } catch { throw BackupCryptoError.badPassword }
     }

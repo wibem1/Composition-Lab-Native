@@ -1,0 +1,138 @@
+name: Composition Lab Native quality gates
+on:
+  push:
+    branches: [v4-cross-platform]
+  pull_request:
+    branches: [v4-cross-platform]
+  workflow_dispatch:
+  workflow_call:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+env:
+  COMPOSITION_LAB_BACKUP_FIXTURE: ${{ github.workspace }}/Tests/CompositionCoreTests/Fixtures/backup-compatibility.json
+jobs:
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift 6.1.2 on macOS and Linux
+        if: runner.os != 'Windows'
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '6.1.2'
+      - name: Swift 6.1.2 on Windows
+        if: runner.os == 'Windows'
+        uses: compnerd/gha-setup-swift@bbae8ce86bac5a3449f3992b3d88bc4ca25f2057
+        with:
+          swift-version: swift-6.1.2-release
+          swift-build: 6.1.2-RELEASE
+      - run: python Tools/check_architecture.py
+      - run: swift --version
+      - run: swift test
+      - run: swift build -c release
+      - run: swift run -c release composition-lab-core --version
+      - name: Build isolated Mac application
+        timeout-minutes: 20
+        if: runner.os == 'macOS'
+        run: |
+          bash 'Build Native App.command'
+          test -x 'Composition Lab 4.2.11.app/Contents/MacOS/Composition Lab 4.2.11'
+          lipo 'Composition Lab 4.2.11.app/Contents/MacOS/Composition Lab 4.2.11' -verify_arch x86_64 arm64
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' 'Composition Lab 4.2.11.app/Contents/Info.plist')" = 'de.klangwerke.compositionlab.native.v4'
+          COMPOSITION_LAB_TEST_DOMAIN=de.klangwerke.compositionlab.ci 'Composition Lab 4.2.11.app/Contents/MacOS/Composition Lab 4.2.11' --native-self-test "$PWD/Mac-TestResults"
+          test -s Mac-TestResults/result.json
+          'Composition Lab 4.2.11.app/Contents/MacOS/Composition Lab 4.2.11' --capture-gui-reference "$PWD/Mac-GUI-Reference"
+          test -s Mac-GUI-Reference/Mac-Main.png
+          ditto -c -k --keepParent 'Composition Lab 4.2.11.app' Composition-Lab-4.2.11-Mac.zip
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: Composition-Lab-4.2.11-Mac
+          path: Composition-Lab-4.2.11-Mac.zip
+          if-no-files-found: error
+      - name: Build Windows desktop and test bundled runtime
+        timeout-minutes: 25
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./Windows/Build.ps1
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: Composition-Lab-4.2.11-Windows-x64
+          path: Composition-Lab-4.2.11-Windows-x64.zip
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'Windows'
+        with:
+          name: Windows-Starttest
+          path: Windows/TestResults/
+
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'macOS'
+        with:
+          name: Mac-GUI-Reference
+          path: Mac-GUI-Reference/
+
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'macOS'
+        with:
+          name: Mac-TestResults
+          path: Mac-TestResults/
+
+  release:
+    needs: core
+    if: github.workflow == 'Composition Lab Native quality gates' && github.event_name == 'push' && github.ref == 'refs/heads/v4-cross-platform' && contains(github.event.head_commit.message, '[release 4.2.11]')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Composition-Lab-4.2.11-*
+          merge-multiple: true
+          path: ReleasePackages
+      - uses: actions/download-artifact@v4
+        with:
+          name: Windows-Starttest
+          path: TestEvidence/Windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: Mac-TestResults
+          path: TestEvidence/Mac
+      - name: Verify native regression evidence
+        run: |
+          python - <<'PYTEST'
+          import json, pathlib
+          root = pathlib.Path('TestEvidence')
+          mac = json.loads((root/'Mac/result.json').read_text())
+          assert mac['passed']
+          assert 'svg-three-bar-drag-to-editor' in mac['checks']
+          assert 'window-geometry-roundtrip-and-disconnected-monitor' in mac['checks']
+          for part in ['Windows', 'Windows/Packaged']:
+              base = root/part
+              assert json.loads((base/'result.json').read_text(encoding='utf-8-sig'))['passed']
+              for name in ['Window-Placement.json','Trusted-Mouse-Drag.json']:
+                  assert json.loads((base/name).read_text(encoding='utf-8-sig'))['passed']
+          print('Both native platforms, extracted Windows package, drag and window evidence: PASS')
+          PYTEST
+          zip -r Native-Test-Results.zip TestEvidence
+      - name: Verify packages and publish tested 4.2 commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -s ReleasePackages/Composition-Lab-4.2.11-Mac.zip
+          test -s ReleasePackages/Composition-Lab-4.2.11-Windows-x64.zip
+          python Tools/check_architecture.py
+          cd ReleasePackages
+          sha256sum Composition-Lab-4.2.11-Mac.zip Composition-Lab-4.2.11-Windows-x64.zip > SHA256SUMS.txt
+          cd ..
+          gh release create v4.2.11 ReleasePackages/Composition-Lab-4.2.11-Mac.zip ReleasePackages/Composition-Lab-4.2.11-Windows-x64.zip ReleasePackages/SHA256SUMS.txt Native-Test-Results.zip --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Composition Lab Native 4.2.11' --notes-file VERSION-4.2.11.md

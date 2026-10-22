@@ -1,0 +1,42 @@
+name: Windows 4.2.11 compile gate
+on:
+  push:
+    branches: [v4-cross-platform]
+    paths:
+      - 'Windows/CompositionLab/**'
+      - 'Windows/Build.ps1'
+      - '.github/workflows/windows-v429-compile.yml'
+  pull_request:
+    branches: [v4-cross-platform]
+  workflow_dispatch:
+jobs:
+  windows-compile:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Assert expected version and bundled Guile manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$project = Get-Content 'Windows/CompositionLab/CompositionLab.csproj' -Raw
+          if ($project.Project.PropertyGroup.Version -ne '4.2.11') { throw 'Candidate version is not 4.2.11' }
+          if (-not (Test-Path 'Windows/CompositionLab/GuileRuntimeManifest.json')) { throw 'Missing Guile runtime verification manifest' }
+          $manifest = Get-Content 'Windows/CompositionLab/GuileRuntimeManifest.json' -Raw | ConvertFrom-Json
+          if (@($manifest.pairs).Count -ne 374) { throw 'Expected 374 verified Guile source/bytecode pairs' }
+          if (-not (Select-String -Path 'Windows/CompositionLab/LilyPondCompiler.cs' -Pattern 'EnsureBytecodeFresh' -Quiet)) { throw 'Automatic Guile repair not invoked' }
+      - name: Compile native Windows UI
+        shell: pwsh
+        run: dotnet build 'Windows/CompositionLab/CompositionLab.csproj' -c Release --nologo
+      - name: Validate packaging PowerShell syntax
+        shell: pwsh
+        run: |
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'Windows/Build.ps1'), [ref]$null, [ref]$errors)
+          if ($errors) { $errors | ForEach-Object { Write-Error $_.ToString() }; throw 'Windows build script syntax invalid' }
+      - name: Explicitly do not publish untested package
+        shell: pwsh
+        run: Write-Host 'Compile gate only. Full native Pastorale and extracted ZIP tests remain required before release.'

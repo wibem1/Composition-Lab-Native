@@ -9,6 +9,13 @@ final class TopAlignedDocumentView: NSView {
 final class MainViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
     private let providerPop = NSPopUpButton()
     private let modelPop = NSPopUpButton()
+    private let modelCatalog = NativeModelCatalogStore()
+    private var modelCatalogGeneration = 0
+
+    private func modelsForProvider(_ provider: Provider) -> [(String, String)] {
+        let catalog = modelCatalog.models(for: provider)
+        return catalog.isEmpty ? provider.models : catalog.map { ($0.id, $0.name) }
+    }
     private let effortPop = NSPopUpButton()
     private let keyField = NSSecureTextField()
         private let keyLabel = NSTextField(labelWithString: "API-Key")
@@ -33,6 +40,12 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private var settings = Storage.shared.loadSettings()
     private var history = Storage.shared.loadHistory()
     private var lastConcept = ""
+    private var lastPortableMetadata: [String: JSONValue] = [:]
+    private let localCompiler = NativeLilyPondCompiler(root: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!.appendingPathComponent("CompositionLab-v4/LilyPond"))
+    private var lastLilyPondOutput: NativeLilyPondOutput?
+    private var nativeWorkspaceGeneration = 0
+    private var nativeRequestGeneration = 0
+    private var nativeRequestInFlight = false
     private var lastScore: Score?
     private var lastMidi: Data?
     private var lastProvider: Provider?
@@ -62,6 +75,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     // V6: zehn gleichberechtigte Stück-/Varianten-Slots.
     private var pieceSlots: [HistoryItem?] = [HistoryItem?](repeating: nil, count: 10)
     private var activePieceSlot: Int = 0
+    private var scoreRevisionState: [String: Any]?
+    private var nativeRequestHandle: CoreRequestHandle?
+    private var nativeDialogueClient: APIClient?
     private var pendingCompositionSlot: Int?
     private var slotSelectionLoad = false
     private var mainPieceSlotButtons: [NSButton] = []
@@ -89,7 +105,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private var midiOutputWindowController: NSWindowController?
     private let playerTimeLabel = NSTextField(labelWithString: "0:00 / 0:00")
     private let playerProgress = NSSlider(value: 0, minValue: 0, maxValue: 1, target: nil, action: nil)
-    private let playerVolume = NSSlider(value: 0.80, minValue: 0.10, maxValue: 1.0, target: nil, action: nil)
+    private let playerVolume = NSSlider(value: 0.80, minValue: 0, maxValue: 1.0, target: nil, action: nil)
     private let playerTempoField = NSTextField(string: "120")
     private let playerTempoStepper = NSStepper()
     private let playerLoopButton = NSButton(title: "↻ Loop", target: nil, action: nil)
@@ -114,27 +130,19 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         var sourceContext: String
         var projectName: String
         var savedAt: Date
+        var workspaceExtraFields: [String: JSONValue]? = nil
     }
     private var nextCompositionEntryPoint: String = "compose-button"
     private var musicChatCompositionContextOverride: String = ""
     private var projectName = "Unbenannt"
     private var projectURL: URL?
-    private var reaperBridgeTimer: Timer?
-    private var lastReaperBridgeDate: Date?
-    private var lastStudioProBridgeDate: Date?
     private let v65ProjectLabel = NSTextField(labelWithString: "Projekt: Unbenannt")
-    private let notationPlayerVolume = NSSlider(value: 0.80, minValue: 0.10, maxValue: 1.0, target: nil, action: nil)
+    private let notationPlayerVolume = NSSlider(value: 0.80, minValue: 0, maxValue: 1.0, target: nil, action: nil)
     private let notationPlayerTempoField = NSTextField(string: "120")
     private let notationPlayerLoopButton = NSButton(title: "↻ Loop", target: nil, action: nil)
 
-    private struct V65ProjectDocument: Codable {
-        var format: String
-        var name: String
-        var activeSlot: Int
-        var slots: [HistoryItem?]
-        var settings: AppSettings
-        var history: [HistoryItem]
-    }
+    private typealias V65ProjectDocument = CompositionWorkspace
+    private var workspaceExtraFields: [String: JSONValue] = [:]
 
     override func loadView() {
         NotificationCenter.default.addObserver(self, selector: #selector(midiOutputModeChanged), name: MIDIOutputManager.changedNotification, object: nil)
@@ -153,14 +161,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         view.window?.minSize = NSSize(width:900,height:680)
         view.window?.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
 
-        // Vorhandene Bridge-Dateien sind beim Programmstart nur Altbestand.
-        // Sie dürfen nicht erneut die aktuelle Komposition im Player überschreiben.
-        // Erst eine spätere Änderung der Übergabedatei gilt als neue DAW-Übergabe.
-        if reaperBridgeTimer == nil {
-            lastReaperBridgeDate = ReaperBridge.modificationDate()
-            lastStudioProBridgeDate = StudioProBridge.modificationDate()
-        }
-        startReaperBridgeWatcher()
         v309StartSessionAutosave()
     }
 
@@ -204,11 +204,12 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             chat: chatView.string,
             sourceContext: musicChatCompositionContextOverride,
             projectName: projectName,
-            savedAt: Date()
+            savedAt: Date(),
+            workspaceExtraFields: workspaceExtraFields
         )
         do {
             let data = try JSONEncoder().encode(memory)
-            UserDefaults.standard.set(data, forKey: v309SessionMemoryKey)
+            AppPreferences.standard.set(data, forKey: v309SessionMemoryKey)
         } catch {
             // Autosave must never interrupt musical work. A later timer run can
             // retry; explicit CLAB/CLABPROJECT saves remain independent.
@@ -216,11 +217,12 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     private func v309RestoreSessionMemory() {
-        guard let data = UserDefaults.standard.data(forKey: v309SessionMemoryKey),
+        guard let data = AppPreferences.standard.data(forKey: v309SessionMemoryKey),
               let memory = try? JSONDecoder().decode(V309SessionMemory.self, from: data),
               memory.format == "composition-lab-v3-session-memory" else { return }
 
         settings = memory.settings
+        workspaceExtraFields = memory.workspaceExtraFields ?? [:]
         restoreSettings()
         history = memory.history
         Storage.shared.saveHistory(history)
@@ -256,12 +258,11 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                     addHistory: false,
                     costUSD: item.costUSD,
                     inputTokens: item.inputTokens,
-                    outputTokens: item.outputTokens)
+                    outputTokens: item.outputTokens, metadata: item.extraFields)
             slotSelectionLoad = false
 
             promptView.string = preservedAssignment
             conceptView.string = preservedIdea
-            lastConcept = preservedIdea
             chatView.string = preservedChat
             musicChatCompositionContextOverride = preservedSourceContext
         }
@@ -269,139 +270,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         updatePieceSlotButtons()
         scheduleMusicXMLPreviewRefresh()
         status("Letzte Arbeitssitzung mit \(pieceSlots.compactMap { $0 }.count) Stück(en) wiederhergestellt.", good: true)
-    }
-
-    private func startReaperBridgeWatcher() {
-        guard reaperBridgeTimer == nil else { return }
-        let timer = Timer(timeInterval: 3.0,
-                          target: self,
-                          selector: #selector(reaperBridgeTimerFired(_:)),
-                          userInfo: nil,
-                          repeats: true)
-        timer.tolerance = 1.0
-        // Intentionally .default: bridge polling pauses while AppKit is tracking
-        // scroll wheels, sliders, menus and mouse drags. UI interaction wins.
-        RunLoop.main.add(timer, forMode: .default)
-        reaperBridgeTimer = timer
-    }
-
-    private var dawBridgeCheckInFlight = false
-
-    @objc private func reaperBridgeTimerFired(_ timer: Timer) {
-        // File-system access and bridge parsing must never block AppKit's main thread.
-        // The timer only launches a background check; UI/state updates return to main.
-        guard !dawBridgeCheckInFlight else { return }
-        dawBridgeCheckInFlight = true
-
-        let previousReaperDate = lastReaperBridgeDate
-        let previousStudioDate = lastStudioProBridgeDate
-
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            // Build immutable snapshots in the background. Swift 6 then does not
-            // see mutable captured variables crossing into the main-queue closure.
-            let reaperResult: (Date, Result<Score, Error>)? = {
-                guard let date = ReaperBridge.modificationDate(),
-                      previousReaperDate == nil || date > previousReaperDate! else { return nil }
-                return (date, Result { try ReaperBridge.loadScore() })
-            }()
-
-            let studioResult: (Date, Result<Score, Error>)? = {
-                guard let date = StudioProBridge.modificationDate(),
-                      previousStudioDate == nil || date > previousStudioDate! else { return nil }
-                return (date, Result { try StudioProBridge.loadScore() })
-            }()
-
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.dawBridgeCheckInFlight = false
-
-                if let (date, result) = reaperResult {
-                    self.lastReaperBridgeDate = date
-                    switch result {
-                    case .success(let score):
-                        self.importedReferenceScore = score
-                        self.importedReferenceName = "REAPER: " + score.ti
-                        self.lastConcept = ""
-                        self.conceptView.string = ""
-                        self.install(score: score, concept: "", provider: self.provider, model: self.model, addHistory: false)
-                        self.conceptView.string = ""
-                        self.workspaceSegment.selectedSegment = 0
-                        self.workspaceChanged()
-                        NSApp.activate(ignoringOtherApps: true)
-                        self.view.window?.makeKeyAndOrderFront(nil)
-                        self.status("REAPER-Vorlage übernommen – \(score.tr.reduce(0) { $0 + $1.nt.count }) Noten.", good: true)
-                    case .failure(let error):
-                        self.status("REAPER-Übergabe fehlgeschlagen: \(error.localizedDescription)", good: false)
-                    }
-                }
-
-                if let (date, result) = studioResult {
-                    self.lastStudioProBridgeDate = date
-                    switch result {
-                    case .success(let score):
-                        self.importedReferenceScore = score
-                        self.importedReferenceName = "Studio Pro: " + score.ti
-                        self.lastConcept = ""
-                        self.conceptView.string = ""
-                        self.install(score: score, concept: "", provider: self.provider, model: self.model, addHistory: false)
-                        self.conceptView.string = ""
-                        self.workspaceSegment.selectedSegment = 0
-                        self.workspaceChanged()
-                        NSApp.activate(ignoringOtherApps: true)
-                        self.view.window?.makeKeyAndOrderFront(nil)
-                        self.status("Studio-Pro-Vorlage übernommen – \(score.tr.reduce(0) { $0 + $1.nt.count }) Noten.", good: true)
-                    case .failure(let error):
-                        self.status("Studio-Pro-Übergabe fehlgeschlagen: \(error.localizedDescription)", good: false)
-                    }
-                }
-            }
-        }
-    }
-
-    private func checkReaperBridge() {
-        // Nur Dateien verarbeiten, die sich seit dem Start/letzten Empfang geändert haben.
-        guard let date = ReaperBridge.modificationDate() else { return }
-        if let last = lastReaperBridgeDate, date <= last { return }
-        lastReaperBridgeDate = date
-        do {
-            let score = try ReaperBridge.loadScore()
-            importedReferenceScore = score
-            importedReferenceName = "REAPER: " + score.ti
-            lastConcept = ""
-            conceptView.string = ""
-            install(score: score, concept: "", provider: provider, model: model, addHistory: false)
-            conceptView.string = ""
-            selectWorkspace(0)
-            workspaceSegment.selectedSegment = 0
-            NSApp.activate(ignoringOtherApps: true)
-            view.window?.makeKeyAndOrderFront(nil)
-            status("REAPER-Vorlage übernommen – \(score.tr.reduce(0) { $0 + $1.nt.count }) Noten.", good: true)
-        } catch {
-            status("REAPER-Übergabe fehlgeschlagen: \(error.localizedDescription)", good: false)
-        }
-    }
-
-    private func checkStudioProBridge() {
-        // Nur Dateien verarbeiten, die sich seit dem Start/letzten Empfang geändert haben.
-        guard let date = StudioProBridge.modificationDate() else { return }
-        if let last = lastStudioProBridgeDate, date <= last { return }
-        lastStudioProBridgeDate = date
-        do {
-            let score = try StudioProBridge.loadScore()
-            importedReferenceScore = score
-            importedReferenceName = "Studio Pro: " + score.ti
-            lastConcept = ""
-            conceptView.string = ""
-            install(score: score, concept: "", provider: provider, model: model, addHistory: false)
-            conceptView.string = ""
-            selectWorkspace(0)
-            workspaceSegment.selectedSegment = 0
-            NSApp.activate(ignoringOtherApps: true)
-            view.window?.makeKeyAndOrderFront(nil)
-            status("Studio-Pro-Vorlage übernommen – \(score.tr.reduce(0) { $0 + $1.nt.count }) Noten.", good: true)
-        } catch {
-            status("Studio-Pro-Übergabe fehlgeschlagen: \(error.localizedDescription)", good: false)
-        }
     }
 
     private func buildUI() {
@@ -421,7 +289,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         workspaceSegment.translatesAutoresizingMaskIntoConstraints = false
         header.addSubview(workspaceSegment)
 
-        let project = NSTextField(labelWithString: "Composition Lab · Composition Engine \(ComposerPrompts.referenceVersion) · Build \(ComposerPrompts.engineBuild)")
+        let project = NSTextField(labelWithString: "Composition Lab \(CoreServices.version) · Build 4200 · 20.10.2026")
         project.font = .systemFont(ofSize: 15, weight: .semibold)
         project.translatesAutoresizingMaskIntoConstraints = false
         header.addSubview(project)
@@ -737,7 +605,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         explanation.widthAnchor.constraint(equalTo:rightStack.widthAnchor).isActive = true
 
         musicXMLPreview.translatesAutoresizingMaskIntoConstraints = false
-        musicXMLPreview.onRefreshRequested = { [weak self] in self?.refreshMusicXMLPreview() }
+        musicXMLPreview.onRefreshRequested = { [weak self] in self?.refreshCurrentNotation() }
+        musicXMLPreview.onSourceSelection = { [weak self] message in self?.selectOriginalSource(message) }
         rightStack.addArrangedSubview(musicXMLPreview)
         musicXMLPreview.widthAnchor.constraint(equalTo:rightStack.widthAnchor).isActive = true
         musicXMLPreview.heightAnchor.constraint(greaterThanOrEqualToConstant:360).isActive = true
@@ -938,7 +807,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             notationProfile = stored
         } else {
             // Einmalige Migration älterer V4.9.0/V5.0.11-Einstellungen.
-            let d = UserDefaults.standard
+            let d = AppPreferences.standard
             if d.object(forKey: "musicXML.startGrid") != nil {
                 let startGridValues: [Double] = [0, 1.0, 0.5, 0.25, 0.125, 1.0/3.0, 1.0/6.0]
                 let restValues: [Double] = [0, 0.125, 0.25, 0.5]
@@ -1032,6 +901,11 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     private func refreshMusicXMLPreview() {
+        if case .bool(true)? = lastPortableMetadata["directLilyPond"] {
+            if let output = lastLilyPondOutput { musicXMLPreview.setLilyPond(output.pages) }
+            else { musicXMLPreview.setMusicXML(nil) }
+            return
+        }
         guard let score = lastScore else {
             musicXMLPreview.setMusicXML(nil)
             return
@@ -1076,7 +950,12 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         if providerPop.numberOfItems == 0 { providerPop.addItems(withTitles: Provider.allCases.map(\.displayName)); providerPop.target = self; providerPop.action = #selector(providerChanged) }
         if effortPop.numberOfItems == 0 { effortPop.addItems(withTitles: Effort.allCases.map(\.displayName)) }
         let ai = NSTextField(labelWithString: "KI"); ai.font = .systemFont(ofSize: 12, weight: .semibold); row.addArrangedSubview(ai)
-        row.addArrangedSubview(providerPop); row.addArrangedSubview(modelPop); row.addArrangedSubview(effortPop); row.addArrangedSubview(NSView())
+        row.addArrangedSubview(providerPop); row.addArrangedSubview(modelPop)
+        modelPop.widthAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
+        modelPop.widthAnchor.constraint(lessThanOrEqualToConstant: 280).isActive = true
+        modelPop.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        modelPop.toolTip = "Vollständige Modellliste über Technisches → KI-Modelle aktualisieren laden."
+        row.addArrangedSubview(effortPop); row.addArrangedSubview(NSView())
         func label(_ text: String) { row.addArrangedSubview(NSTextField(labelWithString: text)) }
         func field(_ f: NSTextField, _ placeholder: String, _ width: CGFloat) { f.placeholderString = placeholder; f.widthAnchor.constraint(equalToConstant: width).isActive = true; row.addArrangedSubview(f) }
         if measuresField.numberOfItems == 0 {
@@ -1192,7 +1071,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         playerRow.alignment = .centerY
         playerRow.spacing = 7
 
-        playerRow.addArrangedSubview(NSButton(title: "▶", target: self, action: #selector(playCurrentMIDI)))
+        playerRow.addArrangedSubview(NSButton(title: "▶Ⅱ", target: self, action: #selector(playCurrentMIDI)))
         playerRow.addArrangedSubview(NSButton(title: "■", target: self, action: #selector(stopCurrentMIDI)))
         playerLoopButton.setButtonType(.toggle)
         playerLoopButton.target = self
@@ -1247,7 +1126,23 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     private func importFile(_ url: URL, intoPieceSlot index: Int) {
-        guard index >= 0, index < pieceSlots.count else { return }; if index != activePieceSlot { captureCurrentInActiveSlot() }; activePieceSlot = index; updatePieceSlotButtons(); loadCompositionReference(url: url); if lastScore != nil { captureCurrentInActiveSlot() }; status("Datei in Stück-Slot \(index + 1) übernommen.", good: true)
+        guard index >= 0, index < pieceSlots.count else { return }
+        if url.pathExtension.lowercased() == "clabproject" { loadLegacyProject(url: url); return }
+        do {
+            // Validate before selecting/replacing a slot. Failed imports must
+            // never copy the previous current score into the destination.
+            let data = try Data(contentsOf: url)
+            switch url.pathExtension.lowercased() {
+            case "clab": try CoreServices.validateDocument(data)
+            case "xml", "musicxml": _ = try CoreServices.importMusicXML(data, title: url.lastPathComponent)
+            default: _ = try CoreServices.importMIDI(data, title: url.lastPathComponent)
+            }
+            if index != activePieceSlot { captureCurrentInActiveSlot() }
+            activePieceSlot = index
+            loadCompositionReference(url: url)
+            if lastScore != nil { captureCurrentInActiveSlot() }
+            updatePieceSlotButtons()
+        } catch { status("Datei nicht übernommen: " + error.localizedDescription, good: false) }
     }
 
     @objc private func importIntoActivePieceSlotPressed() {
@@ -1318,6 +1213,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             return
         }
         pieceSlots[index] = nil
+        if index == activePieceSlot { clearCurrentPiece() }
         updatePieceSlotButtons()
         status("Stück-Slot \(index + 1) gelöscht.", good: true)
     }
@@ -1478,12 +1374,13 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private func v65SaveProject() {
         captureCurrentInActiveSlot()
         saveSettingsFromUI()
-        let doc = V65ProjectDocument(format: "composition-lab-v6-project",
+        var doc = V65ProjectDocument(format: "composition-lab-v6-project",
                                      name: projectName,
                                      activeSlot: activePieceSlot,
                                      slots: pieceSlots,
                                      settings: settings,
                                      history: history)
+        doc.concept = conceptView.string; doc.chat = chatView.string; doc.extraFields = workspaceExtraFields
         let panel = NSSavePanel()
         panel.allowedFileTypes = ["clabproject"]
         panel.nameFieldStringValue = safeFilename(projectName) + ".clabproject"
@@ -1506,13 +1403,20 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         panel.allowedFileTypes = ["clabproject"]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        loadWorkspaceProject(url: url)
+    }
+
+    private func loadWorkspaceProject(url: URL) {
         do {
             let data = try Data(contentsOf: url)
+            try CoreServices.validateWorkspace(data)
             let doc = try JSONDecoder().decode(V65ProjectDocument.self, from: data)
             guard doc.format == "composition-lab-v6-project" else {
                 throw NSError(domain: "CompositionLab.V65", code: 1,
                               userInfo: [NSLocalizedDescriptionKey: "Unbekanntes V6-Projektformat."])
             }
+            workspaceExtraFields = doc.extraFields
+            if let chat = doc.chat { chatView.string = chat }
             projectName = doc.name
             projectURL = url
             settings = doc.settings
@@ -1530,9 +1434,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 slotSelectionLoad = true
                 install(score: item.score, concept: item.concept, provider: item.provider, model: item.model,
                         addHistory: false, costUSD: item.costUSD,
-                        inputTokens: item.inputTokens, outputTokens: item.outputTokens)
+                        inputTokens: item.inputTokens, outputTokens: item.outputTokens, metadata: item.extraFields)
                 slotSelectionLoad = false
-            }
+            } else { clearCurrentPiece() }
             scheduleMusicXMLPreviewRefresh()
             status("Projekt „\(projectName)“ geladen.", good: true)
         } catch {
@@ -1764,7 +1668,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
               let score = lastScore else { return }
         let p = lastProvider ?? provider
         let m = lastModel ?? model
-        pieceSlots[activePieceSlot] = HistoryItem(id: UUID(),
+        lastPortableMetadata["description"] = .string(conceptView.string)
+        lastPortableMetadata["assignment"] = .string(promptView.string)
+        pieceSlots[activePieceSlot] = HistoryItem(id: pieceSlots[activePieceSlot]?.id ?? UUID(),
                                                   time: Date(),
                                                   title: score.ti,
                                                   provider: p,
@@ -1774,50 +1680,37 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                                                   costUSD: lastCostUSD,
                                                   inputTokens: lastInputTokens,
                                                   outputTokens: lastOutputTokens,
-                                                  area: .composition)
+                                                  area: .composition,
+                                                  extraFields: lastPortableMetadata)
         updatePieceSlotButtons()
+    }
+
+    private func clearCurrentPiece() {
+        nativeWorkspaceGeneration += 1
+        lastScore = nil; lastMidi = nil; lastConcept = ""; lastPortableMetadata = [:]; lastLilyPondOutput = nil
+        midiPlayer.stop(); conceptView.string = ""; jsonView.string = ""; validationView.string = ""
+        musicXMLPreview.setMusicXML(nil); resultLabel.stringValue = "Noch keine Komposition."
+        musicXMLCurrentLabel.stringValue = "Aktuelles Stück: –"
+        updatePlayerTime()
     }
 
     @objc private func pieceSlotPressed(_ sender: NSButton) {
         let newIndex = sender.tag
-        guard newIndex >= 0, newIndex < pieceSlots.count else { return }
-
-        // Composition Lab 3.x: the right-hand composition idea is one global,
-        // user-editable working state. Merely browsing a piece slot must never
-        // replace it with the historical concept stored in that slot.
-        let preservedWorkingIdea = conceptView.string
-        let preservedLastConcept = lastConcept
-        let preservedAssignment = promptView.string
-        let preservedSourceContext = musicChatCompositionContextOverride
-
+        guard newIndex >= 0, newIndex < pieceSlots.count, newIndex != activePieceSlot else { return }
+        captureCurrentInActiveSlot()
         activePieceSlot = newIndex
         guard let item = pieceSlots[newIndex] else {
-            updatePieceSlotButtons()
-            status("Stück-Slot \(newIndex + 1) ist leer. Die nächste Komposition oder importierte Datei landet hier.", good: true)
-            return
+            clearCurrentPiece(); updatePieceSlotButtons()
+            status("Stück-Slot \(newIndex + 1) ist leer.", good: true); return
         }
-
         slotSelectionLoad = true
-        install(score: item.score,
-                concept: item.concept,
-                provider: item.provider,
-                model: item.model,
-                addHistory: false,
-                costUSD: item.costUSD,
-                inputTokens: item.inputTokens,
-                outputTokens: item.outputTokens)
+        install(score: item.score, concept: item.concept, provider: item.provider, model: item.model,
+                addHistory: false, costUSD: item.costUSD, inputTokens: item.inputTokens,
+                outputTokens: item.outputTokens, metadata: item.extraFields)
         slotSelectionLoad = false
-
-        // install() intentionally loads the piece metadata for legacy workflows.
-        // Restore the independent 3.x working state immediately afterwards.
-        conceptView.string = preservedWorkingIdea
-        lastConcept = preservedLastConcept
-        promptView.string = preservedAssignment
-        musicChatCompositionContextOverride = preservedSourceContext
-
-        updatePieceSlotButtons()
-        scheduleMusicXMLPreviewRefresh()
-        status("Stück \(newIndex + 1) geladen: \(item.title) · Kompositionsidee bleibt unverändert.", good: true)
+        if case .string(let assignment)? = item.extraFields["assignment"] { promptView.string = assignment }
+        updatePieceSlotButtons(); scheduleMusicXMLPreviewRefresh()
+        status("Stück \(newIndex + 1) geladen: \(item.title).", good: true)
     }
 
     @objc private func generateMotifPressed() {
@@ -1843,7 +1736,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         let task = "Komponiere ein prägnantes musikalisches Motiv von \(bars) Takten als Ausgangspunkt für eine spätere Komposition. Übernimm die aktuell gewählte Besetzung, Tonart, Taktart und das Tempo."
         promptView.string = task
         conceptView.string = "\(bars) Takte · \(meterField.stringValue) · \(tempoField.stringValue) BPM · \(musicalKeyField.stringValue) · \(ensembleField.stringValue)\n\nKurzes, eigenständiges Motiv; musikalische Ausarbeitung erfolgt erst mit Komponieren."
-        lastConcept = conceptView.string
         musicChatCompositionContextOverride = ""
         importedReferenceScore = nil
         importedReferenceName = nil
@@ -1861,7 +1753,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         row.spacing = 7
         panel.contentView = row
 
-        row.addArrangedSubview(NSButton(title: "▶", target: self, action: #selector(playCurrentMIDI)))
+        row.addArrangedSubview(NSButton(title: "▶Ⅱ", target: self, action: #selector(playCurrentMIDI)))
         row.addArrangedSubview(NSButton(title: "■", target: self, action: #selector(stopCurrentMIDI)))
         notationPlayerLoopButton.setButtonType(.toggle)
         notationPlayerLoopButton.bezelStyle = .rounded
@@ -1967,7 +1859,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         playerStack.orientation = .vertical; playerStack.alignment = .leading; playerStack.spacing = 5
         let transportRow = NSStackView()
         transportRow.orientation = .horizontal; transportRow.spacing = 6
-        let playButton = NSButton(title:"▶", target:self, action:#selector(playCurrentMIDI))
+        let playButton = NSButton(title:"▶Ⅱ", target:self, action:#selector(playCurrentMIDI))
         let pauseButton = NSButton(title:"Ⅱ", target:self, action:#selector(pauseCurrentMIDI))
         let stopButton = NSButton(title:"■", target:self, action:#selector(stopCurrentMIDI))
         transportRow.addArrangedSubview(playButton); transportRow.addArrangedSubview(pauseButton); transportRow.addArrangedSubview(stopButton)
@@ -1993,7 +1885,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         playerTempoField.widthAnchor.constraint(equalToConstant: 58).isActive = true
         tempoPlayerRow.addArrangedSubview(playerTempoField)
         tempoPlayerRow.addArrangedSubview(NSTextField(labelWithString:"BPM"))
-        playerTempoStepper.minValue = 20; playerTempoStepper.maxValue = 300; playerTempoStepper.increment = 1
+        playerTempoStepper.minValue = 20; playerTempoStepper.maxValue = 400; playerTempoStepper.increment = 1
         playerTempoStepper.target = self; playerTempoStepper.action = #selector(playerTempoStepperChanged)
         tempoPlayerRow.addArrangedSubview(playerTempoStepper)
         playerStack.addArrangedSubview(tempoPlayerRow)
@@ -2170,9 +2062,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             providerPop.selectItem(at: pi)
             refillModels()
         }
-        if let mi = state.provider.models.firstIndex(where: { $0.0 == state.model }) {
-            modelPop.selectItem(at: mi)
-        }
+        settings.models[state.provider.rawValue] = state.model
+        refillModels()
         keyField.stringValue = SessionSecrets.shared.key(for: state.provider)
         status("\(state.score.ti) als letzter Player-Stand wiederhergestellt.", good: true)
     }
@@ -2181,7 +2072,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         if let i = Provider.allCases.firstIndex(of: settings.provider) { providerPop.selectItem(at:i) }
         refillModels()
         let pkey = settings.provider.rawValue
-        if let m = settings.models[pkey], let idx = settings.provider.models.firstIndex(where:{$0.0 == m}) { modelPop.selectItem(at:idx) }
         if let e = Effort(rawValue: settings.efforts[pkey] ?? "medium"),
            let idx = Effort.allCases.firstIndex(of:e) { effortPop.selectItem(at:idx) }
         measuresField.stringValue = settings.measures
@@ -2196,27 +2086,73 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
     private var provider: Provider { Provider.allCases[max(0,providerPop.indexOfSelectedItem)] }
     private var model: String {
-        let list = provider.models
-        guard !list.isEmpty else { return "" }
-        return list[max(0,min(modelPop.indexOfSelectedItem,list.count-1))].0
+        modelPop.selectedItem?.representedObject as? String ?? settings.models[provider.rawValue] ?? provider.models.first?.0 ?? ""
     }
     private var effort: Effort { Effort.allCases[max(0,effortPop.indexOfSelectedItem)] }
 
     private func refillModels() {
         modelPop.removeAllItems()
-        modelPop.addItems(withTitles: provider.models.map{$0.1})
+        var list = modelsForProvider(provider)
         let stored = settings.models[provider.rawValue]
-        if let stored, let idx = provider.models.firstIndex(where:{$0.0 == stored}) {
-            modelPop.selectItem(at:idx)
-        } else { modelPop.selectItem(at:0) }
+        // Imported projects can reference a model absent from today's catalog.
+        // Keep that exact ID selectable instead of silently changing the model.
+        if let stored, !stored.isEmpty, !list.contains(where: { $0.0 == stored }) { list.insert((stored, stored), at: 0) }
+        var labels = Set<String>()
+        for (id, title) in list {
+            let base = title == id ? id : title + " · " + id
+            var label = base, suffix = 2
+            while labels.contains(label) { label = base + " (\(suffix))"; suffix += 1 }
+            labels.insert(label)
+            modelPop.addItem(withTitle: label)
+            modelPop.lastItem?.representedObject = id
+            modelPop.lastItem?.toolTip = modelCatalog.models(for: provider).first(where: { $0.id == id })?.details
+        }
+        if let stored, let item = modelPop.itemArray.first(where: { $0.representedObject as? String == stored }) { modelPop.select(item) }
+        else { modelPop.selectItem(at: 0) }
+        modelPop.target = self; modelPop.action = #selector(providerModelChanged)
         keyLabel.stringValue = "API-Key für \(provider.displayName)"
         keyField.placeholderString = "\(provider.displayName) API-Key"
     }
 
+    @objc private func providerModelChanged() { saveSettingsFromUI() }
+
+    @objc func menuRefreshModels() { refreshProviderModels() }
+
+    @objc private func refreshProviderModels() {
+        let selectedProvider = provider
+        let key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { status("Bitte zuerst den API-Schlüssel dieses Providers eintragen.", good: false); return }
+        modelCatalogGeneration += 1
+        let generation = modelCatalogGeneration
+        let selectedModel = model
+        status("Vollständige Modellliste wird geladen …", good: true)
+        NativeModelCatalogClient().list(provider: selectedProvider, key: key) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self, self.modelCatalogGeneration == generation,
+                      self.provider == selectedProvider,
+                      self.keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) == key else { return }
+                switch result {
+                case .success(let models):
+                    self.modelCatalog.accept(models, for: selectedProvider)
+                    self.settings.models[selectedProvider.rawValue] = selectedModel
+                    self.refillModels()
+                    self.status("\(models.count) Modelle vollständig vom Provider geladen.", good: true)
+                case .failure(let error): self.status(error.localizedDescription, good: false)
+                }
+            }
+        }
+    }
+
     @objc private func providerChanged() {
-        saveSettingsFromUI()
+        if let oldModel = modelPop.selectedItem?.representedObject as? String { settings.models[settings.provider.rawValue] = oldModel }
+        settings.efforts[settings.provider.rawValue] = effort.rawValue
+        settings.provider = provider
+        modelCatalogGeneration += 1
         refillModels()
+        let selectedEffort = Effort(rawValue: settings.efforts[provider.rawValue] ?? "medium") ?? .medium
+        effortPop.selectItem(at: Effort.allCases.firstIndex(of: selectedEffort) ?? 1)
         keyField.stringValue = SessionSecrets.shared.key(for: provider)
+        Storage.shared.saveSettings(settings)
     }
 
     private func saveSettingsFromUI() {
@@ -2255,43 +2191,19 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         promptView.string = "Komponiere ein eigenständiges, musikalisch überzeugendes Stück."
     }
 
-    private func basePrompt() -> String {
-        func value(_ raw:String, fallback:String)->String {
-            let v=raw.trimmingCharacters(in:.whitespacesAndNewlines)
-            return v.isEmpty ? fallback : v
+    private func compositionInput() throws -> CoreServices.CompositionInput {
+        let parameters = ["ensemble": ensembleField.stringValue, "measures": measuresField.stringValue,
+                          "meter": meterField.stringValue, "tempo": tempoField.stringValue, "key": musicalKeyField.stringValue]
+        var source: Data?
+        if let reference = importedReferenceScore, let score = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(reference)) {
+            source = try? JSONSerialization.data(withJSONObject: ["name": importedReferenceName ?? "importierte Vorlage", "score": score])
         }
-        let visibleTask = chatInput.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let legacyTask = promptView.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        let task = !visibleTask.isEmpty ? visibleTask : legacyTask
-        var result = """
-        Besetzung: \(value(ensembleField.stringValue, fallback:"frei"))
-        Takte: \(value(measuresField.stringValue, fallback:"32"))
-        Taktart: \(value(meterField.stringValue, fallback:"4/4"))
-        Tempo: \(value(tempoField.stringValue, fallback:"96")) BPM
-        Tonart: \(value(musicalKeyField.stringValue, fallback:"frei"))
-
-        Auftrag:
-        \(task)
-        """
-        if !musicChatCompositionContextOverride.isEmpty {
-            result += "\n\nMUSICCHAT-ARBEITSMATERIAL:\n" + musicChatCompositionContextOverride
-        }
-        if let reference = importedReferenceScore {
-            let source = importedReferenceName ?? "importierte Vorlage"
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            if let data = try? encoder.encode(reference),
-               let json = String(data: data, encoding: .utf8) {
-                result += """
-
-                VORHANDENES MUSIKALISCHES MATERIAL AUS \(source):
-                Das folgende Material ist bereits vorhanden und gehört zum musikalischen Auftrag. Behandle es entsprechend dem freien Auftrag als Kontext, Ausgangsmaterial oder zu bearbeitende Musik. Erfinde keine technischen TARGET-/CONTEXT-Rollen.
-
-                \(json)
-                """
-            }
-        }
-        return result
+        let input = try CoreServices.compositionInput(chat: chatInput.stringValue, idea: conceptView.string, fallback: promptView.string,
+            parametersJSON: JSONEncoder().encode(parameters), sourceJSON: source)
+        if input.localSource != nil { return input }
+        var result = input.assignment
+        if !musicChatCompositionContextOverride.isEmpty { result += "\n\nMUSICCHAT-ARBEITSMATERIAL:\n" + musicChatCompositionContextOverride }
+        return CoreServices.CompositionInput(assignment: result, localSource: nil)
     }
 
     private func conceptDisplay(_ concept: String, provider: Provider, model: String) -> String {
@@ -2299,172 +2211,305 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         return "KI: \(provider.displayName) · \(modelName)\n\n\(concept)"
     }
 
-    private func titleAvoidanceInstruction() -> String {
-        let recent = Storage.shared.loadHistory()
-            .map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let unique = Array(NSOrderedSet(array: recent).compactMap { $0 as? String }.prefix(12))
-        guard !unique.isEmpty else {
-            return "Vergib der Komposition einen eigenständigen, prägnanten Titel."
-        }
-        let list = unique.map { "– \($0)" }.joined(separator: "\n")
-        return """
-        TITEL:
-        Vergib der Komposition einen neuen, eigenständigen und prägnanten Titel.
-        Verwende keinen der folgenden bereits vergebenen Titel erneut und vermeide auch bloße minimale Varianten davon:
-        \(list)
-        """
-    }
-
     @objc private func composePressed() {
-        let tempoText = tempoField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !tempoText.isEmpty && Double(tempoText.replacingOccurrences(of: ",", with: ".")) == nil {
-            status("Tempo bitte als Zahl eingeben oder das Feld leer lassen.", good: false)
-            return
+        guard !nativeRequestInFlight else { status("Bitte die laufende Anfrage abwarten.", good: false); return }
+        let p = provider, m = model
+        let key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let destination = (pieceSlots[activePieceSlot] == nil ? activePieceSlot : pieceSlots.firstIndex(where: { $0 == nil })) else {
+            status("Alle 10 Stück-Slots sind belegt. Bitte zuerst einen Slot freimachen.", good: false); return
         }
-
-        var key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if key.isEmpty {
-            key = SessionSecrets.shared.key(for: provider)
-            if !key.isEmpty { keyField.stringValue = key }
-        }
-        if !key.isEmpty { SessionSecrets.shared.set(key, for: provider) }
-        guard !key.isEmpty else {
-            status("Bitte API-Key für \(provider.displayName) eingeben.", good: false)
-            return
-        }
+        let input: CoreServices.CompositionInput
+        do { input = try compositionInput() }
+        catch { status(error.localizedDescription, good: false); return }
+        if input.localSource == nil && key.isEmpty { status("Bitte API-Key für \(p.displayName) eingeben.", good: false); return }
+        let assignment = input.assignment
         saveSettingsFromUI()
-
-        let p = provider
-        let m = model
-        let e = effort
-        let assignment = basePrompt()
-
-        let destinationSlot: Int
-        if activePieceSlot >= 0, activePieceSlot < pieceSlots.count, pieceSlots[activePieceSlot] == nil {
-            destinationSlot = activePieceSlot
-        } else if let freeSlot = pieceSlots.firstIndex(where: { $0 == nil }) {
-            destinationSlot = freeSlot
-        } else {
-            status("Alle 10 Stück-Slots sind belegt. Bitte zuerst einen Slot löschen.", good: false)
+        nativeRequestGeneration += 1
+        let generation = nativeRequestGeneration
+        nativeRequestInFlight = true
+        if let original = input.localSource {
+            let diagnostic: [String: Any] = ["stage": "local-source-import", "composition": original, "assignment": original,
+                "interface": "macOS AppKit", "interfaceVersion": CoreServices.version, "estimatedCostUSD": 0.0,
+                "inputTokens": 0, "outputTokens": 0, "compositionAICalls": 0, "conversionAICalls": 0]
+            lastDiagnostic = diagnostic
+            if let saved = try? JSONSerialization.data(withJSONObject: diagnostic) {
+                AppPreferences.standard.set(saved, forKey: "CompositionLab.v4.pendingComposition")
+            }
+            status("Vorhandener Notentext wird lokal übernommen …", good: true)
+            acceptOriginalResponse(original, diagnostic: diagnostic, assignment: assignment, provider: p, model: m, destination: destination, generation: generation)
             return
         }
-        pendingCompositionSlot = destinationSlot
-
-        let compositionPrompt = ComposerPrompts.compositionPrompt(assignment)
-        lastDiagnostic = [
-            "format": "composition-lab-native-diagnostic",
-            "engineBuild": ComposerPrompts.engineBuild,
-            "engineVersion": ComposerPrompts.referenceVersion,
-            "interface": "macOS AppKit",
-            "interfaceVersion": "3.5.3",
-            "entryPoint": "compose-button",
-            "stage": "composition-request",
-            "destinationSlot": destinationSlot + 1,
-            "assignment": assignment,
-            "compositionPrompt": compositionPrompt,
-            "provider": p.rawValue,
-            "model": m,
-            "reasoning": e.rawValue
-        ]
-
+        let request: [String: Any] = ["assignment": assignment, "provider": p.rawValue, "model": m, "effort": effort.rawValue]
+        guard let data = try? JSONSerialization.data(withJSONObject: request) else { nativeRequestInFlight = false; return }
         status("KI komponiert …", good: true)
-        APIClient.shared.call(provider: p, model: m, key: key, effort: e,
-                              purpose: "composition",
-                              system: ComposerPrompts.system,
-                              user: compositionPrompt,
-                              wantJSON: false) { [weak self] compositionResult in
-            switch compositionResult {
-            case .failure(let error):
-                DispatchQueue.main.async {
-                    self?.pendingCompositionSlot = nil
-                    self?.status("Fehler: \(error.localizedDescription)", good: false)
-                }
-            case .success(let compositionResponse):
-                let composition = compositionResponse.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !composition.isEmpty else {
-                    DispatchQueue.main.async {
-                        self?.pendingCompositionSlot = nil
-                        self?.status("Fehler: Die Komposition ist leer.", good: false)
-                    }
-                    return
-                }
-
-                let translationPrompt = ComposerPrompts.translationPrompt(composition: composition)
-                DispatchQueue.main.async {
-                    if var d = self?.lastDiagnostic {
-                        d["stage"] = "technical-translation-request"
-                        d["composition"] = composition
-                        d["compositionInputTokens"] = compositionResponse.inputTokens
-                        d["compositionOutputTokens"] = compositionResponse.outputTokens
-                        d["translationPrompt"] = translationPrompt
-                        self?.lastDiagnostic = d
-                    }
-                    self?.status("Technische Übertragung der fertigen Komposition …", good: true)
-                }
-
-                APIClient.shared.call(provider: p, model: m, key: key, effort: e,
-                                      purpose: "composition.technical-translation",
-                                      system: ComposerPrompts.system,
-                                      user: translationPrompt,
-                                      wantJSON: true) { [weak self] scoreResult in
-                    switch scoreResult {
-                    case .failure(let error):
-                        DispatchQueue.main.async {
-                            self?.pendingCompositionSlot = nil
-                            self?.status("Fehler: \(error.localizedDescription)", good: false)
-                        }
-                    case .success(let response):
-                        do {
-                            let data = try APIClient.shared.extractJSON(response.text)
-                            let score = try JSONDecoder().decode(Score.self, from: data)
-                            let totalInput = compositionResponse.inputTokens + response.inputTokens
-                            let totalOutput = compositionResponse.outputTokens + response.outputTokens
-                            let costUSD = APICost.estimate(provider: p, model: m,
-                                                          inputTokens: totalInput,
-                                                          outputTokens: totalOutput)
-                            DispatchQueue.main.async {
-                                guard let self else { return }
-                                if var d = self.lastDiagnostic {
-                                    d["stage"] = "completed"
-                                    d["scoreResponse"] = response.text
-                                    d["translationInputTokens"] = response.inputTokens
-                                    d["translationOutputTokens"] = response.outputTokens
-                                    d["inputTokens"] = totalInput
-                                    d["outputTokens"] = totalOutput
-                                    self.lastDiagnostic = d
-                                }
-                                // In Engine 2.3.1 ist die erste kreative Antwort bereits die fertige Komposition; die zweite Stufe übersetzt nur technisch.
-                                self.lastConcept = composition
-                                self.install(score: score,
-                                             concept: composition,
-                                             provider: p,
-                                             model: m,
-                                             costUSD: costUSD,
-                                             inputTokens: totalInput,
-                                             outputTokens: totalOutput)
-                                self.status("Komposition erfolgreich abgeschlossen! · Engine 2.3.1 · API-Kosten ca. \(APICost.display(costUSD))", good: true)
-                            }
-                        } catch {
-                            DispatchQueue.main.async {
-                                self?.pendingCompositionSlot = nil
-                                if var d = self?.lastDiagnostic {
-                                    d["stage"] = "decode-failed"
-                                    d["rawResponse"] = response.text
-                                    d["error"] = error.localizedDescription
-                                    self?.lastDiagnostic = d
-                                }
-                                self?.status("Fehler: \(error.localizedDescription)", good: false)
-                            }
-                        }
-                    }
+        nativeRequestHandle = CoreServices.chat(requestJSON: data, apiKey: key, compositionOnly: true) { [weak self] response in
+            DispatchQueue.main.async {
+                guard let self, self.nativeRequestGeneration == generation else { return }
+                switch response {
+                case .failure(let error): self.nativeRequestInFlight = false; self.status(error.localizedDescription, good: false)
+                case .success(let data):
+                    do {
+                        var diagnostic = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+                        diagnostic["interface"] = "macOS AppKit"; diagnostic["interfaceVersion"] = CoreServices.version
+                        diagnostic["conversionAICalls"] = 0
+                        self.lastDiagnostic = diagnostic
+                        let original = diagnostic["composition"] as? String ?? ""
+                        // Preserve the paid answer before parsing or engraving can fail.
+                        AppPreferences.standard.set(data, forKey: "CompositionLab.v4.pendingComposition")
+                        self.status("Originalantwort gesichert. Lokale Ausgabe wird erzeugt …", good: true)
+                        self.acceptOriginalResponse(original, diagnostic: diagnostic, assignment: assignment, provider: p, model: m, destination: destination, generation: generation)
+                    } catch { self.nativeRequestInFlight = false; self.status(error.localizedDescription, good: false) }
                 }
             }
         }
     }
 
+    private func acceptOriginalResponse(_ original: String, diagnostic: [String: Any], assignment: String,
+                                        provider p: Provider, model m: String, destination: Int, generation: Int) {
+        NativeLocalCompositionService(compiler: localCompiler).interpret(original) { result in
+            DispatchQueue.main.async {
+                guard self.nativeRequestGeneration == generation else { return }
+                self.nativeRequestInFlight = false
+                switch result {
+                case .failure(let error):
+                    var failed = diagnostic; failed["stage"] = "local-output-failed"; failed["error"] = error.localizedDescription
+                    self.lastDiagnostic = failed
+                    self.status("Original gesichert; Ausgabe fehlgeschlagen: " + error.localizedDescription, good: false)
+                case .success(nil):
+                    if self.lastScore == nil { self.conceptView.string = original } else { self.appendChat("Originalantwort", original) }
+                    self.status("Original gesichert. Das Format ist nicht lokal lesbar; keine automatische zweite KI-Anfrage.", good: false)
+                case .success(.some(let work)):
+                    guard self.pieceSlots[destination] == nil else { self.status("Ziel-Slot inzwischen belegt. Original bleibt in der Diagnose erhalten.", good: false); return }
+                    self.pendingCompositionSlot = destination
+                    var completed = diagnostic; completed["stage"] = "completed"; completed["conversionAICalls"] = 0
+                    if let scoreData = try? JSONEncoder().encode(work.score), let score = try? JSONSerialization.jsonObject(with: scoreData) { completed["score"] = score }
+                    self.lastDiagnostic = completed
+                    var metadata = work.metadata
+                    metadata["assignment"] = .string(assignment)
+                    if let effort = diagnostic["reasoning"] as? String { metadata["reasoning"] = .string(effort) }
+                    self.install(score: work.score, concept: original, provider: p, model: m,
+                        costUSD: diagnostic["estimatedCostUSD"] as? Double,
+                        inputTokens: diagnostic["inputTokens"] as? Int, outputTokens: diagnostic["outputTokens"] as? Int,
+                        metadata: metadata)
+                    AppPreferences.standard.removeObject(forKey: "CompositionLab.v4.pendingComposition")
+                    self.status("Komposition lokal übernommen. Keine zusätzliche KI-Übertragung.", good: true)
+                }
+            }
+        }
+    }
+
+    @objc func menuRecoverOriginal() {
+        guard !nativeRequestInFlight else { return }
+        guard let destination = pieceSlots.firstIndex(where: { $0 == nil }) else { status("Bitte einen Stück-Slot freimachen.", good: false); return }
+        do {
+            let saved = AppPreferences.standard.data(forKey: "CompositionLab.v4.pendingComposition")
+            let diagnostic = try saved.map { try JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? lastDiagnostic
+            guard let diagnostic, let original = diagnostic["composition"] as? String, !original.isEmpty else { throw APIError.badResponse("Keine gesicherte Originalantwort vorhanden.") }
+            let p = Provider(rawValue: diagnostic["provider"] as? String ?? "") ?? provider
+            let m = diagnostic["model"] as? String ?? model
+            nativeRequestGeneration += 1; nativeRequestInFlight = true
+            acceptOriginalResponse(original, diagnostic: diagnostic, assignment: diagnostic["assignment"] as? String ?? "",
+                provider: p, model: m, destination: destination, generation: nativeRequestGeneration)
+        } catch { status(error.localizedDescription, good: false) }
+    }
+
+    @objc func menuSaveLilyPond() {
+        do {
+            let source = try LilyPondSource.extract(conceptView.string)
+            let panel = NSSavePanel(); panel.allowedFileTypes = ["ly"]
+            panel.nameFieldStringValue = safeFilename(lastScore?.ti ?? "Komposition") + ".ly"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            try Data(source.utf8).write(to: url, options: .atomic)
+            status("LilyPond-Quelltext gespeichert.", good: true)
+        } catch { status(error.localizedDescription, good: false) }
+    }
+
+    @objc func menuOpenHacklily() {
+        do {
+            let source = try LilyPondSource.extract(conceptView.string)
+            let encoded = source.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            let url = "https://www.hacklily.org/wasm#src=" + encoded
+            let value = try JSONSerialization.data(withJSONObject: [url])
+            let literal = String(decoding: value, as: UTF8.self).dropFirst().dropLast()
+            let html = "<!doctype html><html lang=\"de\"><meta charset=\"utf-8\"><title>An Hacklily übergeben</title><p>Die Komposition wird in Hacklily geöffnet.</p><script>location.replace(" + literal + ");</script></html>"
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent("CompositionLab-Hacklily-" + UUID().uuidString + ".html")
+            try Data(html.utf8).write(to: file, options: .atomic)
+            NSWorkspace.shared.open(file)
+        } catch { status(error.localizedDescription, good: false) }
+    }
+
+    private func loadOriginalPreview() {
+        lastLilyPondOutput = nil
+        guard case .bool(true)? = lastPortableMetadata["directLilyPond"] else { return }
+        let text: String
+        if case .string(let edited)? = lastPortableMetadata["lilyPondSource"] { text = edited } else { text = lastConcept }
+        guard let source = try? LilyPondSource.extract(text) else { return }
+        let generation = nativeWorkspaceGeneration
+        localCompiler.compile(source) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self, self.nativeWorkspaceGeneration == generation else { return }
+                switch result {
+                case .success(let output): self.lastLilyPondOutput = output; self.refreshMusicXMLPreview()
+                case .failure(let error): self.status(error.localizedDescription, good: false)
+                }
+            }
+        }
+    }
+
+    private func refreshCurrentNotation() {
+        guard !nativeRequestInFlight else { status("Bitte die laufende Anfrage abwarten.", good: false); return }
+        let text = conceptView.string
+        guard (try? LilyPondSource.extract(text))?.contains("\\score") == true else { refreshMusicXMLPreview(); return }
+        let generation = nativeWorkspaceGeneration, slot = activePieceSlot
+        let original = lastConcept, metadata = lastPortableMetadata
+        let p = lastProvider ?? provider, m = lastModel ?? model
+        nativeRequestGeneration += 1
+        let requestGeneration = nativeRequestGeneration
+        nativeRequestInFlight = true
+        NativeLocalCompositionService(compiler: localCompiler).interpret(text) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard self.nativeRequestGeneration == requestGeneration else { return }
+                self.nativeRequestInFlight = false
+                guard self.nativeWorkspaceGeneration == generation, self.activePieceSlot == slot, self.conceptView.string == text else { return }
+                switch result {
+                case .success(.some(let work)):
+                    var updated = metadata
+                    for (key, value) in work.metadata { updated[key] = value }
+                    guard self.saveScoreUndoSnapshot() else { return }
+                    self.install(score: work.score, concept: original, provider: p, model: m, addHistory: false,
+                        costUSD: self.lastCostUSD, inputTokens: self.lastInputTokens, outputTokens: self.lastOutputTokens, metadata: updated)
+                    self.conceptView.string = text
+                    self.status("Bearbeiteter LilyPond-Code übernommen. Original bleibt erhalten.", good: true)
+                case .success(nil): self.status("Kein lokal lesbarer Quelltext. Letzte gültige Fassung bleibt erhalten.", good: false)
+                case .failure(let error):
+                    self.lastDiagnostic = ["format": "composition-lab-native-diagnostic", "stage": "failed", "entryPoint": "edited-lilypond",
+                        "composition": text, "lastValidSource": { if case .string(let applied)? = metadata["lilyPondSource"] { return applied }; return original }(),
+                        "error": error.localizedDescription, "conversionAICalls": 0]
+                    self.status(error.localizedDescription, good: false)
+                }
+            }
+        }
+    }
+
+    private func revisionStep(_ operation: String) throws -> [String: Any] {
+        let slots: [Any] = try pieceSlots.map { item in
+            guard let item else { return NSNull() }
+            return ["identity": item.id.uuidString, "document": try JSONSerialization.jsonObject(with: JSONEncoder().encode(item))] as [String: Any]
+        }
+        var request: [String: Any] = ["operation": operation, "slots": slots, "slot": activePieceSlot]
+        if let state = scoreRevisionState { request["state"] = state }
+        let result = try JSONSerialization.jsonObject(with: ScoreRevisionStore.step(JSONSerialization.data(withJSONObject: request))) as! [String: Any]
+        scoreRevisionState = result["state"] as? [String: Any]
+        return result
+    }
+    private func saveScoreUndoSnapshot() -> Bool {
+        do { _ = try revisionStep("push"); return true }
+        catch { status(error.localizedDescription, good: false); return false }
+    }
+    @objc func menuUndoScore() { restoreScoreRevision(redo: false) }
+    @objc func menuRedoScore() { restoreScoreRevision(redo: true) }
+    private func restoreScoreRevision(redo: Bool) {
+        guard !nativeRequestInFlight else { status("Bitte die laufende Anfrage abwarten.", good: false); return }
+        do {
+            let result = try revisionStep(redo ? "redo" : "undo")
+            guard let slot = result["slot"] as? Int, let value = result["document"] else { status("Keine weitere Partituränderung vorhanden.", good: true); return }
+            let item = try JSONDecoder().decode(HistoryItem.self, from: JSONSerialization.data(withJSONObject: value))
+            captureCurrentInActiveSlot(); activePieceSlot = slot; pieceSlots[slot] = item
+            install(score: item.score, concept: item.concept, provider: item.provider, model: item.model,
+                addHistory: false, costUSD: item.costUSD, inputTokens: item.inputTokens, outputTokens: item.outputTokens, metadata: item.extraFields)
+            if case .string(let assignment)? = item.extraFields["assignment"] { promptView.string = assignment }
+            v309SaveSessionMemory()
+            status(redo ? "Partituränderung wiederhergestellt." : "Partituränderung rückgängig gemacht.", good: true)
+        } catch { status(error.localizedDescription, good: false) }
+    }
+
+    @objc func menuCancelRequest() {
+        nativeRequestGeneration += 1; nativeWorkspaceGeneration += 1
+        nativeRequestHandle?.cancel(); nativeRequestHandle = nil
+        nativeDialogueClient?.cancel(); nativeDialogueClient = nil
+        nativeRequestInFlight = false
+        status("Anfrage lokal abgebrochen. Letzte gültige Fassung bleibt erhalten.", good: true)
+    }
+
+    @objc func menuReviewRegisters() {
+        guard !nativeRequestInFlight, lastScore != nil else { status("Bitte ein Stück laden und die laufende Anfrage abwarten.", good: false); return }
+        let source = conceptView.string, generation = nativeWorkspaceGeneration
+        let slot = activePieceSlot, original = lastConcept, metadata = lastPortableMetadata
+        let p = provider, m = model, e = effort
+        var key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if key.isEmpty { key = SessionSecrets.shared.key(for: p) }
+        let apiKey = key
+        nativeRequestGeneration += 1
+        let requestGeneration = nativeRequestGeneration
+        nativeRequestInFlight = true
+        status("Oktavlagen werden geprüft …", good: true)
+        NativeRegisterRepairService(compiler: localCompiler).repair(source: source, transport: { instruction, done in
+            guard !apiKey.isEmpty else { done(.failure(APIError.badResponse("Für die ausdrücklich angeforderte Oktavkorrektur fehlt der API-Schlüssel."))); return }
+            do {
+                let request = try JSONSerialization.data(withJSONObject: ["assignment": instruction, "provider": p.rawValue, "model": m, "effort": e.rawValue])
+                DispatchQueue.main.async {
+                guard self.nativeWorkspaceGeneration == generation else { done(.failure(APIError.badResponse("Anfrage abgebrochen."))); return }
+                self.nativeRequestHandle = CoreServices.chat(requestJSON: request, apiKey: apiKey) { result in
+                    DispatchQueue.main.async {
+                        guard self.nativeRequestGeneration == requestGeneration else { done(.failure(APIError.badResponse("Anfrage abgebrochen."))); return }
+                        if case .success(let data) = result, let diagnostic = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                            self.lastDiagnostic = diagnostic
+                        }
+                        done(result)
+                    }
+                }
+                }
+            } catch { done(.failure(error)) }
+        }) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard self.nativeRequestGeneration == requestGeneration else { return }
+                self.nativeRequestInFlight = false
+                guard self.nativeWorkspaceGeneration == generation, self.activePieceSlot == slot, self.conceptView.string == source else { return }
+                switch result {
+                case .success(let work):
+                    var updated = metadata
+                    for (key, value) in work.metadata { updated[key] = value }
+                    guard self.saveScoreUndoSnapshot() else { return }
+                    var cost = self.lastCostUSD, input = self.lastInputTokens, output = self.lastOutputTokens
+                    if case .object(let review)? = work.metadata["octaveReview"], case .object(let response)? = review["response"] {
+                        if case .number(let n)? = response["estimatedCostUSD"] { cost += n }
+                        if case .number(let n)? = response["inputTokens"] { input += Int(n) }
+                        if case .number(let n)? = response["outputTokens"] { output += Int(n) }
+                    }
+                    self.install(score: work.score, concept: original, provider: p, model: m, addHistory: false,
+                        costUSD: cost, inputTokens: input, outputTokens: output, metadata: updated)
+                    self.status("Oktavprüfung abgeschlossen. Original bleibt erhalten.", good: true)
+                case .failure(let error): self.status(error.localizedDescription + " Letzte gültige Fassung bleibt erhalten.", good: false)
+                }
+            }
+        }
+    }
+
+    private func selectOriginalSource(_ message: [String: Any]) {
+        guard let line = message["line"] as? Int, let character = message["character"] as? Int else { return }
+        let rendered: String
+        if case .string(let edited)? = lastPortableMetadata["lilyPondSource"] { rendered = edited } else { rendered = lastConcept }
+        let selected = LilyPondSource.selection(rendered: rendered, editor: conceptView.string,
+            from: .init(line: line, character: character), to: .init(line: message["endLine"] as? Int ?? line, character: message["endCharacter"] as? Int ?? character))
+        guard let start = selected.start, let length = selected.length else {
+            status("Notenbild und Editor unterscheiden sich. Erst Notation aktualisieren.", good: false); return
+        }
+        selectWorkspace(0)
+        conceptView.setSelectedRange(NSRange(location: start, length: length))
+        conceptView.scrollRangeToVisible(NSRange(location: start, length: length))
+        view.window?.makeFirstResponder(conceptView)
+    }
+
     private func install(score:Score, concept:String, provider:Provider, model:String, addHistory:Bool = true,
-                         costUSD: Double? = nil, inputTokens: Int? = nil, outputTokens: Int? = nil) {
+                         costUSD: Double? = nil, inputTokens: Int? = nil, outputTokens: Int? = nil,
+                         metadata: [String: JSONValue] = [:]) {
+        nativeWorkspaceGeneration += 1
+        lastPortableMetadata = metadata
+        lastLilyPondOutput = nil
+        // Invalidate the previous SVG before asynchronous compilation can finish.
+        musicXMLPreview.setMusicXML(nil)
         if addHistory, let requestedSlot = pendingCompositionSlot {
             activePieceSlot = max(0, min(requestedSlot, pieceSlots.count - 1))
             pendingCompositionSlot = nil
@@ -2475,38 +2520,23 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         lastCostUSD = costUSD ?? 0
         lastInputTokens = inputTokens ?? 0
         lastOutputTokens = outputTokens ?? 0
-        lastMidi = MIDIBuilder.build(score)
-        do {
-            try StudioProBridge.writeReturnScore(score)
-        } catch {
-            // Die Studio-Pro-Rückgabe ist eine Komfortfunktion und darf die Komposition nicht blockieren.
-            print("Studio Pro return JSON write failed: \(error.localizedDescription)")
-        }
-        if let midi = lastMidi {
-            do {
-                try StudioProBridge.writeReturnMIDI(midi)
-            } catch {
-                // Die Studio-Pro-Rückgabe ist eine Komfortfunktion und darf die Komposition nicht blockieren.
-                print("Studio Pro return MIDI write failed: \(error.localizedDescription)")
-            }
-        }
-        do {
-            try ReaperBridge.writeResult(score: score)
-        } catch {
-            // Die REAPER-Rückgabe ist eine Komfortfunktion und darf die Komposition nicht blockieren.
-            print("REAPER result bridge write failed: \(error.localizedDescription)")
-        }
-        let displayBPM = max(20, min(300, Int(score.bpm.rounded())))
+        if case .string(let encoded)? = metadata["sourceMidiData"], let data = Data(base64Encoded: encoded) { lastMidi = data }
+        else { lastMidi = MIDIBuilder.build(score) }
+        loadOriginalPreview()
+        let initialBPM = metadata["sourceMidiData"] != nil ? (lastMidi.flatMap { try? PlaybackMIDICopy.initialBPM($0) } ?? score.bpm) : score.bpm
+        let displayBPM = max(20, min(400, Int(initialBPM.rounded())))
         playerTempoField.integerValue = displayBPM
         playerTempoStepper.integerValue = displayBPM
-        if let midi = lastMidi { try? midiPlayer.load(score: score, data: midi) }
+        midiPlayer.stop()
+        reloadMainPlayerForPlaybackSettings(errorPrefix: "Player konnte nicht geladen werden")
         updatePlayerTime()
         var info = "\(score.ti)\n\(Int(score.bpm)) BPM · \(score.k) · \(score.tr.count) Spur(en)\n\(score.sm)"
         if let costUSD = costUSD { info += "\nAPI-Kosten ca.: \(APICost.display(costUSD))" }
         resultLabel.stringValue = info
         if let jd = try? JSONEncoder.pretty.encode(score) { jsonView.string = String(data:jd,encoding:.utf8) ?? "" }
         validationView.string = validate(score)
-        conceptView.string = concept.trimmingCharacters(in: .whitespacesAndNewlines)
+        if case .string(let edited)? = metadata["description"] { conceptView.string = edited }
+        else { conceptView.string = concept.trimmingCharacters(in: .whitespacesAndNewlines) }
         Storage.shared.saveCurrentPlayerState(
             CurrentPlayerState(score: score,
                                concept: concept,
@@ -2538,7 +2568,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
             if !duplicate {
                 history.insert(HistoryItem(id:UUID(),time:Date(),title:score.ti,provider:provider,model:model,concept:concept,score:score,
-                                           costUSD:costUSD,inputTokens:inputTokens,outputTokens:outputTokens,area:.composition),at:0)
+                                           costUSD:costUSD,inputTokens:inputTokens,outputTokens:outputTokens,area:.composition,extraFields:metadata),at:0)
                 history = trimmedHistory(history)
                 Storage.shared.saveHistory(history)
                 refreshVisibleHistories()
@@ -2548,6 +2578,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
     @objc private func playCurrentMIDI() {
         guard lastMidi != nil else { status("Noch keine MIDI-Komposition vorhanden.", good:false); return }
+        if midiPlayer.isPlaying { pauseCurrentMIDI(); return }
         midiPlayer.play(); startPlayerTimer(); status("Wiedergabe läuft.", good:true)
     }
     @objc private func playerLoopChanged() {
@@ -2596,38 +2627,20 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         updatePlayerTime()
     }
 
-    private func scoreWithVolume(_ score: Score, factor: Double) -> Score {
-        var sc = score
-        sc.tr = sc.tr.map { tr in
-            var t = tr
-            t.nt = tr.nt.map { n in
-                var x = n
-                if x.count > 3 { x[3] = max(1, min(127, x[3] * factor)) }
-                return x
-            }
-            return t
-        }
-        return sc
-    }
-
     private func reloadMainPlayerForPlaybackSettings(errorPrefix: String) {
         guard let score = lastScore else { return }
         let wasPlaying = midiPlayer.isPlaying
         let fraction = midiPlayer.duration > 0 ? midiPlayer.position / midiPlayer.duration : 0
-        var adjusted = scoreWithVolume(score, factor: playerVolume.doubleValue)
-        var bpm = playerTempoField.integerValue
-        if bpm <= 0 { bpm = Int(score.bpm.rounded()) }
-        bpm = max(20, min(300, bpm))
-        playerTempoField.integerValue = bpm
-        playerTempoStepper.integerValue = bpm
-        adjusted.bpm = Double(bpm)
-        let data = MIDIBuilder.build(adjusted)
+        let bpm = max(20, min(400, playerTempoField.integerValue > 0 ? playerTempoField.integerValue : Int(score.bpm.rounded())))
+        playerTempoField.integerValue = bpm; playerTempoStepper.integerValue = bpm
         do {
-            try midiPlayer.load(score: adjusted, data: data)
+            let original = lastPortableMetadata["sourceMidiData"] != nil ? (lastMidi ?? Data()) : MIDIBuilder.build(score, endPaddingSeconds: 3)
+            let data = try PlaybackMIDICopy.make(original, velocityFactor: playerVolume.doubleValue, targetBPM: Double(bpm))
+            try midiPlayer.load(score: score, data: data, preserveOriginal: true)
             midiPlayer.seek(fraction: fraction)
             if wasPlaying { midiPlayer.play(); startPlayerTimer() }
             updatePlayerTime()
-        } catch { status("\(errorPrefix): \(error.localizedDescription)", good:false) }
+        } catch { status(errorPrefix + ": " + error.localizedDescription, good: false) }
     }
 
     @objc private func playerTempoStepperChanged() {
@@ -2666,7 +2679,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private func validate(_ score:Score) -> String {
         var errors:[String] = [], warnings:[String] = []
         var notes = 0, controls = 0, maxBeat = 0.0
-        if score.bpm < 20 || score.bpm > 300 { errors.append("Tempo ungültig: \(score.bpm)") }
+        if score.bpm < 20 || score.bpm > 400 { errors.append("Tempo ungültig: \(score.bpm)") }
         if score.ts.n < 1 || score.ts.n > 32 { errors.append("Taktzähler ungültig: \(score.ts.n)") }
         if ![1,2,4,8,16,32,64].contains(score.ts.d) { errors.append("Taktnenner ungültig: \(score.ts.d)") }
         let beatsPerBar = Double(score.ts.n) * 4.0 / Double(max(1,score.ts.d))
@@ -2760,125 +2773,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         return text
     }
 
-    private func executeMusicChatRevision(targetSlot oneBased: Int,
-                                          sourceSlots: [Int],
-                                          task: String,
-                                          replyLead: String?,
-                                          provider p: Provider,
-                                          model m: String,
-                                          effort e: Effort,
-                                          key: String) {
-        let targetIndex = oneBased - 1
-        guard targetIndex >= 0, targetIndex < pieceSlots.count, let targetItem = pieceSlots[targetIndex] else {
-            appendChat(p.displayName, "Welches vorhandene Stück soll ich bearbeiten?")
-            status("MusicChat braucht einen eindeutigen Ziel-Slot.", good: false)
-            return
-        }
-        if let lead = replyLead?.trimmingCharacters(in: .whitespacesAndNewlines), !lead.isEmpty {
-            appendChat(p.displayName, lead)
-        }
-
-        var materialSlots = sourceSlots
-        if !materialSlots.contains(oneBased) { materialSlots.append(oneBased) }
-        let sourceText = musicChatSourceMaterial(materialSlots)
-        let revisionPrompt = """
-        \(ComposerPrompts.technical)
-
-        Du arbeitest im Composition Lab mit mehreren gleichzeitig verfügbaren Stücken.
-        Bearbeite ausschließlich das als ZIEL bezeichnete Stück. Andere angegebene Slots sind Vergleichs- oder Quellenmaterial.
-        Wenn der Nutzer nur eine Teiländerung verlangt, bewahre alle nicht verlangten musikalischen Eigenschaften möglichst unverändert.
-
-        AKTUELLE RAHMENBEDINGUNGEN:
-        Takte: \(measuresField.stringValue)
-        Taktart: \(meterField.stringValue)
-        Tempo: \(tempoField.stringValue)
-        Tonart: \(musicalKeyField.stringValue)
-        Besetzung: \(ensembleField.stringValue)
-
-        ZIEL: Stück \(oneBased) – \(targetItem.title)
-
-        ARBEITSMATERIAL:
-        \(sourceText)
-
-        NUTZER-AUFTRAG:
-        \(task)
-
-        Antworte ausschließlich mit einem JSON-Objekt im Format:
-        {"reply":"kurze Antwort an den Nutzer", "concept": null ODER "vollständige neue Kompositionsidee", "score": vollständige bearbeitete Partitur}
-        """
-
-        lastDiagnostic = [
-            "format": "composition-lab-native-diagnostic",
-            "engineBuild": ComposerPrompts.engineBuild,
-            "interface": "macOS AppKit",
-            "interfaceVersion": "3.5.3",
-            "entryPoint": "musicchat-context-revise",
-            "stage": "revision-request",
-            "targetSlot": oneBased,
-            "sourceSlots": materialSlots,
-            "resolvedTask": task,
-            "revisionPrompt": revisionPrompt
-        ]
-        status("KI bearbeitet Stück \(oneBased) …", good: true)
-
-        APIClient.shared.call(provider: p, model: m, key: key, effort: e,
-                              purpose: "MainViewController.executeMusicChatRevision", system: ComposerPrompts.system, user: revisionPrompt, wantJSON: true) { [weak self] result in
-            switch result {
-            case .failure(let error):
-                DispatchQueue.main.async {
-                    if var d = self?.lastDiagnostic {
-                        d["stage"] = "revision-failed"
-                        d["error"] = error.localizedDescription
-                        self?.lastDiagnostic = d
-                    }
-                    self?.appendChat("Fehler", error.localizedDescription)
-                    self?.status("Fehler: \(error.localizedDescription)", good: false)
-                }
-            case .success(let response):
-                do {
-                    let data = try APIClient.shared.extractJSON(response.text)
-                    let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
-                    let reply = object["reply"] as? String ?? "Bearbeitung abgeschlossen."
-                    let concept = (object["concept"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard let scoreObject = object["score"], !(scoreObject is NSNull) else {
-                        throw NSError(domain: "CompositionLab.MusicChat", code: 2,
-                                      userInfo: [NSLocalizedDescriptionKey: "Die KI hat keine bearbeitete Partitur zurückgegeben."])
-                    }
-                    let scoreData = try JSONSerialization.data(withJSONObject: scoreObject)
-                    let score = try JSONDecoder().decode(Score.self, from: scoreData)
-                    let cost = APICost.estimate(provider: p, model: m,
-                                                inputTokens: response.inputTokens,
-                                                outputTokens: response.outputTokens)
-                    DispatchQueue.main.async {
-                        guard let self else { return }
-                        self.activePieceSlot = targetIndex
-                        self.pendingCompositionSlot = targetIndex
-                        self.install(score: score,
-                                     concept: (concept?.isEmpty == false ? concept! : targetItem.concept),
-                                     provider: p,
-                                     model: m,
-                                     costUSD: cost,
-                                     inputTokens: response.inputTokens,
-                                     outputTokens: response.outputTokens)
-                        self.appendChat(p.displayName, reply)
-                        if var d = self.lastDiagnostic {
-                            d["stage"] = "revision-completed"
-                            d["response"] = response.text
-                            self.lastDiagnostic = d
-                        }
-                        self.status("Stück \(oneBased) wurde bearbeitet. · API-Kosten ca. \(APICost.display(cost))", good: true)
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        self?.appendChat("Fehler", error.localizedDescription)
-                        self?.status("Fehler: \(error.localizedDescription)", good: false)
-                    }
-                }
-            }
-        }
-    }
-
     @objc private func chatPressed() {
+        guard !nativeRequestInFlight else { status("Bitte die laufende Anfrage abwarten.", good: false); return }
         let msg = chatInput.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !msg.isEmpty else { return }
 
@@ -2900,54 +2796,34 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         chatInput.stringValue = ""
 
         let workspace = musicChatWorkspaceContext()
-        let dialoguePrompt = """
-        Du bist der musikalische Gesprächspartner im MusicChat von Composition Lab.
-        Dieser Aufruf dient ausschließlich Gespräch und Ideenarbeit; er erzeugt keine Partitur.
-
-        Der ARBEITSRAUM ist Gedächtnis und Orientierung, nicht automatisch musikalisches Ausgangsmaterial.
-        Vorhandene Slots oder eine frühere Kompositionsidee werden nur dann zu Material, wenn der aktuelle
-        Nutzerwunsch erkennbar darauf Bezug nimmt. sourceSlots nennt ausschließlich solche tatsächlich
-        gewünschten Quellen. Bei einem neuen Kompositionsvorhaben entwickelst du die Idee aus dem aktuellen
-        Nutzerwunsch und den ausdrücklich gesetzten Rahmenbedingungen.
-
-        Antworte ausschließlich als JSON:
-        {
-          "reply":"natürliche Dialogantwort",
-          "compositionAssignment": null ODER "aktueller Kompositionsauftrag",
-          "compositionIdea": null ODER "aktuelle musikalische Vorstellung",
-          "sourceSlots":[1,2],
-          "resolvedSettings":{"measures":"4","meter":"4/4","tempo":null,"key":"d-Moll","ensemble":"Klavier"}
-        }
-        Gib resolvedSettings nur für im aktuellen Nutzerwunsch ausdrücklich genannte Werte zurück; sonst null.
-        Ein neuer Kompositionsauftrag darf alte Einstellungen nicht stillschweigend übernehmen, wenn sie ihm widersprechen.
-
-        ARBEITSRAUM:
-        \(workspace)
-
-        AKTUELLER NUTZERBEITRAG:
-        \(msg)
-        """
+        let dialoguePrompt = WorkspaceDialogue.prompt(message: msg, workspace: workspace)
 
         lastDiagnostic = [
             "format": "composition-lab-native-diagnostic",
             "engineBuild": ComposerPrompts.engineBuild,
             "interface": "macOS AppKit",
-            "interfaceVersion": "3.5.3",
+            "interfaceVersion": CoreServices.version,
             "entryPoint": "musicchat",
             "stage": "dialogue-request",
             "userMessage": msg,
             "workspaceContext": workspace,
             "dialoguePrompt": dialoguePrompt
         ]
+        nativeRequestGeneration += 1
+        let generation = nativeRequestGeneration
+        nativeRequestInFlight = true
+        let client = APIClient(); nativeDialogueClient = client
         status("KI denkt im MusicChat mit …", good: true)
 
-        APIClient.shared.call(provider: p, model: m, key: key, effort: e,
+        client.call(provider: p, model: m, key: key, effort: e,
                               purpose: "MainViewController.chatPressed", system: ComposerPrompts.system,
                               user: dialoguePrompt,
                               wantJSON: true) { [weak self] result in
             switch result {
             case .failure(let error):
                 DispatchQueue.main.async {
+                    guard self?.nativeRequestGeneration == generation else { return }
+                    self?.nativeRequestInFlight = false
                     if var d = self?.lastDiagnostic {
                         d["stage"] = "dialogue-failed"
                         d["error"] = error.localizedDescription
@@ -2959,7 +2835,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
             case .success(let response):
                 do {
-                    let data = try APIClient.shared.extractJSON(response.text)
+                    let data = try WorkspaceDialogue.decode(response.text)
                     let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
                     let reply = (object["reply"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                     let assignment = (object["compositionAssignment"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2988,6 +2864,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
 
                     DispatchQueue.main.async {
                         guard let self else { return }
+                        guard self.nativeRequestGeneration == generation else { return }
+                        self.nativeRequestInFlight = false
                         let answer = (reply?.isEmpty == false) ? reply! : "Ich habe den musikalischen Zusammenhang aufgenommen."
                         self.appendChat(p.displayName, answer)
 
@@ -3005,7 +2883,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                         }
                         if let idea, !idea.isEmpty {
                             self.conceptView.string = idea
-                            self.lastConcept = idea
+                            // Planning is a draft; retain the accepted score original.
                         }
                         if assignment?.isEmpty == false || idea?.isEmpty == false {
                             self.musicChatCompositionContextOverride = self.musicChatSourceMaterial(sourceSlots)
@@ -3032,6 +2910,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                     }
                 } catch {
                     DispatchQueue.main.async {
+                        guard self?.nativeRequestGeneration == generation else { return }
+                    self?.nativeRequestInFlight = false
                         if var d = self?.lastDiagnostic {
                             d["stage"] = "dialogue-decode-failed"
                             d["rawResponse"] = response.text
@@ -3100,7 +2980,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             // Ein alter Impuls darf deshalb nicht mit der neuen Vorlage vermischt werden.
             lastConcept = ""
             conceptView.string = ""
-            install(score: score, concept: "", provider: provider, model: model, addHistory: false)
+            install(score: score, concept: "", provider: provider, model: model, addHistory: false, metadata: ["sourceMidiData": .string(data.base64EncodedString())])
             conceptView.string = ""
             selectWorkspace(0)
             workspaceSegment.selectedSegment = 0
@@ -3203,7 +3083,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private func currentCLABDocument() -> CompositionLabDocument? {
         guard let score = lastScore else { return nil }
         saveSettingsFromUI()
-        return CompositionLabDocument(
+        var document = CompositionLabDocument(
             title: score.ti,
             score: score,
             concept: lastConcept,
@@ -3227,6 +3107,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
             inputTokens: lastInputTokens == 0 ? nil : lastInputTokens,
             outputTokens: lastOutputTokens == 0 ? nil : lastOutputTokens
         )
+        document.extraFields = lastPortableMetadata
+        document.extraFields["description"] = .string(conceptView.string)
+        return document
     }
 
     @objc private func saveCLABPressed() {
@@ -3288,9 +3171,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                 providerPop.selectItem(at: pi)
                 refillModels()
             }
-            if let mi = p.models.firstIndex(where: { $0.0 == m }) {
-                modelPop.selectItem(at: mi)
-            }
+            settings.models[p.rawValue] = m
+            refillModels()
             keyField.stringValue = SessionSecrets.shared.key(for: p)
 
             install(score: doc.score,
@@ -3300,7 +3182,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                     addHistory: false,
                     costUSD: doc.costUSD,
                     inputTokens: doc.inputTokens,
-                    outputTokens: doc.outputTokens)
+                    outputTokens: doc.outputTokens, metadata: doc.extraFields)
 
             lastConcept = doc.concept
             lastProvider = doc.provider
@@ -3320,7 +3202,9 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private func loadLegacyProject(url: URL) {
         do {
             let data = try Data(contentsOf: url)
+            if let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any], root["format"] as? String == "composition-lab-v6-project" { loadWorkspaceProject(url: url); return }
             let doc = try JSONDecoder().decode(CompositionLabProject.self, from: data)
+            workspaceExtraFields = [:]
             projectName = doc.name
             projectURL = url
             settings = doc.settings
@@ -3527,10 +3411,10 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         // Der gespeicherte Titel bleibt unverändert erhalten und wird durch install()
         // in "Aktuelle Komposition", Player, JSON/MusicXML/MIDI-Export übernommen.
         install(score:score, concept:h.concept, provider:h.provider, model:h.model, addHistory:false,
-                costUSD:h.costUSD, inputTokens:h.inputTokens, outputTokens:h.outputTokens)
+                costUSD:h.costUSD, inputTokens:h.inputTokens, outputTokens:h.outputTokens, metadata:h.extraFields)
 
         if let pi = Provider.allCases.firstIndex(of:h.provider) { providerPop.selectItem(at:pi); refillModels() }
-        if let mi = h.provider.models.firstIndex(where:{$0.0==h.model}) { modelPop.selectItem(at:mi) }
+        settings.models[h.provider.rawValue] = h.model; refillModels()
         keyField.stringValue = SessionSecrets.shared.key(for:h.provider)
 
         // Die rekonstruierten Editorwerte gelten als aktueller Arbeitsstand und
@@ -3734,41 +3618,11 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         }
 
         let p = provider, m = model, e = effort
-        let tempo = r.tempo.isEmpty ? "96" : r.tempo
-        let ensemble = r.ensemble.isEmpty ? "frei" : r.ensemble
-        let stylePrefix = r.style.isEmpty ? "" : "Stil / Charakter: \(r.style)\n"
-        let assignment = """
-        MODUS: MUSIKALISCHES MOTIV / KEIMZELLE
-        Besetzung: \(ensemble)
-        Exakte Länge: \(r.measures) Takte
-        Taktart: 4/4
-        Tempo: \(tempo) BPM
-        Tonart: frei
-
-        Auftrag:
-        \(stylePrefix)\(r.task)
-        """
-
-        // Das Experimentallabor besitzt bewusst einen eigenen Ein-Schritt-Pfad.
-        // Es ruft weder conceptPrompt() noch die normale Compose-Pipeline auf.
-        // Ergebnis ist ausschließlich eine kurze, in sich offene Keimzelle.
-        let motifPrompt = """
-        \(ComposerPrompts.technical)
-
-        AUFGABE: ERZEUGE NUR EIN KURZES MUSIKALISCHES MOTIV / EINE KEIMZELLE.
-
-        \(assignment)
-
-        VERBINDLICH:
-        - Erzeuge exakt \(r.measures) Takte musikalisches Ausgangsmaterial, kein vollständiges Stück.
-        - Keine Einleitung, Durchführung, Reprise, Coda oder sonstige Großform ergänzen.
-        - Das Material soll prägnant genug sein, um später wiedererkannt, variiert und entwickelt zu werden.
-        - Der Titel bezeichnet das Motiv/die Keimzelle, nicht ein fertiges Werk.
-        - Die JSON-Partitur endet spätestens am Ende von Takt \(r.measures).
-        - Dies ist Experimentalmaterial. Es darf die aktuelle Hauptkomposition nicht verändern.
-
-        Gib ausschließlich die JSON-Partitur dieser Keimzelle aus.
-        """
+        let assignment = r.task
+        guard let motifPrompt = try? LaboratoryWorkflow.prompt(kind: "motif", task: r.task,
+            measures: r.measures, tempo: r.tempo, ensemble: r.ensemble, style: r.style) else {
+            window?.setStatus("Ungültiger Motivauftrag.", good: false); return
+        }
 
         window?.setStatus("KI erzeugt Motiv / Keimzelle …", good: true)
         APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e, purpose: "MainViewController.generateExperiment.motif",
@@ -3783,23 +3637,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
                     let data = try APIClient.shared.extractJSON(response.text)
                     let score = try JSONDecoder().decode(Score.self, from: data)
 
-                    // Harte Sicherheitsgrenze nur für den Labor-Datenweg:
-                    // Ein Modell darf durch einen zu langen Score nicht versehentlich
-                    // wieder ein ganzes Stück in das Experimentallabor einschleusen.
-                    let beatsPerBar = Double(max(1, score.ts.n)) * 4.0 / Double(max(1, score.ts.d))
-                    let maxAllowedBeat = Double(r.measures) * beatsPerBar + 0.0001
-                    let hasOverflow = score.tr.contains { track in
-                        track.nt.contains { note in
-                            guard note.count >= 2 else { return false }
-                            return note[0] + max(0, note[1]) > maxAllowedBeat
-                        }
-                    }
-                    guard !hasOverflow else {
-                        DispatchQueue.main.async {
-                            window?.setStatus("Motiv verworfen: KI lieferte mehr als \(r.measures) Takte. Die Hauptkomposition blieb unverändert.", good: false)
-                        }
-                        return
-                    }
+                    try LaboratoryWorkflow.validateMotif(scoreJSON: JSONEncoder().encode(score), measures: r.measures)
 
                     DispatchQueue.main.async {
                         guard let self = self else { return }
@@ -3873,7 +3711,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
     private func transferCompareResultToComposition(_ item: HistoryItem) {
         importedReferenceScore = item.score
         importedReferenceName = item.title
-        install(score: item.score, concept: item.concept, provider: item.provider, model: item.model, addHistory: false)
+        install(score: item.score, concept: item.concept, provider: item.provider, model: item.model, addHistory: false, metadata: item.extraFields)
         selectWorkspace(0)
         status("\(item.title) aus dem Vergleichslabor an die Kompositionsseite übergeben.", good: true)
     }
@@ -3886,16 +3724,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         guard let score=lastExperimentScore else { window?.appendChat("Hinweis","Bitte zuerst eine Vorlage erzeugen."); return }
         let p=provider,m=model,e=effort
         let scoreJSON=(try? String(data:JSONEncoder().encode(score),encoding:.utf8)) ?? ""
-        let user="""
-        MUSIKALISCHER IMPULS:
-        \(lastExperimentConcept)
-
-        VORLAGE:
-        \(scoreJSON)
-
-        FRAGE / WUNSCH:
-        \(question)
-        """
+        let user = (try? LaboratoryWorkflow.prompt(kind: "analysis", task: question, first: lastExperimentConcept + "\n" + scoreJSON)) ?? ""
         APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,purpose: "MainViewController.chatExperiment", system:"Du bist ein musikalischer Analyse- und Kompositionspartner. Besprich die vorliegende musikalische Vorlage konkret und musikalisch. Ändere nicht automatisch die MIDI-Daten; antworte zunächst als Gesprächspartner.",user:user,wantJSON:false){ [weak window] result in
             DispatchQueue.main.async { switch result { case .failure(let err): window?.appendChat("Fehler",err.localizedDescription); case .success(let r): window?.appendChat(p.displayName,r.text) } }
         }
@@ -3915,13 +3744,7 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         guard !apiKey.isEmpty else { window?.setDialogText("API-Key für \(provider.displayName) fehlt."); return }
         let p=provider,m=model,e=effort
         let enc=JSONEncoder(); let ja=(try? String(data:enc.encode(a.score),encoding:.utf8)) ?? ""; let jb=(try? String(data:enc.encode(b.score),encoding:.utf8)) ?? ""
-        let user="""
-        VERGLEICHE A UND B MUSIKALISCH.
-        A: \(a.title)\nImpuls: \(a.concept)\nMIDI-JSON: \(ja)
-        B: \(b.title)\nImpuls: \(b.concept)\nMIDI-JSON: \(jb)
-
-        Beurteile knapp: Charakter, motivische Arbeit, Harmonik, Rhythmik, Form, Eigenständigkeit und welche Fassung musikalisch überzeugender ist. Begründe konkret.
-        """
+        let user = (try? LaboratoryWorkflow.prompt(kind: "compare", task: "", first: a.concept + "\n" + ja, second: b.concept + "\n" + jb)) ?? ""
         APIClient.shared.call(provider:p,model:m,key:apiKey,effort:e,purpose: "MainViewController.compare", system:"Du bist ein musikalischer Analytiker und vergleichst zwei MIDI-Kompositionen sachlich und konkret.",user:user,wantJSON:false){ [weak window] result in DispatchQueue.main.async { switch result { case .failure(let err):window?.setDialogText("Fehler: \(err.localizedDescription)");case .success(let r):window?.setDialogText(r.text) } } }
     }
 
@@ -3941,25 +3764,8 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         let enc = JSONEncoder()
         let ja = (try? String(data: enc.encode(a.score), encoding: .utf8)) ?? ""
         let jb = (try? String(data: enc.encode(b.score), encoding: .utf8)) ?? ""
-        let user = """
-        MUSIK A: \(a.title)
-        Impuls A: \(a.concept)
-        MIDI-JSON A: \(ja)
-
-        MUSIK B: \(b.title)
-        Impuls B: \(b.concept)
-        MIDI-JSON B: \(jb)
-
-        NUTZER:
-        \(text)
-        """
-        let system = """
-        Du bist der KI-Dialog im Vergleichslabor einer MIDI-Kompositions-App.
-        Entscheide anhand der Bedeutung der Nutzereingabe:
-        - Wenn der Nutzer eine neue, veränderte, kombinierte, fortgesetzte oder sonstwie neu zu komponierende musikalische Fassung aus A und/oder B verlangt, antworte AUSSCHLIESSLICH mit [[COMPOSE]].
-        - Wenn der Nutzer nur analysieren, vergleichen, fragen, diskutieren oder eine Einschätzung erhalten möchte, antworte normal als musikalischer Gesprächspartner.
-        WICHTIG: Erzeuge in diesem Dialog niemals Python-Code, MIDI-Binärdaten, Base64, ein MIDI-Skript oder Anweisungen zum Erzeugen einer Datei. Behaupte auch nicht, dass du keine Binärdatei anhängen kannst. Die App erzeugt MIDI selbst.
-        """
+        let user = (try? LaboratoryWorkflow.prompt(kind: "route", task: text, first: a.concept + "\n" + ja, second: b.concept + "\n" + jb)) ?? ""
+        let system = ComposerPrompts.system
         APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
                               purpose: "MainViewController.routeCompareDialog", system: system, user: user, wantJSON: false) { [weak self, weak window] result in
             DispatchQueue.main.async {
@@ -3980,39 +3786,6 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         }
     }
 
-    private func chatCompare(a: HistoryItem, b: HistoryItem, question: String, window: CompareLabWindowController?) {
-        var apiKey = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if apiKey.isEmpty { apiKey = SessionSecrets.shared.key(for: provider); if !apiKey.isEmpty { keyField.stringValue = apiKey } }
-        if !apiKey.isEmpty { SessionSecrets.shared.set(apiKey, for: provider) }
-        guard !apiKey.isEmpty else { window?.setDialogText("API-Key für \(provider.displayName) fehlt."); return }
-        let p = provider, m = model, e = effort
-        let enc = JSONEncoder()
-        let ja = (try? String(data: enc.encode(a.score), encoding: .utf8)) ?? ""
-        let jb = (try? String(data: enc.encode(b.score), encoding: .utf8)) ?? ""
-        let user = """
-        MUSIK A: \(a.title)
-        Impuls A: \(a.concept)
-        MIDI-JSON A: \(ja)
-
-        MUSIK B: \(b.title)
-        Impuls B: \(b.concept)
-        MIDI-JSON B: \(jb)
-
-        FRAGE / WUNSCH:
-        \(question)
-        """
-        APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
-                              purpose: "MainViewController.chatCompare", system: "Du bist ein musikalischer Analyse- und Kompositionspartner. Besprich zwei vorliegende MIDI-Kompositionen konkret und musikalisch. Antworte zunächst als Gesprächspartner und erzeuge in diesem Dialog keine JSON-Partitur.",
-                              user: user, wantJSON: false) { [weak window] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .failure(let err): window?.setDialogText("Fehler: \(err.localizedDescription)")
-                case .success(let r): window?.setDialogText(r.text)
-                }
-            }
-        }
-    }
-
     private func createCompareResult(a: HistoryItem, b: HistoryItem, instruction: String, window: CompareLabWindowController?) {
         var apiKey = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if apiKey.isEmpty { apiKey = SessionSecrets.shared.key(for: provider); if !apiKey.isEmpty { keyField.stringValue = apiKey } }
@@ -4023,50 +3796,21 @@ final class MainViewController: NSViewController, NSTableViewDataSource, NSTable
         let enc = JSONEncoder()
         let ja = (try? String(data: enc.encode(a.score), encoding: .utf8)) ?? ""
         let jb = (try? String(data: enc.encode(b.score), encoding: .utf8)) ?? ""
-        let assignment = """
-        Zwei vorhandene Kompositionen sind Ausgangsmaterial.
-
-        A: \(a.title)
-        Impuls A: \(a.concept)
-        MIDI-JSON A: \(ja)
-
-        B: \(b.title)
-        Impuls B: \(b.concept)
-        MIDI-JSON B: \(jb)
-
-        Auftrag:
-        \(instruction)
-        """
-
+        guard let assignment = try? LaboratoryWorkflow.prompt(kind: "revision", task: instruction,
+            first: a.concept + "\n" + ja, second: b.concept + "\n" + jb) else { return }
         APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
-                              purpose: "MainViewController.createCompareResult", system: ComposerPrompts.system,
-                              user: ComposerPrompts.compositionPrompt(assignment),
-                              wantJSON: false) { [weak window] first in
-            switch first {
-            case .failure(let err): DispatchQueue.main.async { window?.setDialogText("Fehler: \(err.localizedDescription)") }
-            case .success(let concept):
-                let prompt = """
-                AUFTRAG:
-                \(assignment)
-
-                MUSIKALISCHE VORSTELLUNG:
-                \(concept.text)
-
-                \(ComposerPrompts.technical)
-
-                \(self.titleAvoidanceInstruction())
-                """
-                APIClient.shared.call(provider: p, model: m, key: apiKey, effort: e,
-                                      purpose: "MainViewController.createCompareResult", system: ComposerPrompts.system, user: prompt, wantJSON: true) { second in
-                    switch second {
-                    case .failure(let err): DispatchQueue.main.async { window?.setDialogText("Fehler: \(err.localizedDescription)") }
-                    case .success(let response):
-                        do {
-                            let data = try APIClient.shared.extractJSON(response.text)
-                            let score = try JSONDecoder().decode(Score.self, from: data)
-                            DispatchQueue.main.async { window?.setGeneratedResult(score: score, concept: concept.text, provider: p, model: m) }
-                        } catch {
-                            DispatchQueue.main.async { window?.setDialogText("Fehler: \(error.localizedDescription)") }
+            purpose: "comparison-revision", system: ComposerPrompts.system, user: assignment, wantJSON: false) { [weak self, weak window] result in
+            switch result {
+            case .failure(let error): DispatchQueue.main.async { window?.setDialogText(error.localizedDescription) }
+            case .success(let response):
+                guard let self else { return }
+                NativeLocalCompositionService(compiler: self.localCompiler).interpret(response.text) { result in
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(.some(let work)):
+                            window?.setGeneratedResult(score: work.score, concept: response.text, provider: p, model: m, metadata: work.metadata)
+                        case .success(nil): window?.setDialogText("Originalantwort erhalten, aber nicht lokal lesbar: " + response.text)
+                        case .failure(let error): window?.setDialogText(error.localizedDescription + "\nOriginalantwort:\n" + response.text)
                         }
                     }
                 }
@@ -4185,5 +3929,146 @@ extension JSONEncoder {
         let e = JSONEncoder()
         e.outputFormatting = [.prettyPrinted,.sortedKeys,.withoutEscapingSlashes]
         return e
+    }
+}
+
+
+// Runs only when the AppDelegate receives --native-self-test in an isolated
+// preferences domain. It exercises the real AppKit/WebKit/engraver path offline.
+extension MainViewController {
+    func runNativeSelfTest(output: String, completion: @escaping (Error?) -> Void) {
+        do {
+            guard let path = ProcessInfo.processInfo.environment["COMPOSITION_LAB_BACKUP_FIXTURE"] else { throw APIError.badResponse("Backup-Kompatibilitätsfixture fehlt.") }
+            let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as! [String: Any]
+            let password = fixture["password"] as! String
+            let envelope = try JSONSerialization.data(withJSONObject: fixture["envelope"]!)
+            let payload = try BackupCrypto.decrypt(envelope, password: password)
+            guard payload.apiKeys["anthropic"] == "OFFLINE-TEST-NOT-A-REAL-KEY", payload.settings.prompt == "Test 𝄞" else { throw APIError.badResponse("Backup-Austausch verliert Daten.") }
+            let encrypted = try BackupCrypto.encrypt(payload, password: password)
+            _ = try BackupCrypto.decrypt(encrypted, password: password)
+            do { _ = try BackupCrypto.decrypt(envelope, password: "wrong"); throw APIError.badResponse("Falsches Backup-Passwort akzeptiert.") }
+            catch BackupCryptoError.badPassword { }
+        } catch { completion(error); return }
+        let bad = "\\version \"2.24.0\"\n\\score { { c''''4 e''''4 g''''4 c'''''4 } \\layout {} \\midi {} }"
+        let good = "\\version \"2.24.0\"\n\\score { { c''4 e''4 g''4 c'''4 } \\layout {} \\midi {} }"
+        var calls = 0
+        NativeRegisterRepairService(compiler: localCompiler).repair(source: bad, transport: { _, done in
+            calls += 1
+            done(Result { try JSONSerialization.data(withJSONObject: ["text": good, "estimatedCostUSD": 0.03]) })
+        }) { result in
+            DispatchQueue.main.async {
+                do {
+                    let work = try result.get()
+                    guard calls == 1, work.score.tr.flatMap({ $0.nt }).allSatisfy({ $0[2] < 96 }),
+                          work.metadata["originalLilyPond"] == .string(bad),
+                           work.metadata["lilyPondSource"] == .string(good) else { throw APIError.badResponse("Native Oktavkorrektur hat korrigierte LilyPond-Quelle verloren.") }
+                    self.runNativeInputSelfTest(output: output, completion: completion)
+                } catch { completion(error) }
+            }
+        }
+    }
+    private func runNativeInputSelfTest(output: String, completion: @escaping (Error?) -> Void) {
+        let source = "\\version \"2.24.0\"\n\\score { << \\new Staff { \\set Staff.midiInstrument = \"violin\" c''4 d'' e'' f'' } \\new PianoStaff << \\new Staff { g'4 a' b' c'' } \\new Staff { \\clef bass c4 d e f } >> >> \\layout {} \\midi {} }"
+        conceptView.string = source; chatInput.stringValue = ""; ensembleField.stringValue = "Klavier"; keyField.stringValue = ""
+        composePressed()
+        func check(_ attempts: Int) {
+            if nativeRequestInFlight {
+                guard attempts > 0 else { completion(APIError.badResponse("Zeitlimit bei lokaler Auftragsübernahme.")); return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { check(attempts - 1) }
+                return
+            }
+            guard lastConcept == source, lastScore?.tr.flatMap({ $0.nt }).count == 12,
+                  lastDiagnostic?["compositionAICalls"] as? Int == 0 else {
+                completion(APIError.badResponse("Fertige Violin-/Klavierpartitur wurde nicht ohne API-Key lokal übernommen.")); return
+            }
+            pieceSlots = Array(repeating: nil, count: 10); activePieceSlot = 0
+            runNativeWorkspaceSelfTest(output: output, completion: completion)
+        }
+        check(600)
+    }
+    private func runNativeWorkspaceSelfTest(output: String, completion: @escaping (Error?) -> Void) {
+        let source = "\\version \"2.24.0\"\n\\header { title = \"Native Original\" tagline = ##f }\n\\score { \\new PianoStaff << \\new Staff { \\time 4/4 \\tempo 4 = 96 c'4 d' e' f' | g'4 a' b' c'' | d''4 c'' b' a' } \\new Staff { \\clef bass c4 d e f | g4 a b c' | d'4 c' b a } >> \\layout {} \\midi {} }\n"
+        func require(_ condition: Bool, _ message: String) throws { if !condition { throw APIError.badResponse(message) } }
+        func waitFor(_ attempts: Int = 600, condition: @escaping () -> Bool, then action: @escaping () -> Void) {
+            if condition() { action(); return }
+            guard attempts > 0 else { completion(APIError.badResponse("Zeitlimit im nativen Mac-Funktionstest. Vorschau: \(self.musicXMLPreview.originalPreviewIsReady), Auswahl: \(self.conceptView.selectedRange().length), Anfrage: \(self.nativeRequestInFlight)")); return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { waitFor(attempts - 1, condition: condition, then: action) }
+        }
+        NativeLocalCompositionService(compiler: localCompiler).interpret(source) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { completion(APIError.badResponse("Testfenster fehlt.")); return }
+                do {
+                    guard let work = try result.get() else { throw APIError.badResponse("Lokale Originalübernahme fehlt.") }
+                    let catalogProvider = self.provider
+                    self.modelCatalog.accept([CatalogModel(id: "native-model-a", name: "Gleicher Modellname", details: "A"),
+                        CatalogModel(id: "native-model-b", name: "Gleicher Modellname", details: "B")], for: catalogProvider)
+                    self.settings.models[catalogProvider.rawValue] = "native-model-a"
+                    self.refillModels()
+                    try require(self.modelPop.numberOfItems == 2 && self.model == "native-model-a", "Gleich benannte Provider-Modelle gehen in der Mac-Auswahl verloren.")
+                    self.modelPop.selectItem(at: 1)
+                    try require(self.model == "native-model-b", "Modellauswahl verwendet nicht die tatsächliche Kennung.")
+                    self.view.layoutSubtreeIfNeeded()
+                    try require(self.modelPop.bounds.width >= 160, "Das Modellfeld ist trotz erfolgreicher Modellabfrage unlesbar schmal.")
+                    self.pendingCompositionSlot = 0
+                    self.install(score: work.score, concept: source, provider: .gemini, model: "offline-test", metadata: work.metadata)
+                    let originalMidi = self.lastMidi
+                    try require(self.lastScore?.tr.reduce(0, { $0 + $1.nt.count }) == 24, "Nicht alle 24 Noten aus drei Takten übernommen.")
+                    waitFor(condition: { self.musicXMLPreview.originalPreviewIsReady }) {
+                        self.selectWorkspace(1)
+                        self.musicXMLPreview.probeOriginalSelection { sent in
+                            guard sent else { completion(APIError.badResponse("Mac-SVG-Auswahl sendet keine Quellposition.")); return }
+                            waitFor(condition: { self.conceptView.selectedRange().length > 0 }) {
+                                do {
+                                    try require(self.workspaceSegment.selectedSegment == 0, "Notenauswahl öffnet den Editor nicht.")
+                                    let invalid = FileManager.default.temporaryDirectory.appendingPathComponent("clab-invalid-" + UUID().uuidString + ".mid")
+                                    try Data("invalid MIDI fixture".utf8).write(to: invalid)
+                                    self.importFile(invalid, intoPieceSlot: 1)
+                                    try? FileManager.default.removeItem(at: invalid)
+                                    try require(self.activePieceSlot == 0 && self.pieceSlots[1] == nil && self.lastMidi == originalMidi, "Fehlerhafter Import ersetzt das aktuelle Stück.")
+                                    let button = NSButton(); button.tag = 1; self.pieceSlotPressed(button)
+                                    self.captureCurrentInActiveSlot()
+                                    try require(self.lastScore == nil && self.pieceSlots[1] == nil, "Leerer Slot übernimmt fremde Partitur.")
+                                    button.tag = 0; self.pieceSlotPressed(button)
+                                    let edited = source.replacingOccurrences(of: "c'4", with: "e'4")
+                                    self.conceptView.string = edited; self.refreshCurrentNotation()
+                                    waitFor(condition: { !self.nativeRequestInFlight }) {
+                                        do {
+                                            try require(self.lastConcept == source, "Bearbeitung überschreibt das Original.")
+                                            try require(self.lastMidi != originalMidi, "Bearbeitung aktualisiert MIDI nicht.")
+                                            try require(self.lastPortableMetadata["lilyPondSource"] == .string(edited), "Bearbeitete Quelle fehlt.")
+                                            let validMidi = self.lastMidi
+                                            self.menuUndoScore()
+                                            try require(self.lastMidi == originalMidi, "Partitur-Undo stellt Original-MIDI nicht wieder her.")
+                                            self.menuRedoScore()
+                                            try require(self.lastMidi == validMidi, "Partitur-Redo stellt bearbeitetes MIDI nicht wieder her.")
+                                            self.playerVolume.doubleValue = 0; self.playerVolumeChanged()
+                                            try require(self.midiPlayer.duration > 0, "Stumme Wiedergabekopie ist nicht ladbar.")
+                                            self.playerVolume.doubleValue = 0.5; self.playerTempoField.integerValue = 72
+                                            self.reloadMainPlayerForPlaybackSettings(errorPrefix: "Test-Player")
+                                            try require(self.lastMidi == validMidi, "Player-Einstellungen verändern das exportierbare Original-MIDI.")
+                                            self.conceptView.string = edited + "\n\\unbekannteStimme"
+                                            self.refreshCurrentNotation()
+                                            waitFor(condition: { !self.nativeRequestInFlight }) {
+                                                do {
+                                                    try require(self.lastMidi == validMidi && self.lastPortableMetadata["lilyPondSource"] == .string(edited), "Fehlerhafter Entwurf zerstört gültige Ausgabe.")
+                                                    let doc = try JSONEncoder().encode(self.currentCLABDocument())
+                                                    let restored = try JSONDecoder().decode(CompositionLabDocument.self, from: doc)
+                                                    try require(restored.extraFields["lilyPondSource"] == .string(edited), "Mac-CLAB verliert angewendete Quelle.")
+                                                    let report: [String: Any] = ["passed": true, "interface": "AppKit/WebKit", "offline": true,
+                                                        "checks": ["finished-notation-compose-without-key", "local-original", "duplicate-model-names", "svg-three-bar-drag-to-editor", "window-geometry-roundtrip-and-disconnected-monitor", "empty-slot", "source-edit", "invalid-edit-rollback", "failed-import-rollback", "clab-metadata", "original-midi", "playback-copy", "score-undo-redo", "explicit-register-repair", "portable-encrypted-backup"]]
+                                                    try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
+                                                    try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: output).appendingPathComponent("result.json"))
+                                                    completion(nil)
+                                                } catch { completion(error) }
+                                            }
+                                        } catch { completion(error) }
+                                    }
+                                } catch { completion(error) }
+                            }
+                        }
+                    }
+                } catch { completion(error) }
+            }
+        }
     }
 }

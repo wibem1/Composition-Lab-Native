@@ -1,0 +1,52 @@
+name: Romanze MIDI isolation
+on:
+  push:
+    branches: [v4-cross-platform]
+    paths: ['.github/workflows/romanze-midi-isolation.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest 'https://github.com/wibem1/Composition-Lab-Native/releases/download/v4.2.9/Composition-Lab-4.2.9-Windows-x64.zip' -OutFile app.zip
+          Expand-Archive app.zip bundle
+          $app = (Resolve-Path 'bundle/Composition Lab 4.2.9').Path
+          $lily = Join-Path $app 'LilyPond'
+          $manifest = Get-Content 'Windows/CompositionLab/GuileRuntimeManifest.json' -Raw | ConvertFrom-Json
+          foreach ($pair in $manifest.pairs) {
+            $source = Get-Item (Join-Path $lily $pair.source)
+            (Get-Item (Join-Path $lily $pair.compiled)).LastWriteTimeUtc = $source.LastWriteTimeUtc.AddSeconds(4)
+          }
+          $env:FONTCONFIG_FILE = Join-Path $lily 'etc/fonts/fonts.conf'
+          $env:FONTCONFIG_PATH = Join-Path $lily 'etc/fonts'
+          New-Item audit -ItemType Directory | Out-Null
+          & (Join-Path $lily 'bin/lilypond.exe') --svg -dpoint-and-click --output=audit/romanze 'Tests/CompositionCoreTests/Fixtures/romanze-violin-piano-a4.ly' 2>&1 | Tee-Object audit/engraving.log
+          if ($LASTEXITCODE -ne 0) { throw 'Engraving failed' }
+          & (Join-Path $app 'Core/composition-lab-core.exe') midi-to-score audit/romanze.mid audit/score.json 2>&1 | Tee-Object audit/import.log
+          if ($LASTEXITCODE -ne 1) { throw "Expected rejection of invalid original MIDI" }
+          python -m pip install mido==1.3.3
+          @'
+          import mido
+          try:
+              mido.MidiFile('audit/romanze.mid')
+          except (ValueError, OSError) as error:
+              if 'data byte' not in str(error):
+                  raise
+              print('Independent MIDI parser confirms invalid original note byte:', error)
+          else:
+              raise RuntimeError('Expected out-of-range original Romanze MIDI note')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Independent MIDI inspection failed' }
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Romanze-MIDI-audit
+          path: audit/

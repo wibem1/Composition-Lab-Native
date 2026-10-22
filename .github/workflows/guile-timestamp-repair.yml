@@ -1,0 +1,83 @@
+name: Guile timestamp reproduction and repair
+on:
+  workflow_dispatch:
+  push:
+    branches: [v4-cross-platform]
+    paths:
+      - '.github/workflows/guile-timestamp-repair.yml'
+permissions:
+  contents: read
+jobs:
+  extraction:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      COMPOSITION_LAB_BACKUP_FIXTURE: ${{ github.workspace }}/Tests/CompositionCoreTests/Fixtures/backup-compatibility.json
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact released 4.2.8
+        shell: pwsh
+        run: |
+          Invoke-WebRequest 'https://github.com/wibem1/Composition-Lab-Native/releases/download/v4.2.8/Composition-Lab-4.2.8-Windows-x64.zip' -OutFile package.zip
+          if ((Get-FileHash package.zip -Algorithm SHA256).Hash -ne '5702DD4F05C641BDAECF44FC46E3962A02D2378949A290120A6242F9B358D2D0') { throw 'Release checksum mismatch' }
+          Expand-Archive package.zip package
+      - name: Reproduce exact source-newer-than-bytecode extraction
+        shell: pwsh
+        run: |
+          $runtime = "$PWD/package/Composition Lab 4.2.8/LilyPond"
+          $sourceTime = [DateTime]::Parse('2026-10-21T10:51:29Z').ToUniversalTime()
+          $compiledTime = [DateTime]::Parse('2026-10-21T10:51:16Z').ToUniversalTime()
+          Get-ChildItem $runtime -Recurse -Filter '*.scm' | ForEach-Object { $_.LastWriteTimeUtc = $sourceTime }
+          Get-ChildItem $runtime -Recurse -Filter '*.go' | ForEach-Object { $_.LastWriteTimeUtc = $compiledTime }
+          New-Item -ItemType Directory Results -Force | Out-Null
+          $control = @{ composition = '\version "2.24.0" \score { { c\singleQuote4 d\singleQuote e\singleQuote f\singleQuote } \layout {} \midi {} }'.Replace('\singleQuote', "'") }
+          $control | ConvertTo-Json | Set-Content Results/minimal.json
+          pwsh -File Windows/Diagnose-LilyPond-Isolated.ps1 -DiagnosticPath Results/minimal.json -LilyPondExe "$runtime/bin/lilypond.exe" -OutputDirectory Results/Before -TimeoutSeconds 10 -EnvironmentProfile application
+          $report = Get-Content Results/Before/report.json -Raw | ConvertFrom-Json
+          if (@($report.cases | Where-Object timedOut).Count -ne 4) { throw 'Source-newer bootstrap stall was not reproduced in every case; do not claim cause' }
+          exit 0
+      - name: Apply shipped hash-verified repair
+        shell: pwsh
+        run: |
+          $app = "$PWD/package/Composition Lab 4.2.8"
+          $env:CLAB_REPAIR_TARGET = $app
+          $env:CLAB_REPAIR_NO_PAUSE = '1'
+          $env:CLAB_REPAIR_REPORT = "$PWD/Results/repair.json"
+          $env:PSModulePath = "$env:windir/System32/WindowsPowerShell/v1.0/Modules"
+          & "$app/LilyPond-Reparatur.cmd"
+          if ($LASTEXITCODE -ne 0) { throw 'Shipped repair failed' }
+          $report = Get-Content Results/repair.json -Raw | ConvertFrom-Json
+          if (-not $report.passed -or $report.repairedPairs -lt 2) { throw 'Repair did not validate the affected bootstrap pairs and compile' }
+      - name: Validate complete Pastorale after repair
+        shell: pwsh
+        run: |
+          pwsh -File Windows/Diagnose-LilyPond-Isolated.ps1 -DiagnosticPath Windows/Fixtures/Pastorale-20261021.json -LilyPondExe "$PWD/package/Composition Lab 4.2.8/LilyPond/bin/lilypond.exe" -OutputDirectory Results/Pastorale -TimeoutSeconds 120 -EnvironmentProfile application
+          exit $LASTEXITCODE
+      - name: Validate actual released native application after repair
+        shell: pwsh
+        run: |
+          $app = "$PWD/package/Composition Lab 4.2.8"
+          $start = [Diagnostics.ProcessStartInfo]::new("$app/Composition Lab 4.2.8.exe")
+          $start.UseShellExecute = $false
+          $start.ArgumentList.Add('--self-test')
+          $start.ArgumentList.Add('--test-output')
+          $start.ArgumentList.Add("$PWD/Results/Native")
+          $p = [Diagnostics.Process]::Start($start)
+          if (-not $p.WaitForExit(180000)) { $p.Kill($true); throw 'Native test timeout' }
+          if ($p.ExitCode -ne 0) {
+            if (Test-Path Results/Native/failure.txt) { Get-Content Results/Native/failure.txt }
+            throw 'Native tests failed'
+          }
+          $report = Get-Content Results/Native/result.json -Raw | ConvertFrom-Json
+          if (-not $report.passed) { throw 'Native report not green' }
+          Get-Content Results/Native/Pastorale-Messung.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: guile-timestamp-${{ matrix.os }}
+          path: Results/
+          if-no-files-found: error

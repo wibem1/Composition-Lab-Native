@@ -617,8 +617,8 @@ final class CompareLabWindowController: NSWindowController {
         appendDialog("KI", "Kompositionsauftrag erkannt. Musikalischer Impuls und neue MIDI-Fassung werden erzeugt …")
     }
 
-    func setGeneratedResult(score: Score, concept: String, provider: Provider, model: String) {
-        let item = HistoryItem(id: UUID(), time: Date(), title: score.ti, provider: provider, model: model, concept: concept, score: score, area: .comparison)
+    func setGeneratedResult(score: Score, concept: String, provider: Provider, model: String, metadata: [String: JSONValue] = [:]) {
+        let item = HistoryItem(id: UUID(), time: Date(), title: score.ti, provider: provider, model: model, concept: concept, score: score, area: .comparison, extraFields: metadata)
         generatedResult = item
         onGeneratedResult?(item)
         resultInfo.string = concept.isEmpty

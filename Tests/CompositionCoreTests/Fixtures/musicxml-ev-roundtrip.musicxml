@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="4.0">
+  <work><work-title>EV Roundtrip Test</work-title></work>
+  <part-list>
+    <score-part id="P1"><part-name>Piano</part-name><midi-instrument id="P1-I1"><midi-program>1</midi-program></midi-instrument></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>4</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <direction placement="below"><direction-type><dynamics><p/></dynamics></direction-type><staff>1</staff></direction>
+      <direction placement="below"><direction-type><pedal type="start" line="yes"/></direction-type><staff>1</staff></direction>
+      <direction placement="below"><direction-type><wedge type="crescendo" number="1"/></direction-type><staff>1</staff></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff><notations><articulations><staccato/></articulations><slur type="start" number="1"/></notations></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>12</duration><voice>1</voice><staff>1</staff></note>
+    </measure>
+    <measure number="2">
+      <direction placement="below"><direction-type><dynamics><f/></dynamics></direction-type><staff>1</staff></direction>
+      <direction placement="below"><direction-type><wedge type="stop" number="1"/></direction-type><staff>1</staff></direction>
+      <direction placement="below"><direction-type><pedal type="stop" line="yes"/></direction-type><staff>1</staff></direction>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><staff>1</staff><notations><slur type="stop" number="1"/></notations></note>
+      <note><rest/><duration>12</duration><voice>1</voice><staff>1</staff></note>
+    </measure>
+  </part>
+</score-partwise>

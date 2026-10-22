@@ -1,0 +1,111 @@
+name: LilyPond Windows isolation
+on:
+  workflow_dispatch:
+  push:
+    branches: [v4-cross-platform]
+    paths:
+      - 'Windows/**'
+      - 'Shared/**'
+      - 'Tools/**'
+      - 'Package.swift'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [v4-cross-platform]
+    paths:
+      - 'Windows/**'
+      - 'Shared/**'
+      - 'Tools/**'
+      - 'Package.swift'
+      - '.github/workflows/**'
+jobs:
+  pastorale:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+        environment: [inherited, application]
+        runtime: [official, released-4.2.8]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download pinned bundled LilyPond
+        if: matrix.runtime == 'official'
+        shell: pwsh
+        run: |
+          $url = 'https://gitlab.com/lilypond/lilypond/-/releases/v2.24.4/downloads/lilypond-2.24.4-mingw-x86_64.zip'
+          Invoke-WebRequest $url -OutFile lilypond.zip
+          $expected = 'E238F5A33EBDE7466FE03D0FBCAA155A44536CA582951972482E0B00CEB0FBF1'
+          if ((Get-FileHash lilypond.zip -Algorithm SHA256).Hash -ne $expected) { throw 'Checksum mismatch' }
+          Expand-Archive lilypond.zip -DestinationPath lilypond-dist
+          "LILYPOND_TEST_EXE=$PWD/lilypond-dist/lilypond-2.24.4/bin/lilypond.exe" >> $env:GITHUB_ENV
+      - name: Download exact released Windows 4.2.8 package
+        if: matrix.runtime == 'released-4.2.8'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest 'https://github.com/wibem1/Composition-Lab-Native/releases/download/v4.2.8/Composition-Lab-4.2.8-Windows-x64.zip' -OutFile package.zip
+          if ((Get-FileHash package.zip -Algorithm SHA256).Hash -ne '5702DD4F05C641BDAECF44FC46E3962A02D2378949A290120A6242F9B358D2D0') { throw 'Release checksum mismatch' }
+          Expand-Archive package.zip -DestinationPath package
+          "LILYPOND_TEST_EXE=$PWD/package/Composition Lab 4.2.8/LilyPond/bin/lilypond.exe" >> $env:GITHUB_ENV
+      - name: Create minimal control diagnostic
+        shell: pwsh
+        run: |
+          $control = [ordered]@{
+            composition = @'
+          \version "2.24.0"
+          \score {
+            \new Staff { \clef treble \time 4/4 c'4 d'4 e'4 f'4 }
+            \layout { }
+            \midi { \tempo 4 = 100 }
+          }
+          '@
+          }
+          $control | ConvertTo-Json | Set-Content minimal-control.json -Encoding utf8
+      - name: Test minimal LilyPond first
+        id: minimal
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          pwsh -File Windows/Diagnose-LilyPond-Isolated.ps1 -DiagnosticPath minimal-control.json -LilyPondExe "$env:LILYPOND_TEST_EXE" -OutputDirectory LilyPond-Control -TimeoutSeconds 60 -EnvironmentProfile ${{ matrix.environment }}
+          exit $LASTEXITCODE
+      - name: Reproduce original Pastorale outside application
+        id: reproduce
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          pwsh -File Windows/Diagnose-LilyPond-Isolated.ps1 -DiagnosticPath Windows/Fixtures/Pastorale-20261021.json -LilyPondExe "$env:LILYPOND_TEST_EXE" -OutputDirectory LilyPond-Isolation -TimeoutSeconds 120 -EnvironmentProfile ${{ matrix.environment }}
+          exit $LASTEXITCODE
+      - name: Test standalone diagnostic against actual release
+        if: matrix.runtime == 'released-4.2.8' && matrix.environment == 'application'
+        shell: pwsh
+        run: |
+          $app = "$PWD/package/Composition Lab 4.2.8"
+          # Exercise download-and-double-click auto-discovery outside the app.
+          $downloads = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Downloads'
+          New-Item -ItemType Directory -Path $downloads -Force | Out-Null
+          New-Item -ItemType Junction -Path "$downloads/Composition Lab 4.2.8" -Target $app | Out-Null
+          cmd /c "`"$PWD/Windows/LilyPond-CPU-Diagnose.cmd`" < NUL"
+          $desktop = [Environment]::GetFolderPath('Desktop')
+          $report = Get-ChildItem $desktop -Filter 'Composition-Lab-LilyPond-CPU-*.json' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $report) { throw 'Standalone diagnostic did not save its report' }
+          Copy-Item $report.FullName LilyPond-Isolation/cpu-diagnostic.json
+          $result = Get-Content $report.FullName -Raw | ConvertFrom-Json
+          if ($result.version -ne 4 -or $result.appFolder -notlike '*Downloads*') { throw 'Auto-discovery did not select the test installation' }
+          if (@($result.bootstrapFiles).Count -lt 2) { throw 'Guile bootstrap inventory missing' }
+          $original = $result.experiments | Where-Object name -eq '03-original-pastorale'
+          if (@($original.loadedModules | Where-Object { $_.name -eq 'lilypond.exe' -and $_.sha256 }).Count -ne 1) { throw 'Runtime module capture missing' }
+          if ($result.error -or @($result.experiments).Count -ne 4) { throw 'Incomplete standalone diagnostic' }
+          if (@($result.experiments | Where-Object { $_.timedOut -or $_.exitCode -ne 0 }).Count) { throw 'Standalone diagnostic failed' }
+      - name: Upload isolation logs even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lilypond-pastorale-${{ matrix.os }}-${{ matrix.environment }}-${{ matrix.runtime }}
+          path: |
+            LilyPond-Isolation/
+            LilyPond-Control/
+          if-no-files-found: warn
+      - name: Fail gate when original does not compile
+        if: steps.reproduce.outcome != 'success' || steps.minimal.outcome != 'success'
+        shell: pwsh
+        run: throw 'Original Pastorale LilyPond isolation failed; no release allowed'

@@ -1,0 +1,20 @@
+name: Windows slot persistence compile check
+# The automatic matrix already compiles, packages and tests Windows.
+# Keep this focused diagnostic workflow available for explicit runs.
+on:
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Compile Windows application
+        run: dotnet build Windows/CompositionLab/CompositionLab.csproj --configuration Release

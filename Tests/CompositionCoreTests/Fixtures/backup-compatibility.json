@@ -1,0 +1,33 @@
+{
+  "password": "Offline-Kompatibilitaet-4.2",
+  "envelope": {
+    "format": "composition-lab-native-backup",
+    "version": 1,
+    "salt": "AAECAwQFBgcICQoLDA0ODw==",
+    "combined": "AAECAwQFBgcICQoL/tShDukNH9oYJKqeawuQqZhG+iJ2EAtI6ysT7Crut5VzkkpXwgv4ORjALhbeDutAaTqm2yLPa2Eu0I1BX9AewdIdPDYqCTyj/su35k7oqOlf1HaECEWMoO3d94eXxYQ5bCb4HH6bkDJ1iml+yh37Gtet1AJJgPKD3GpSWPJ4kMZcaaupZondBblvhtKg17C5adJ4zpDcofDgnWlVXcx+dV+qhxSJxjJs66xaXw7dL4P/p/fXCsCO/WzIINcNRxHE9QKXPSY+t+cpg3+WGaKsxnTcwoXKYLrfLXpxtX5lMcCiFKalHNfgaBkJiXOP/Voeqq1jQrj8zsA6EZsrFv09U+KYj77HMHZ0cOndZ8VNlbvo+JyLnMBoWEa+REWBDiGa0cIks29fwEMmCEbSGQLQ0rnOrJhyYeOocwDp4Xn9acUg49/r86wCMPs/5f2EKwnSt3NmWJvZ+ZBnC47C4HCjqpguNFJkz1t+eQVilt83aG8M5PmC77MhEVWdxe4="
+  },
+  "payload": {
+    "format": "composition-lab-native-backup-payload",
+    "version": 1,
+    "savedAt": 0,
+    "settings": {
+      "provider": "anthropic",
+      "models": {
+        "anthropic": "offline-test"
+      },
+      "efforts": {
+        "anthropic": "high"
+      },
+      "measures": "",
+      "meter": "",
+      "tempo": "",
+      "key": "",
+      "ensemble": "Klavier",
+      "prompt": "Test 𝄞"
+    },
+    "history": [],
+    "apiKeys": {
+      "anthropic": "OFFLINE-TEST-NOT-A-REAL-KEY"
+    }
+  }
+}

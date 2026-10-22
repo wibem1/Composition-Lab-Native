@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Composition Lab 4.2.11</AssemblyName>
+    <Version>4.2.11</Version>
+    <AssemblyVersion>4.2.11.0</AssemblyVersion>
+    <FileVersion>4.2.11.4211</FileVersion>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../Shared/CompositionCore/Resources/ScorePreview.html" LogicalName="CompositionLab.ScorePreview.html" />
+    <EmbeddedResource Include="GuileRuntimeManifest.json" LogicalName="CompositionLab.GuileRuntimeManifest.json" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+  </ItemGroup>
+</Project>

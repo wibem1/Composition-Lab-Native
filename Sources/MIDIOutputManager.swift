@@ -12,7 +12,7 @@ final class MIDIOutputManager {
 
     private var client = MIDIClientRef()
     private var outputPort = MIDIPortRef()
-    private let defaults = UserDefaults.standard
+    private let defaults = AppPreferences.standard
 
     private init() {
         MIDIClientCreate("Composition Lab MIDI Client" as CFString, nil, nil, &client)
@@ -129,7 +129,7 @@ final class ExternalMIDIPlayer {
         }
     }
 
-    func load(score: Score) {
+    func load(score: Score, data: Data? = nil) {
         stop()
         disposeEngine()
         loadedScore = score
@@ -137,7 +137,7 @@ final class ExternalMIDIPlayer {
         // Externe Wiedergabe wird als komplette Standard-MIDI-Datei an Apples
         // MusicSequence/MusicPlayer übergeben. Damit übernimmt Core Audio das
         // gesamte Timing; kein eigener Note-On/Off-Timer läuft mehr.
-        let midiData = MIDIBuilder.build(score, endPaddingSeconds: releaseTail)
+        let midiData = data ?? MIDIBuilder.build(score, endPaddingSeconds: releaseTail)
 
         var newSequence: MusicSequence?
         guard NewMusicSequence(&newSequence) == noErr, let seq = newSequence else {
@@ -173,13 +173,20 @@ final class ExternalMIDIPlayer {
         sequence = seq
         player = mp
 
-        let bpm = max(20.0, min(300.0, score.bpm))
-        let maxBeat = score.tr
-            .flatMap(\.nt)
-            .filter { $0.count >= 2 }
-            .map { max(0, $0[0]) + max(0.001, $0[1]) * ($0.count > 5 ? max(0.01, $0[5]) : 0.95) }
-            .max() ?? 0
-        duration = maxBeat > 0 ? (maxBeat * 60.0 / bpm) + releaseTail : 0
+        var trackCount: UInt32 = 0
+        var lastBeat: MusicTimeStamp = 0
+        MusicSequenceGetTrackCount(seq, &trackCount)
+        for index in 0..<trackCount {
+            var track: MusicTrack?
+            if MusicSequenceGetIndTrack(seq, index, &track) == noErr, let track {
+                var length: MusicTimeStamp = 0
+                var size = UInt32(MemoryLayout<MusicTimeStamp>.size)
+                if MusicTrackGetProperty(track, kSequenceTrackProperty_TrackLength, &length, &size) == noErr { lastBeat = max(lastBeat, length) }
+            }
+        }
+        var seconds: Float64 = 0
+        MusicSequenceGetSecondsForBeats(seq, lastBeat, &seconds)
+        duration = max(0, seconds)
 
         MusicPlayerSetTime(mp, 0)
         MusicPlayerPreroll(mp)
@@ -189,11 +196,12 @@ final class ExternalMIDIPlayer {
 
     var position: TimeInterval {
         get {
-            guard let mp = player, let score = loadedScore else { return 0 }
+            guard let mp = player, let seq = sequence else { return 0 }
             var beat: MusicTimeStamp = 0
             guard MusicPlayerGetTime(mp, &beat) == noErr else { return 0 }
-            let bpm = max(20.0, min(300.0, score.bpm))
-            return max(0, min(duration, beat * 60.0 / bpm))
+            var seconds: Float64 = 0
+            guard MusicSequenceGetSecondsForBeats(seq, beat, &seconds) == noErr else { return 0 }
+            return max(0, min(duration, seconds))
         }
         set {
             seek(to: newValue)
@@ -246,14 +254,14 @@ final class ExternalMIDIPlayer {
     }
 
     private func seek(to value: TimeInterval) {
-        guard let mp = player, let score = loadedScore else { return }
+        guard let mp = player, let seq = sequence else { return }
         let resume = isPlaying
         MusicPlayerStop(mp)
         MIDIOutputManager.shared.allNotesOff()
 
         let clamped = max(0, min(duration, value))
-        let bpm = max(20.0, min(300.0, score.bpm))
-        let beat = clamped * bpm / 60.0
+        var beat: MusicTimeStamp = 0
+        guard MusicSequenceGetBeatsForSeconds(seq, clamped, &beat) == noErr else { return }
         MusicPlayerSetTime(mp, beat)
         MusicPlayerPreroll(mp)
 
