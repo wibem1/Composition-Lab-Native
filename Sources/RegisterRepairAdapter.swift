@@ -30,6 +30,7 @@ final class NativeRegisterRepairService {
                                 try RegisterReview.validateRepair(before: beforeJSON, after: JSONEncoder().encode(after.score), source: text)
                                 var metadata = after.metadata
                                 metadata["originalLilyPond"] = .string(source)
+                                metadata["lilyPondSource"] = .string(text)
                                 metadata["octaveReview"] = .object(["status": .string("corrected"), "repairAICalls": .number(1),
                                     "response": try JSONDecoder().decode(JSONValue.self, from: data)])
                                 completion(.success(NativeLocalComposition(score: after.score, metadata: metadata)))
