@@ -1,0 +1,52 @@
+name: Publish verified Mac 4.2.10 package
+on:
+  push:
+    branches: [v4-cross-platform]
+    paths:
+      - '.github/workflows/backfill-mac-v4210.yml'
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish-tested-mac:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download exact Mac artifact from successful cross-platform run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          expected="967667213c9cbdddf020f54ac7f7b5ce1649afc4"
+          run="39681244303"
+          test "$(gh api "repos/$repo/actions/runs/$run" --jq '.head_sha')" = "$expected"
+          test "$(gh api "repos/$repo/actions/runs/$run" --jq '.conclusion')" = "success"
+          test "$(gh api "repos/$repo/releases/tags/v4.2.10" --jq '.target_commitish')" = "$expected"
+          mkdir -p verified-mac
+          gh run download "$run" --repo "$repo" --name 'Composition-Lab-4.2.10-Mac' --dir verified-mac
+          test -s verified-mac/Composition-Lab-4.2.10-Mac.zip
+          python - <<'PY'
+          import zipfile
+          path = "verified-mac/Composition-Lab-4.2.10-Mac.zip"
+          with zipfile.ZipFile(path) as z:
+              assert z.testzip() is None
+              names = z.namelist()
+              assert any(n.startswith("Composition Lab 4.2.10.app/Contents/") for n in names)
+              assert any(n.endswith(".app/Contents/MacOS/Composition Lab 4.2.10") for n in names)
+          PY
+      - name: Attach Mac package to the existing matching release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          if gh release view v4.2.10 --repo "$repo" --json assets --jq '.assets[].name' | grep -Fxq 'Composition-Lab-4.2.10-Mac.zip'; then
+            echo 'Mac release asset already present; not replacing it.'
+          else
+            gh release upload v4.2.10 verified-mac/Composition-Lab-4.2.10-Mac.zip --repo "$repo"
+          fi
+          gh release view v4.2.10 --repo "$repo" --json assets --jq '.assets[].name' | grep -Fxq 'Composition-Lab-4.2.10-Mac.zip'
+          gh release view v4.2.10 --repo "$repo" --json assets --jq '.assets[].name' | grep -Fxq 'Composition-Lab-4.2.10-Windows-x64.zip'
