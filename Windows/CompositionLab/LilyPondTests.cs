@@ -306,6 +306,31 @@ internal sealed partial class MainForm
                 """);
             if (dragResult != "\"drag-ok\"")
                 throw new Exception("Klick-und-Ziehen markiert keine Notenpassage: " + dragResult);
+            // Trusted Chromium input takes the real hit-test/capture path: no
+            // dispatchEvent target can mask a broken geometric drag implementation.
+            await web.ExecuteScriptAsync("clear(); window.scrollTo(0,0)");
+            string geometry = await web.ExecuteScriptAsync("""
+                (() => { const a=links.filter(n=>!n.closest('.page').hidden);
+                  const boxes=a.map(n=>n.getBoundingClientRect());
+                  const visible=boxes.map((r,i)=>({r,i})).filter(o=>o.r.width>0&&o.r.top>=40&&o.r.bottom<innerHeight);
+                  if(visible.length<2)throw Error('Not enough visible notes for trusted drag');
+                  const first=visible[0],last=visible[visible.length-1];
+                  return {x1:first.r.left+first.r.width/2,y1:first.r.top+first.r.height/2,
+                    x2:last.r.left+last.r.width/2,y2:last.r.top+last.r.height/2,expected:last.i-first.i+1}; })()
+                """);
+            var coordinates = JsonNode.Parse(geometry)!;
+            double x1=Numeric(coordinates["x1"]),y1=Numeric(coordinates["y1"]),
+                x2=Numeric(coordinates["x2"]),y2=Numeric(coordinates["y2"]);
+            async Task Mouse(string type,double x,double y,int buttons) =>
+                await web.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+                    JsonSerializer.Serialize(new { type, x, y, button="left", buttons, clickCount=1 }));
+            await Mouse("mousePressed",x1,y1,1);
+            for(int i=1;i<=12;i++)await Mouse("mouseMoved",x1+(x2-x1)*i/12,y1+(y2-y1)*i/12,1);
+            await Mouse("mouseReleased",x2,y2,0);
+            if(await web.ExecuteScriptAsync("chosen.size") != coordinates["expected"]!.ToString())
+                throw new Exception("Trusted mouse drag loses source notes or pointer capture.");
+            await File.WriteAllTextAsync(Path.Combine(output,"Trusted-Mouse-Drag.json"),
+                new JsonObject { ["passed"]=true,["input"]="Chromium Input.dispatchMouseEvent",["geometry"]=coordinates.DeepClone() }.ToJsonString());
             // Reproduce the user flow: edit the visible composition, then click
             // the actual Noten-tab button rather than calling the compiler only.
             string edited = music.Replace("Auftakt – Originalprüfung", "Bearbeitet – G statt C").Replace("c8\\mf", "g'8\\mf").Replace("4 = 104", "4 = 116");

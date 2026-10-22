@@ -6,10 +6,10 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyName>Composition Lab 4.2.10</AssemblyName>
-    <Version>4.2.10</Version>
-    <AssemblyVersion>4.2.10.0</AssemblyVersion>
-    <FileVersion>4.2.10.4210</FileVersion>
+    <AssemblyName>Composition Lab 4.2.11</AssemblyName>
+    <Version>4.2.11</Version>
+    <AssemblyVersion>4.2.11.0</AssemblyVersion>
+    <FileVersion>4.2.11.4211</FileVersion>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
   <ItemGroup>

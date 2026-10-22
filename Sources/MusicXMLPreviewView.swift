@@ -20,9 +20,15 @@ final class MusicXMLPreviewView: NSView, WKScriptMessageHandler, WKNavigationDel
     var originalPreviewIsReady: Bool { lilyPondPages != nil && ready }
     func probeOriginalSelection(completion: @escaping (Bool) -> Void) {
         webView.evaluateJavaScript(#"""
-        (()=>{const a=Array.from(document.querySelectorAll('.page a')).find(n=>/source\.ly:\d+:\d+:\d+/i.test(n.getAttribute('href')||n.getAttribute('xlink:href')||''));
-        if(!a)return false;a.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));
-        if(document.getElementById('openSelection').disabled)return false;document.getElementById('openSelection').click();return true})()
+        (()=>{const notes=Array.from(document.querySelectorAll('.page:not([hidden]) a')).filter(n=>/source\.ly:\d+:\d+:\d+/i.test(n.getAttribute('href')||n.getAttribute('xlink:href')||''));
+        if(notes.length<2)return false;
+        const first=notes[0],last=notes[notes.length-1];
+        document.getElementById('clearSelection').click();
+        first.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerId:7,button:0,buttons:1}));
+        last.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,cancelable:true,pointerId:7,button:0,buttons:1}));
+        document.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,pointerId:7,button:0,buttons:0}));
+        if(document.querySelectorAll('.page a.selected').length!==notes.length||document.getElementById('openSelection').disabled)return false;
+        document.getElementById('openSelection').click();return true})()
         """#) { value, error in completion(error == nil && value as? Bool == true) }
     }
 

@@ -91,10 +91,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let restored = NSRectFromString(saved)
             if restored.width >= w.minSize.width,
                restored.height >= w.minSize.height,
+               restored.origin.x.isFinite, restored.origin.y.isFinite,
                restored.width.isFinite,
                restored.height.isFinite {
                 w.setFrame(restored, display: false)
-                if let screen = NSScreen.screens.first(where: { $0.frame.intersects(w.frame) }) {
+                if let screen = NSScreen.screens.first(where: { $0.frame.intersects(w.frame) }) ?? NSScreen.main {
                     var f = w.frame
                     let visible = screen.visibleFrame
                     f.size.width = min(f.width, visible.width)

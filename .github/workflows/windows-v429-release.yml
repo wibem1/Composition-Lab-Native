@@ -1,4 +1,4 @@
-name: Windows 4.2.10 end-to-end verification
+name: Windows 4.2.11 end-to-end verification
 on:
   workflow_dispatch:
   push:
@@ -25,7 +25,7 @@ jobs:
       - name: Download tested Windows archive from regression job
         uses: actions/download-artifact@v4
         with:
-          name: Composition-Lab-4.2.10-Windows-x64
+          name: Composition-Lab-4.2.11-Windows-x64
           path: .
       - name: Download matching native and extracted-package test evidence
         uses: actions/download-artifact@v4
@@ -48,13 +48,13 @@ jobs:
             $guile = Get-Content (Join-Path $dir 'Guile-Extraction-Repair.json') -Raw | ConvertFrom-Json
             if (-not $guile.passed -or $guile.verifiedPairs -ne 374 -or -not $guile.simulatedUserExtraction) { throw "Guile corruption/repair test failed for $dir" }
           }
-          if (-not (Test-Path 'Composition-Lab-4.2.10-Windows-x64.zip')) { throw 'Package missing' }
+          if (-not (Test-Path 'Composition-Lab-4.2.11-Windows-x64.zip')) { throw 'Package missing' }
       - name: Store installable archive and logs
         uses: actions/upload-artifact@v4
         with:
-          name: Composition-Lab-4.2.10-Windows-verified
+          name: Composition-Lab-4.2.11-Windows-verified
           path: |
-            Composition-Lab-4.2.10-Windows-x64.zip
+            Composition-Lab-4.2.11-Windows-x64.zip
             Windows/TestResults/**
           if-no-files-found: error
       # No independent Windows release here. The cross-platform v4-core.yml

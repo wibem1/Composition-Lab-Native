@@ -1,7 +1,7 @@
 <!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <style>html,body{margin:0;background:#eee}#score{padding:12px}.page{display:block;width:100%;background:white;margin:0 auto 12px}.page svg{display:block;width:100%;height:auto}.page[hidden]{display:none}
-.page a{cursor:crosshair}.page a:hover{outline:1px solid #bd7d00;outline-offset:3px}.page a.selected{outline:2px solid #e99a10;outline-offset:4px}
+.page a{cursor:crosshair}#score{touch-action:none;user-select:none;-webkit-user-select:none}.page a:hover{outline:1px solid #bd7d00;outline-offset:3px}.page a.selected{outline:2px solid #e99a10;outline-offset:4px}
 #selection{position:sticky;top:0;z-index:10;padding:8px;background:#fff;border-bottom:1px solid #ccc;display:flex;gap:12px;align-items:center;font:13px Segoe UI,sans-serif}
 #selection button{padding:6px 12px;cursor:pointer}
 @media print{#selection{display:none}}
@@ -75,10 +75,12 @@ host.addEventListener('pointerdown',event=>{
   const a=linkLocation(direct)?direct:hitNote(event.clientX,event.clientY);
   if(!a)return;
   dragStart=a;dragEnd=a;didDrag=false;activePointer=event.pointerId;
-  host.setPointerCapture?.(event.pointerId);
+  // Synthetic regression events have no active browser pointer. Real pointers
+  // still capture, while unsupported hosts continue with document listeners.
+  try { host.setPointerCapture?.(event.pointerId); } catch (_) {}
   event.preventDefault();
 });
-host.addEventListener('pointermove',event=>{
+document.addEventListener('pointermove',event=>{
   if(!dragStart || activePointer!==event.pointerId || !(event.buttons&1))return;
   const direct=nearestLink(event.target);
   const a=linkLocation(direct)?direct:hitNote(event.clientX,event.clientY);
