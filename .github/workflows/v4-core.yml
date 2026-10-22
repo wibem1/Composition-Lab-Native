@@ -100,6 +100,31 @@ jobs:
           pattern: Composition-Lab-4.2.11-*
           merge-multiple: true
           path: ReleasePackages
+      - uses: actions/download-artifact@v4
+        with:
+          name: Windows-Starttest
+          path: TestEvidence/Windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: Mac-TestResults
+          path: TestEvidence/Mac
+      - name: Verify native regression evidence
+        run: |
+          python - <<'PYTEST'
+          import json, pathlib
+          root = pathlib.Path('TestEvidence')
+          mac = json.loads((root/'Mac/result.json').read_text())
+          assert mac['passed']
+          assert 'svg-three-bar-drag-to-editor' in mac['checks']
+          assert 'window-geometry-roundtrip-and-disconnected-monitor' in mac['checks']
+          for part in ['Windows', 'Windows/Packaged']:
+              base = root/part
+              assert json.loads((base/'result.json').read_text(encoding='utf-8-sig'))['passed']
+              for name in ['Window-Placement.json','Trusted-Mouse-Drag.json']:
+                  assert json.loads((base/name).read_text(encoding='utf-8-sig'))['passed']
+          print('Both native platforms, extracted Windows package, drag and window evidence: PASS')
+          PYTEST
+          zip -r Native-Test-Results.zip TestEvidence
       - name: Verify packages and publish tested 4.2 commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -110,4 +135,4 @@ jobs:
           cd ReleasePackages
           sha256sum Composition-Lab-4.2.11-Mac.zip Composition-Lab-4.2.11-Windows-x64.zip > SHA256SUMS.txt
           cd ..
-          gh release create v4.2.11 ReleasePackages/Composition-Lab-4.2.11-Mac.zip ReleasePackages/Composition-Lab-4.2.11-Windows-x64.zip ReleasePackages/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Composition Lab Native 4.2.11' --notes-file VERSION-4.2.11.md
+          gh release create v4.2.11 ReleasePackages/Composition-Lab-4.2.11-Mac.zip ReleasePackages/Composition-Lab-4.2.11-Windows-x64.zip ReleasePackages/SHA256SUMS.txt Native-Test-Results.zip --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Composition Lab Native 4.2.11' --notes-file VERSION-4.2.11.md
