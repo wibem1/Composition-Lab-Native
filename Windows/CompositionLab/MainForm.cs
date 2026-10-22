@@ -87,6 +87,7 @@ internal sealed partial class MainForm : Form
         BuildUI();
         ResumeLayout(true);
         LoadLocalState();
+        RestoreWindowPlacement();
         mainSplitReady = true;
         RefreshSlots();
         slots.SelectedIndex = 0;
@@ -97,8 +98,11 @@ internal sealed partial class MainForm : Form
                 // Fit after Windows has applied the monitor DPI; keep the title bar reachable.
                 var area = Screen.FromControl(this).WorkingArea;
                 MinimumSize = new Size(Math.Min(MinimumSize.Width, area.Width - 40), Math.Min(MinimumSize.Height, area.Height - 40));
-                Size = new Size(Math.Min(Width, area.Width - 40), Math.Min(Height, area.Height - 40));
-                Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + (area.Height - Height) / 2);
+                if (!windowPlacementRestored)
+                {
+                    Size = new Size(Math.Min(Width, area.Width - 40), Math.Min(Height, area.Height - 40));
+                    Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + (area.Height - Height) / 2);
+                }
                 await InitializeNotationAsync();
                 _ = RefreshModelsAsync(false);
             }
@@ -109,7 +113,7 @@ internal sealed partial class MainForm : Form
             }
             catch (Exception e) { SetStatus(e.Message, true); }
         };
-        FormClosing += (_, _) => { pending?.Cancel(); SaveLocalState(); player.Close(); };
+        FormClosing += (_, _) => { pending?.Cancel(); SaveWindowPlacement(); SaveLocalState(); player.Close(); };
         playbackTimer.Tick += (_, _) =>
         {
             if (!player.Loaded) return;
