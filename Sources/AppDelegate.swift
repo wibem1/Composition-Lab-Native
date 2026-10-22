@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard ProcessInfo.processInfo.environment["COMPOSITION_LAB_TEST_DOMAIN"] != nil else { print("Native tests require an isolated preferences domain."); exit(2) }
             let output = CommandLine.arguments[index + 1]
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                do { try self?.testWindowPersistence() } catch { print(error); exit(1) }
                 self?.mainVC?.runNativeSelfTest(output: output) { error in
                     if let error { print("Native Mac self-test failed: " + error.localizedDescription); exit(1) }
                     exit(0)
@@ -86,6 +87,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         w.isReleasedWhenClosed = false
         w.delegate = self
 
+        restoreMainWindowFrame(w)
+
+        mainVC = vc
+        window = w
+    }
+
+    private func restoreMainWindowFrame(_ w: NSWindow) {
         let defaults = AppPreferences.standard
         if let saved = defaults.string(forKey: mainWindowFrameKey), !saved.isEmpty {
             let restored = NSRectFromString(saved)
@@ -107,8 +115,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             } else { w.center() }
         } else { w.center() }
 
-        mainVC = vc
-        window = w
+    }
+
+    private func testWindowPersistence() throws {
+        guard let w = window else { throw APIError.badResponse("Testfenster fehlt.") }
+        let original = w.frame
+        w.delegate = nil
+        defer { w.setFrame(original, display: false); w.delegate = self; saveMainWindowFrame() }
+        saveMainWindowFrame()
+        w.setFrameOrigin(NSPoint(x: original.minX + 15, y: original.minY + 15))
+        restoreMainWindowFrame(w)
+        guard w.frame == original else { throw APIError.badResponse("Mac-Fenstergeometrie wird nicht wiederhergestellt.") }
+        AppPreferences.standard.set(NSStringFromRect(NSRect(x: 90000,y: 90000,width: 1000,height: 700)), forKey: mainWindowFrameKey)
+        restoreMainWindowFrame(w)
+        guard NSScreen.screens.contains(where: { $0.visibleFrame.intersects(w.frame) }) else {
+            throw APIError.badResponse("Mac-Fenster bleibt auf entferntem Monitor.")
+        }
     }
 
     func windowDidResize(_ notification: Notification) { saveMainWindowFrame() }

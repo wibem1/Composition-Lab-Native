@@ -7,9 +7,9 @@ internal sealed partial class MainForm
     bool windowPlacementRestored;
     string PlacementFile => Path.Combine(dataDirectory, "window-placement.json");
 
-    void RestoreWindowPlacement()
+    void RestoreWindowPlacement(bool isolatedTest = false)
     {
-        if (testMode || !File.Exists(PlacementFile)) return;
+        if ((testMode && !isolatedTest) || !File.Exists(PlacementFile)) return;
         try
         {
             var state = JsonNode.Parse(File.ReadAllText(PlacementFile))?.AsObject();
@@ -38,9 +38,9 @@ internal sealed partial class MainForm
         }
     }
 
-    void SaveWindowPlacement()
+    void SaveWindowPlacement(bool isolatedTest = false)
     {
-        if (testMode || WindowState == FormWindowState.Minimized) return;
+        if ((testMode && !isolatedTest) || WindowState == FormWindowState.Minimized) return;
         var rect = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
         if (rect.Width < 640 || rect.Height < 480) return;
         var state = new JsonObject {
@@ -50,4 +50,29 @@ internal sealed partial class MainForm
         try { AtomicFile.WriteText(PlacementFile, state.ToJsonString()); }
         catch (Exception e) { SetStatus("Fensterposition konnte nicht gespeichert werden: " + e.Message, true); }
     }
+    void TestWindowPlacement(string output)
+    {
+        if (!testMode) throw new InvalidOperationException("Window test requires isolated storage.");
+        var original = Bounds;
+        var area = Screen.FromControl(this).WorkingArea;
+        try {
+            Bounds = new Rectangle(area.Left+10,area.Top+10,Math.Min(1000,area.Width-20),Math.Min(720,area.Height-20));
+            SaveWindowPlacement(isolatedTest:true);
+            var expected = Bounds;
+            Bounds = new Rectangle(area.Left+25,area.Top+25,expected.Width,expected.Height);
+            RestoreWindowPlacement(isolatedTest:true);
+            if(Bounds!=expected)throw new Exception("Saved window geometry was not restored.");
+            string saved=File.ReadAllText(PlacementFile);
+            WindowState=FormWindowState.Minimized;
+            SaveWindowPlacement(isolatedTest:true);
+            if(File.ReadAllText(PlacementFile)!=saved)throw new Exception("Minimized window overwrites normal geometry.");
+            WindowState=FormWindowState.Normal;
+            File.WriteAllText(PlacementFile,"invalid json");
+            RestoreWindowPlacement(isolatedTest:true); // corrupt settings cannot block startup
+            File.WriteAllText(Path.Combine(output,"Window-Placement.json"),new JsonObject {
+                ["passed"]=true,["roundtrip"]=true,["minimizedPreservesNormal"]=true,["corruptStateTolerated"]=true
+            }.ToJsonString());
+        } finally { WindowState=FormWindowState.Normal; Bounds=original; }
+    }
+
 }

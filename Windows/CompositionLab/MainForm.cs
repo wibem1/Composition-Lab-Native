@@ -338,6 +338,7 @@ internal sealed partial class MainForm : Form
     public async Task<string> RunSelfTestAsync(string output)
     {
         Directory.CreateDirectory(output);
+        TestWindowPlacement(output);
         // Terminal messages are set before RequestAIAsync's finally clears busy.
         // The visible label and controls must settle together for every outcome.
         foreach (var outcome in new[] {

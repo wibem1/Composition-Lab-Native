@@ -39,6 +39,7 @@ jobs:
       - run: swift build -c release
       - run: swift run -c release composition-lab-core --version
       - name: Build isolated Mac application
+        timeout-minutes: 20
         if: runner.os == 'macOS'
         run: |
           bash 'Build Native App.command'
@@ -57,6 +58,7 @@ jobs:
           path: Composition-Lab-4.2.11-Mac.zip
           if-no-files-found: error
       - name: Build Windows desktop and test bundled runtime
+        timeout-minutes: 25
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./Windows/Build.ps1

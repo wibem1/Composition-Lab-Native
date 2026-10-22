@@ -3987,7 +3987,7 @@ extension MainViewController {
         check(600)
     }
     private func runNativeWorkspaceSelfTest(output: String, completion: @escaping (Error?) -> Void) {
-        let source = "\\version \"2.24.0\"\n\\header { title = \"Native Original\" tagline = ##f }\n\\score { \\new PianoStaff << \\new Staff { \\time 4/4 \\tempo 4 = 96 c'4 d' e' f' } \\new Staff { \\clef bass c4 d e f } >> \\layout {} \\midi {} }\n"
+        let source = "\\version \"2.24.0\"\n\\header { title = \"Native Original\" tagline = ##f }\n\\score { \\new PianoStaff << \\new Staff { \\time 4/4 \\tempo 4 = 96 c'4 d' e' f' | g'4 a' b' c'' | d''4 c'' b' a' } \\new Staff { \\clef bass c4 d e f | g4 a b c' | d'4 c' b a } >> \\layout {} \\midi {} }\n"
         func require(_ condition: Bool, _ message: String) throws { if !condition { throw APIError.badResponse(message) } }
         func waitFor(_ attempts: Int = 600, condition: @escaping () -> Bool, then action: @escaping () -> Void) {
             if condition() { action(); return }
@@ -4012,7 +4012,7 @@ extension MainViewController {
                     self.pendingCompositionSlot = 0
                     self.install(score: work.score, concept: source, provider: .gemini, model: "offline-test", metadata: work.metadata)
                     let originalMidi = self.lastMidi
-                    try require(self.lastScore?.tr.reduce(0, { $0 + $1.nt.count }) == 8, "Nicht alle acht Noten übernommen.")
+                    try require(self.lastScore?.tr.reduce(0, { $0 + $1.nt.count }) == 24, "Nicht alle 24 Noten aus drei Takten übernommen.")
                     waitFor(condition: { self.musicXMLPreview.originalPreviewIsReady }) {
                         self.selectWorkspace(1)
                         self.musicXMLPreview.probeOriginalSelection { sent in
@@ -4055,7 +4055,7 @@ extension MainViewController {
                                                     let restored = try JSONDecoder().decode(CompositionLabDocument.self, from: doc)
                                                     try require(restored.extraFields["lilyPondSource"] == .string(edited), "Mac-CLAB verliert angewendete Quelle.")
                                                     let report: [String: Any] = ["passed": true, "interface": "AppKit/WebKit", "offline": true,
-                                                        "checks": ["finished-notation-compose-without-key", "local-original", "duplicate-model-names", "svg-to-editor", "empty-slot", "source-edit", "invalid-edit-rollback", "failed-import-rollback", "clab-metadata", "original-midi", "playback-copy", "score-undo-redo", "explicit-register-repair", "portable-encrypted-backup"]]
+                                                        "checks": ["finished-notation-compose-without-key", "local-original", "duplicate-model-names", "svg-three-bar-drag-to-editor", "window-geometry-roundtrip-and-disconnected-monitor", "empty-slot", "source-edit", "invalid-edit-rollback", "failed-import-rollback", "clab-metadata", "original-midi", "playback-copy", "score-undo-redo", "explicit-register-repair", "portable-encrypted-backup"]]
                                                     try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
                                                     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: output).appendingPathComponent("result.json"))
                                                     completion(nil)
