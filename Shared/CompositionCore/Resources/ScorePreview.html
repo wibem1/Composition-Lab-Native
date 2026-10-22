@@ -79,7 +79,8 @@ host.addEventListener('pointerdown',event=>{
 });
 host.addEventListener('pointermove',event=>{
   if(!dragStart || activePointer!==event.pointerId || !(event.buttons&1))return;
-  const a=hitNote(event.clientX,event.clientY);
+  const direct=nearestLink(event.target);
+  const a=linkLocation(direct)?direct:hitNote(event.clientX,event.clientY);
   if(!a||a===dragEnd)return;
   dragEnd=a;didDrag=true;markRange(dragStart,dragEnd);
   event.preventDefault();
@@ -96,8 +97,8 @@ function finishPointer(event,cancelled){
   }
   event.preventDefault();
 }
-host.addEventListener('pointerup',event=>finishPointer(event,false));
-host.addEventListener('pointercancel',event=>finishPointer(event,true));
+document.addEventListener('pointerup',event=>finishPointer(event,false));
+document.addEventListener('pointercancel',event=>finishPointer(event,true));
 host.addEventListener('click',event=>{
   const a=nearestLink(event.target);
   if(!linkLocation(a))return;
