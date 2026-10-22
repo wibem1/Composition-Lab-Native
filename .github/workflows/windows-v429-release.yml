@@ -1,4 +1,4 @@
-name: Windows 4.2.10 end-to-end and release
+name: Windows 4.2.10 end-to-end verification
 on:
   workflow_dispatch:
   push:
@@ -57,12 +57,5 @@ jobs:
             Composition-Lab-4.2.10-Windows-x64.zip
             Windows/TestResults/**
           if-no-files-found: error
-      - name: Publish only fully tested release
-        if: ${{ success() && github.ref == 'refs/heads/v4-cross-platform' }}
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          Copy-Item 'Windows/TestResults/Packaged/Romanze.ly' 'Romanze-Bassoktaven-korrigiert.ly'
-          Copy-Item 'Windows/TestResults/Packaged/Romanze.mid' 'Romanze-Bassoktaven-korrigiert.mid'
-          gh release create v4.2.10 'Composition-Lab-4.2.10-Windows-x64.zip' 'Romanze-Bassoktaven-korrigiert.ly' 'Romanze-Bassoktaven-korrigiert.mid' --repo '${{ github.repository }}' --target '${{ github.sha }}' --title 'Composition Lab Windows v4.2.10' --notes 'Windows application passed native Pastorale and original Romanze A4 processing plus extracted-ZIP regression tests with deliberately inverted Guile timestamps. See workflow run ${{ github.run_id }}.'
+      # No independent Windows release here. The cross-platform v4-core.yml
+      # release gate must publish both native packages from the same commit.
